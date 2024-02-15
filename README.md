@@ -8,11 +8,26 @@ https://digital-land.github.io/technical-documentation/architecture/design/propo
 
 ## Local running
 
-A docker compose setup has been configured to run the async request backend.  For now, this setup only runs
-an SQS queue using a [Localstack](https://www.localstack.cloud/) container.   This can be run by executing the following command:
+A docker compose setup has been configured to run the async request backend.  This setup runs a Python/FastAPI for 
+receiving requests, a Postgres database to store requests, an SQS queue using the excellent [Localstack](https://www.localstack.cloud/) container
+to trigger processing and a basic Python app to process the requests.
+
+You can run the docker compose stack by executing the following command:
 
 ```shell
 docker compose up -d
+```
+
+### Request API
+
+To create a new request, you can post via curl:
+
+```shell
+curl --location 'http://localhost:8000/requests' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "user_email": "someone@email.com"
+}'
 ```
 
 ### SQS
