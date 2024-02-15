@@ -52,6 +52,17 @@ services:
       SQS_QUEUE_NAME: request-queue
       SQS_RECEIVE_WAIT_SECONDS: 10
       DATABASE_URL: postgresql://postgres:password@request-db/request_database
+      NOTIFY_BASE_URL: http://govuk-notify-stub:8080 # https://api.notifications.service.gov.uk
+      NOTIFY_API_KEY: key_name-c745a8d8-b48a-4b0d-96e5-dbea0165ebd1-8b3aa916-ec82-434e-b0c5-d5d9b371d6a3
+      NOTIFY_TEMPLATE_ID: f33517ff-2a88-4f6e-b855-c550268ce08a
     restart: on-failure
     deploy:
       replicas: 2
+
+  govuk-notify-stub:
+    image: wiremock/wiremock:3.3.1
+    entrypoint: ["/docker-entrypoint.sh", "--global-response-templating", "--verbose"]
+    volumes:
+      - "./govuk-notify-stub/wiremock:/home/wiremock"
+    ports:
+      - "8001:8080"
