@@ -1,8 +1,9 @@
 FROM python:3.12-alpine
 
-COPY signal_handler.py signal_handler.py
-COPY main.py main.py
-COPY requirements.txt requirements.txt
+COPY request-processor/src/. .
+COPY request-processor/requirements.txt requirements.txt
+
+COPY ../request_model ./request_model
 
 RUN python -m pip install -r requirements.txt
 

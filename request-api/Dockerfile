@@ -1,8 +1,10 @@
 FROM python:3.12-alpine
 
-COPY requirements.txt requirements.txt
+COPY request-api/requirements.txt requirements.txt
 
-COPY src/. .
+COPY request-api/src/. .
+
+COPY ../request_model ./request_model
 
 RUN python -m pip install -r requirements.txt
 

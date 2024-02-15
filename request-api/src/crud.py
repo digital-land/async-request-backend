@@ -1,19 +1,19 @@
 from sqlalchemy.orm import Session
 
-import models
-import schemas
+from request_model import models
+from request_model import schemas
 
 
 def get_request(db: Session, request_id: int):
-    return db.query(models.Request).filter(models.User.id == request_id).first()
+    return db.query(models.Request).filter(models.Request.id == request_id).first()
 
 
 def get_request_by_email(db: Session, user_email: str):
-    return db.query(models.User).filter(models.Request.user_email == user_email).first()
+    return db.query(models.Request).filter(models.Request.user_email == user_email).first()
 
 
 def get_requests(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.User).offset(skip).limit(limit).all()
+    return db.query(models.Request).offset(skip).limit(limit).all()
 
 
 def create_request(db: Session, request: schemas.RequestCreate):
