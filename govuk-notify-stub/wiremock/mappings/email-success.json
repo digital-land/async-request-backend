@@ -15,9 +15,9 @@
               },
               "uri": "https://api.notifications.service.gov.uk/v2/notifications/740e5834-3a29-46b4-9a6f-16142fde533a",
               "template": {
-                "id": "{{request.body.template_id}}",
+                "id": "{{jsonPath request.body '$.template_id'}}",
                 "version": 1,
-                "uri": "https://api.notifications.service.gov.uk/v2/template/{{request.body.template_id}}"
+                "uri": "https://api.notifications.service.gov.uk/v2/template/{{jsonPath request.body '$.template_id'}}"
               }
         }
     }
