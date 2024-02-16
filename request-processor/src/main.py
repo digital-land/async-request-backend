@@ -34,15 +34,17 @@ def handle_messages():
             request = schemas.Request.model_validate_json(message.body)
 
             # TODO: Download file from S3
-            # Future: call pipeline and write error summary to database
 
+            # Future: call pipeline here and write error summary to database
+
+            # Set status to COMPLETE when processing successful
             with SessionLocal() as session:
                 model = crud.get_request(session, request.id)
                 model.status = 'COMPLETE'
                 session.commit()
                 session.flush()
 
-            # TODO: notify user by email (GOV UK Notify mock)
+            # TODO: Consider how we will handle failures to send email notification
             notifications_client.send_email_notification(
                 email_address=request.user_email,  # required string
                 template_id=template_id,  # required UUID string
