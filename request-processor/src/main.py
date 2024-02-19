@@ -10,9 +10,11 @@ from database import SessionLocal
 
 import crud
 
-from request_model import schemas
+from request_model import schemas, models
 
 from notifications_python_client.notifications import NotificationsAPIClient
+
+import s3_transfer_manager
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +28,24 @@ notifications_client = NotificationsAPIClient(
 )
 template_id = os.environ["NOTIFY_TEMPLATE_ID"]
 
+# Threshold for s3_transfer_manager to automatically use multipart download
+max_file_size_mb = 30
+
 
 def handle_messages():
     messages = queue.receive_messages(MaxNumberOfMessages=1, WaitTimeSeconds=wait_seconds)
     for message in messages:
         try:
+            print(message.body, flush=True)
             request = schemas.Request.model_validate_json(message.body)
+            request_data = models.RequestData.model_validate(request.data)
 
-            # TODO: Download file from S3
+            s3_transfer_manager.download_with_default_configuration(
+                os.environ["REQUEST_FILES_BUCKET_NAME"],
+                request_data.uploaded_file.uploaded_filename,
+                f"/tmp/{request_data.uploaded_file.uploaded_filename}",
+                max_file_size_mb
+            )
 
             # Future: call pipeline here and write error summary to database
 
@@ -50,6 +62,9 @@ def handle_messages():
                 template_id=template_id,  # required UUID string
                 reference=request.id
             )
+
+            # Remove downloaded file
+            os.remove(f"/tmp/{request_data.uploaded_file.uploaded_filename}")
 
             print(f"Received message: {message.body}", flush=True)
             logger.info(f"Received message: {message.body}")

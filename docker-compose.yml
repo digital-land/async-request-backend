@@ -10,7 +10,7 @@ services:
       # LocalStack configuration: https://docs.localstack.cloud/references/configuration/
       DEBUG: ${DEBUG:-0}
       AWS_DEFAULT_REGION: eu-west-2
-      SERVICES: sqs
+      SERVICES: sqs, s3
     volumes:
       - "${LOCALSTACK_VOLUME_DIR:-./volume}:/var/lib/localstack"
       - "/var/run/docker.sock:/var/run/docker.sock"
@@ -55,6 +55,7 @@ services:
       NOTIFY_BASE_URL: http://govuk-notify-stub:8080 # https://api.notifications.service.gov.uk
       NOTIFY_API_KEY: key_name-c745a8d8-b48a-4b0d-96e5-dbea0165ebd1-8b3aa916-ec82-434e-b0c5-d5d9b371d6a3
       NOTIFY_TEMPLATE_ID: f33517ff-2a88-4f6e-b855-c550268ce08a
+      REQUEST_FILES_BUCKET_NAME: dluhc-data-platform-request-files-local
     restart: on-failure
     deploy:
       replicas: 2

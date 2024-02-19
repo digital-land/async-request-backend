@@ -17,7 +17,17 @@ def get_requests(db: Session, skip: int = 0, limit: int = 100):
 
 
 def create_request(db: Session, request: schemas.RequestCreate):
-    db_request = models.Request(user_email=request.user_email, status='NEW')
+    db_request = models.Request(
+        user_email=request.user_email,
+        status='NEW',
+        data=models.RequestData(
+            uploaded_file=models.UploadedFile(
+                original_filename=request.uploaded_file.original_filename,
+                uploaded_filename=request.uploaded_file.uploaded_filename
+            ),
+            response=None
+        ).model_dump()
+    )
     db.add(db_request)
     db.commit()
     db.refresh(db_request)

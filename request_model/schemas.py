@@ -1,7 +1,12 @@
 import datetime
-from typing import Optional
+from typing import Optional, Dict
 
-from pydantic import BaseModel, Json
+from pydantic import BaseModel
+
+
+class UploadedFile(BaseModel):
+    original_filename: str
+    uploaded_filename: str
 
 
 class RequestBase(BaseModel):
@@ -9,7 +14,7 @@ class RequestBase(BaseModel):
 
 
 class RequestCreate(RequestBase):
-    pass
+    uploaded_file: UploadedFile
 
 
 class Request(RequestBase):
@@ -17,7 +22,7 @@ class Request(RequestBase):
     status: str
     created: datetime.datetime
     modified: datetime.datetime
-    data: Optional[Json] = None
+    data: Optional[Dict] = None
 
     class Config:
         from_attributes = True

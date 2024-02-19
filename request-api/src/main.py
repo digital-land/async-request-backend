@@ -39,8 +39,17 @@ def read_requests(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
 
 @app.post("/requests", status_code=202, response_model=schemas.Request)
 def create_request(request: schemas.RequestCreate, db: Session = Depends(get_db)):
+    print(request.model_dump_json())
     request = crud.create_request(db, request)
-    response = schemas.Request.model_validate(request)
+    response = schemas.Request(
+      id=request.id,
+      user_email=request.user_email,
+      status=request.status,
+      created=request.created,
+      modified=request.modified,
+      data=request.data
+    )
+
     try:
         queue.send_message(
             MessageBody=response.model_dump_json(), MessageAttributes={}
@@ -51,7 +60,7 @@ def create_request(request: schemas.RequestCreate, db: Session = Depends(get_db)
     return response
 
 
-@app.get("/request/{request_id}", response_model=schemas.Request)
+@app.get("/requests/{request_id}", response_model=schemas.Request)
 def read_request(request_id: str, db: Session = Depends(get_db)):
     requests = crud.get_request(db, request_id)
     return requests
