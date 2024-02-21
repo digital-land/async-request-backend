@@ -1,5 +1,7 @@
 import os
 
+import time
+
 import boto3
 
 import logging
@@ -40,6 +42,9 @@ def handle_messages():
             request = schemas.Request.model_validate_json(message.body)
             request_data = models.RequestData.model_validate(request.data)
 
+            # Set status to PROCESSING
+            update_request_status(request.id, 'PROCESSING')
+
             s3_transfer_manager.download_with_default_configuration(
                 os.environ["REQUEST_FILES_BUCKET_NAME"],
                 request_data.uploaded_file.uploaded_filename,
@@ -48,13 +53,11 @@ def handle_messages():
             )
 
             # Future: call pipeline here and write error summary to database
+            # Simulate processing delay
+            time.sleep(20)
 
             # Set status to COMPLETE when processing successful
-            with SessionLocal() as session:
-                model = crud.get_request(session, request.id)
-                model.status = 'COMPLETE'
-                session.commit()
-                session.flush()
+            update_request_status(request.id, 'COMPLETE')
 
             # TODO: Consider how we will handle failures to send email notification
             notifications_client.send_email_notification(
@@ -72,10 +75,19 @@ def handle_messages():
         except Exception as e:
             print(f"exception while processing message: {repr(e)}", flush=True)
             logger.error(f"exception while processing message: {repr(e)}")
+            # Set status to NEW since processing needs to be re-tried
+            update_request_status(request.id, 'NEW')
             continue
 
         message.delete()
 
+
+def update_request_status(requestId, status):
+    with SessionLocal() as session:
+        model = crud.get_request(session, requestId)
+        model.status = status
+        session.commit()
+        session.flush()
 
 if __name__ == "__main__":
     signal_handler = SignalHandler()
