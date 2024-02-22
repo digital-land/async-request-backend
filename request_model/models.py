@@ -12,7 +12,7 @@ class Request(Base):
 
     id = Column(Integer, primary_key=True)
     created = Column(DateTime(timezone=True), server_default=func.now())
-    modified = Column(DateTime(timezone=True), server_default=func.now())
+    modified = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     user_email = Column(String)
     status = Column(String)
     data = Column(JSON)
