@@ -1,20 +1,24 @@
 import os
+from functools import cache
+
 import boto3
 from botocore.exceptions import ClientError
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request, Response, HTTPException
 from sqlalchemy.orm import Session
 
 import crud
-from request_model import models
-from request_model import schemas
+from request_model import models, schemas
 from database import SessionLocal, engine
 
 models.Base.metadata.create_all(bind=engine)
 
-sqs = boto3.resource("sqs")
-queue = sqs.get_queue_by_name(QueueName=os.environ["SQS_QUEUE_NAME"])
-
 app = FastAPI()
+
+
+@cache
+def queue():
+    sqs = boto3.resource("sqs")
+    return sqs.get_queue_by_name(QueueName=os.environ["SQS_QUEUE_NAME"])
 
 
 # Dependency
@@ -28,39 +32,41 @@ def get_db():
 
 @app.get("/")
 def read_root():
-    return {"Hello": "World"}
-
-
-@app.get("/requests", response_model=list[schemas.Request])
-def read_requests(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    requests = crud.get_requests(db, skip=skip, limit=limit)
-    return requests
+    return {"msg": "Hello World"}
 
 
 @app.post("/requests", status_code=202, response_model=schemas.Request)
-def create_request(request: schemas.RequestCreate, db: Session = Depends(get_db)):
-    print(request.model_dump_json())
-    request = crud.create_request(db, request)
-    response = schemas.Request(
-      id=request.id,
-      user_email=request.user_email,
-      status=request.status,
-      created=request.created,
-      modified=request.modified,
-      data=request.data
+def create_request(request: schemas.RequestCreate, http_request: Request, http_response: Response, db: Session = Depends(get_db)):
+    request_schema = _map_to_schema(
+        request_model=crud.create_request(db, request)
     )
 
     try:
-        queue.send_message(
-            MessageBody=response.model_dump_json(), MessageAttributes={}
+        queue().send_message(
+            MessageBody=request_schema.model_dump_json(), MessageAttributes={}
         )
     except ClientError as error:
-        print("Send message failed: %s", request)
+        print("Send message failed: %s", request_schema)
         raise error
-    return response
+
+    http_response.headers['Location'] = f"${http_request.headers['Host']}/requests/{request_schema.id}"
+    return request_schema
 
 
 @app.get("/requests/{request_id}", response_model=schemas.Request)
 def read_request(request_id: str, db: Session = Depends(get_db)):
-    requests = crud.get_request(db, request_id)
-    return requests
+    request_model = crud.get_request(db, request_id)
+    if request_model is None:
+        raise HTTPException(status_code=404, detail=f"Request with ${request_id} was not found")
+    return _map_to_schema(request_model)
+
+
+def _map_to_schema(request_model: models.Request) -> schemas.Request:
+    return schemas.Request(
+        id=request_model.id,
+        user_email=request_model.user_email,
+        status=request_model.status,
+        created=request_model.created,
+        modified=request_model.modified,
+        data=request_model.data
+    )

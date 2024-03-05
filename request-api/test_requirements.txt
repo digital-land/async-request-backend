@@ -1,5 +1,9 @@
+-r requirements.txt
 fastapi>=0.109.2
 uvicorn[standard]>=0.27.1
 SQLAlchemy>=2.0.27
 psycopg2_binary>=2.9.9
 boto3>=1.26.79
+pytest>=7.2.1
+httpx>=0.27.0
+moto[sqs]>=5.0.2
