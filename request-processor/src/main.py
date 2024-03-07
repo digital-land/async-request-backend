@@ -1,6 +1,7 @@
 import os
 
 import time
+from functools import cache
 
 import boto3
 
@@ -14,28 +15,24 @@ import crud
 
 from request_model import schemas, models
 
-from notifications_python_client.notifications import NotificationsAPIClient
-
 import s3_transfer_manager
 
 logger = logging.getLogger(__name__)
 
-sqs = boto3.resource("sqs")
-queue = sqs.get_queue_by_name(QueueName=os.environ["SQS_QUEUE_NAME"])
 wait_seconds = int(os.getenv("SQS_RECEIVE_WAIT_SECONDS", default=10))
-
-notifications_client = NotificationsAPIClient(
-    base_url=os.environ["NOTIFY_BASE_URL"],
-    api_key=os.environ["NOTIFY_API_KEY"]
-)
-template_id = os.environ["NOTIFY_TEMPLATE_ID"]
 
 # Threshold for s3_transfer_manager to automatically use multipart download
 max_file_size_mb = 30
 
 
+@cache
+def queue():
+    sqs = boto3.resource("sqs")
+    return sqs.get_queue_by_name(QueueName=os.environ["SQS_QUEUE_NAME"])
+
+
 def handle_messages():
-    messages = queue.receive_messages(MaxNumberOfMessages=1, WaitTimeSeconds=wait_seconds)
+    messages = queue().receive_messages(MaxNumberOfMessages=1, WaitTimeSeconds=wait_seconds)
     for message in messages:
         try:
             print(message.body, flush=True)
@@ -58,13 +55,6 @@ def handle_messages():
 
             # Set status to COMPLETE when processing successful
             update_request_status(request.id, 'COMPLETE')
-
-            # TODO: Consider how we will handle failures to send email notification
-            notifications_client.send_email_notification(
-                email_address=request.user_email,  # required string
-                template_id=template_id,  # required UUID string
-                reference=request.id
-            )
 
             # Remove downloaded file
             os.remove(f"/tmp/{request_data.uploaded_file.uploaded_filename}")
@@ -89,8 +79,20 @@ def update_request_status(requestId, status):
         session.commit()
         session.flush()
 
-if __name__ == "__main__":
+# def db_session():
+#     db = SessionLocal()
+#     try:
+#         yield db
+#     finally:
+#         db.close()
+
+
+def main():
     signal_handler = SignalHandler()
-    while not signal_handler.received_signal:
+    while not signal_handler.received_exit_signal:
         handle_messages()
+
+
+if __name__ == "__main__":
+    main()
 

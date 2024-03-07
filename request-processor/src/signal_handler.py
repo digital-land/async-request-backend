@@ -3,10 +3,10 @@ from signal import SIGINT, SIGTERM, signal
 
 class SignalHandler:
     def __init__(self):
-        self.received_signal = False
-        signal(SIGINT, self._signal_handler)
-        signal(SIGTERM, self._signal_handler)
+        self.received_exit_signal = False
+        signal(SIGINT, self._exit_signal_handler)
+        signal(SIGTERM, self._exit_signal_handler)
 
-    def _signal_handler(self, signal, frame):
+    def _exit_signal_handler(self, signal, frame):
         print(f"handling signal {signal}, exiting gracefully")
-        self.received_signal = True
+        self.received_exit_signal = True
