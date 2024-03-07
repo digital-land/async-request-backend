@@ -1,6 +1,5 @@
 import os
 
-import time
 from functools import cache
 
 import boto3
@@ -35,7 +34,6 @@ def handle_messages():
     messages = queue().receive_messages(MaxNumberOfMessages=1, WaitTimeSeconds=wait_seconds)
     for message in messages:
         try:
-            print(message.body, flush=True)
             request = schemas.Request.model_validate_json(message.body)
             request_data = models.RequestData.model_validate(request.data)
 
@@ -51,7 +49,7 @@ def handle_messages():
 
             # Future: call pipeline here and write error summary to database
             # Simulate processing delay
-            time.sleep(20)
+            # time.sleep(20)
 
             # Set status to COMPLETE when processing successful
             update_request_status(request.id, 'COMPLETE')
@@ -59,8 +57,7 @@ def handle_messages():
             # Remove downloaded file
             os.remove(f"/tmp/{request_data.uploaded_file.uploaded_filename}")
 
-            print(f"Received message: {message.body}", flush=True)
-            logger.info(f"Received message: {message.body}")
+            print(f"Processed message: {message.body}", flush=True)
 
         except Exception as e:
             print(f"exception while processing message: {repr(e)}", flush=True)
@@ -72,9 +69,9 @@ def handle_messages():
         message.delete()
 
 
-def update_request_status(requestId, status):
+def update_request_status(request_id, status):
     with SessionLocal() as session:
-        model = crud.get_request(session, requestId)
+        model = crud.get_request(session, request_id)
         model.status = status
         session.commit()
         session.flush()

@@ -22,9 +22,29 @@ models.Base.metadata.create_all(bind=engine)
 main.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-def test_handle_messages(sqs_queue):
+def test_handle_messages(sqs_queue, s3_bucket):
+    db_request = _setup_request(sqs_queue)
+    handle_messages()
+
+    messages = sqs_queue.receive_messages(MaxNumberOfMessages=1, WaitTimeSeconds=1)
+    assert len(messages) == 0
+
+    with main.SessionLocal() as session:
+        request = (session.query(models.Request)
+                   .filter(models.Request.id == db_request.id)
+                   .first())
+        assert request.status == 'COMPLETE'
+
+
+def test_handle_messages_when_no_messages_available(sqs_queue):
+    try:
+        handle_messages()
+    except Exception:
+        pytest.fail("Unexpected Exception when no messages available on SQS queue..")
+
+
+def _setup_request(sqs_queue):
     db_request = models.Request(
-        id=76,
         user_email="chris.cundill@tpximpact.com",
         status='NEW',
         data=models.RequestData(
@@ -35,15 +55,14 @@ def test_handle_messages(sqs_queue):
             response=None
         ).model_dump()
     )
-    db = main.SessionLocal()
-    db.add(db_request)
-    db.commit()
-    db.refresh(db_request)
-
+    with main.SessionLocal() as session:
+        session.add(db_request)
+        session.commit()
+        session.refresh(db_request)
     sqs_queue.send_message(
         MessageBody=json.dumps({
             "user_email": "chris.cundill@tpximpact.com",
-            "id": 76,
+            "id": db_request.id,
             "status": "NEW",
             "created": "2024-03-06T16:29:46.182052Z",
             "modified": "2024-03-06T16:29:46.182052Z",
@@ -57,13 +76,5 @@ def test_handle_messages(sqs_queue):
         }),
         MessageAttributes={}
     )
-    handle_messages()
-    messages = sqs_queue.receive_messages(MaxNumberOfMessages=1, WaitTimeSeconds=1)
-    assert len(messages) == 0
+    return db_request
 
-
-def test_handle_messages_when_no_messages_available(sqs_queue):
-    try:
-        handle_messages()
-    except Exception:
-        pytest.fail("Unexpected Exception when no messages available on SQS queue..")
