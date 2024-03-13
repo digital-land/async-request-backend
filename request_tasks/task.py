@@ -17,27 +17,6 @@ celery = Celery('async-request-processor', broker=os.environ['CELERY_BROKER_URL'
 max_file_size_mb = 30
 
 
-@task_prerun.connect
-def before_task(task_id, task, args, **kwargs):
-    request_id = args[0]['id']
-    logger.debug(f"Set status to PROCESSING for request {request_id}")
-    _update_request_status(request_id, 'PROCESSING')
-
-
-@task_success.connect
-def after_task_success(sender, result, **kwargs):
-    request_id = sender.request.args[0]['id']
-    logger.debug(f"Set status to PROCESSING for request {request_id}")
-    _update_request_status(request_id, 'COMPLETE')
-
-
-@task_failure.connect
-def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
-    request_id = args[0]['id']
-    logger.debug(f"Set status to FAILED for request {request_id}")
-    _update_request_status(request_id, 'FAILED')
-
-
 @celery.task
 def check_datafile(request: Dict):
     logger.info('check datafile')
@@ -59,6 +38,28 @@ def check_datafile(request: Dict):
     os.remove(f"/tmp/{request_data.uploaded_file.uploaded_filename}")
 
     return _get_request(request_schema.id)
+
+
+@task_prerun.connect
+def before_task(task_id, task, args, **kwargs):
+    request_id = args[0]['id']
+    logger.debug(f"Set status to PROCESSING for request {request_id}")
+    _update_request_status(request_id, 'PROCESSING')
+
+
+@task_success.connect
+def after_task_success(sender, result, **kwargs):
+    request_id = sender.request.args[0]['id']
+    logger.debug(f"Set status to PROCESSING for request {request_id}")
+    _update_request_status(request_id, 'COMPLETE')
+
+
+@task_failure.connect
+def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
+    request_id = args[0]['id']
+    logger.debug(f"Set status to FAILED for request {request_id}")
+    _update_request_status(request_id, 'FAILED')
+
 
 
 def _update_request_status(request_id, status):
