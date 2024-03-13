@@ -61,7 +61,6 @@ def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
     _update_request_status(request_id, 'FAILED')
 
 
-
 def _update_request_status(request_id, status):
     with database.SessionLocal() as session:
         model = crud.get_request(session, request_id)
