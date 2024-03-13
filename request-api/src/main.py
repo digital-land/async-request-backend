@@ -9,8 +9,11 @@ from sqlalchemy.orm import Session
 import crud
 from request_model import models, schemas
 from database import SessionLocal, engine
+from request_tasks import task
 
 models.Base.metadata.create_all(bind=engine)
+
+use_celery = bool(os.environ.get('USE_CELERY'))
 
 app = FastAPI()
 
@@ -42,9 +45,13 @@ def create_request(request: schemas.RequestCreate, http_request: Request, http_r
     )
 
     try:
-        queue().send_message(
-            MessageBody=request_schema.model_dump_json(), MessageAttributes={}
-        )
+        if use_celery:
+            task.check_datafile.delay(request_schema.model_dump())
+        else:
+            queue().send_message(
+                MessageBody=request_schema.model_dump_json(), MessageAttributes={}
+            )
+
     except ClientError as error:
         print("Send message failed: %s", request_schema)
         raise error

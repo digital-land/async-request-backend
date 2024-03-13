@@ -1,10 +1,14 @@
 FROM python:3.12-alpine
 
+RUN apk add --no-cache libcurl curl-dev build-base
+
 COPY request-api/requirements.txt requirements.txt
 
 COPY request-api/src/. .
 
 COPY ../request_model ./request_model
+
+COPY ../request_tasks ./request_tasks
 
 RUN python -m pip install -r requirements.txt
 
