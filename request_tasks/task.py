@@ -21,12 +21,12 @@ max_file_size_mb = 30
 def check_datafile(request: Dict):
     logger.info('check datafile')
     request_schema = schemas.Request.model_validate(request)
-    request_data = models.RequestData.model_validate(request_schema.data)
+    request_data = request_schema.params
 
     s3_transfer_manager.download_with_default_configuration(
         os.environ["REQUEST_FILES_BUCKET_NAME"],
-        request_data.uploaded_file.uploaded_filename,
-        f"/tmp/{request_data.uploaded_file.uploaded_filename}",
+        request_data.uploaded_filename,
+        f"/tmp/{request_data.uploaded_filename}",
         max_file_size_mb
     )
 
@@ -35,7 +35,7 @@ def check_datafile(request: Dict):
     time.sleep(20)
 
     # Remove downloaded file
-    os.remove(f"/tmp/{request_data.uploaded_file.uploaded_filename}")
+    os.remove(f"/tmp/{request_data.uploaded_filename}")
 
     return _get_request(request_schema.id)
 
