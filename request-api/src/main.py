@@ -70,10 +70,10 @@ def read_request(request_id: str, db: Session = Depends(get_db)):
 
 def _map_to_schema(request_model: models.Request) -> schemas.Request:
     return schemas.Request(
+        type = request_model.type,
         id=request_model.id,
-        user_email=request_model.user_email,
         status=request_model.status,
         created=request_model.created,
         modified=request_model.modified,
-        data=request_model.data
+        params=request_model.params,
     )

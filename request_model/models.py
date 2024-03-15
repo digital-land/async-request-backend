@@ -1,8 +1,8 @@
 from typing import Optional
 
 from pydantic import BaseModel
-from sqlalchemy import Column, Integer, String, DateTime, JSON, func
-from sqlalchemy.orm import declarative_base
+from sqlalchemy import Column, Integer, String, DateTime, JSON, func, ForeignKey
+from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
@@ -13,9 +13,31 @@ class Request(Base):
     id = Column(Integer, primary_key=True)
     created = Column(DateTime(timezone=True), server_default=func.now())
     modified = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    user_email = Column(String)
     status = Column(String)
+    params = Column(JSON)
+    type = Column(String)
+
+    response = relationship("Response", uselist=False, back_populates="request")
+
+class Response(Base):
+    __tablename__ = "response"
+
+    id = Column(Integer, primary_key=True)
+    request_id = Column(Integer, ForeignKey('request.id'))
     data = Column(JSON)
+    error = Column(JSON)
+
+    request = relationship("Request", back_populates="response")
+    details = relationship("ResponseDetails", back_populates="response",uselist=False)
+    
+class ResponseDetails(Base):
+    __tablename__ = "response_details"
+
+    id = Column(Integer, primary_key=True)
+    response_id = Column(Integer, ForeignKey('response.id'))
+    detail = Column(JSON)
+
+    response = relationship("Response", back_populates="details")
 
 
 class UploadedFile(BaseModel):
@@ -30,4 +52,4 @@ class ResponseData(BaseModel):
 # Used in JSON column
 class RequestData(BaseModel):
     uploaded_file: UploadedFile
-    response: Optional[ResponseData]
+    response: Optional[ResponseData] =None

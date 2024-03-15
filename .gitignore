@@ -1,3 +1,4 @@
 .idea
 volume
 __pycache__
+.venv

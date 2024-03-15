@@ -1,27 +1,46 @@
 import datetime
-from typing import Optional, Dict
-from pydantic import BaseModel
+from enum import Enum
+from typing import Union, Literal, Optional
+from pydantic import BaseModel, Field
 
 
-class UploadedFile(BaseModel):
+class RequestTypeEnum(str, Enum):
+    check_url = 'check_url'
+    check_file = 'check_file'
+
+
+class Params(BaseModel):
+    type: RequestTypeEnum
+    dataset: str
+    collection: str
+
+
+class CheckFileParams(Params):
+    type: Literal[RequestTypeEnum.check_file] = RequestTypeEnum.check_file
     original_filename: str
     uploaded_filename: str
 
 
+class CheckUrlParams(Params):
+    type: Literal[RequestTypeEnum.check_url] = RequestTypeEnum.check_url
+    url: str
+    geom_type: Optional[str] = None
+
+
 class RequestBase(BaseModel):
-    user_email: str
+    params: Union[CheckUrlParams, CheckFileParams] = Field(discriminator='type')
 
 
 class RequestCreate(RequestBase):
-    uploaded_file: UploadedFile
+    pass
 
 
 class Request(RequestBase):
     id: int
+    type: RequestTypeEnum
     status: str
     created: datetime.datetime
     modified: datetime.datetime
-    data: Optional[Dict] = None
 
     class Config:
         from_attributes = True
