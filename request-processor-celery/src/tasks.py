@@ -2,22 +2,20 @@ import os
 import time
 from typing import Dict
 
-from celery import Celery
 from celery.utils.log import get_task_logger
 from celery.signals import task_prerun, task_success, task_failure
 
-from request_tasks import s3_transfer_manager, crud, database
-from request_model import schemas, models
+import s3_transfer_manager, crud, database
+from request_model import schemas
+from task_interface.check_tasks import celery, CheckDataFileTask
 
 logger = get_task_logger(__name__)
-
-celery = Celery('async-request-processor', broker=os.environ['CELERY_BROKER_URL'])
 
 # Threshold for s3_transfer_manager to automatically use multipart download
 max_file_size_mb = 30
 
 
-@celery.task
+@celery.task(base=CheckDataFileTask, name=CheckDataFileTask.name)
 def check_datafile(request: Dict):
     logger.info('check datafile')
     request_schema = schemas.Request.model_validate(request)

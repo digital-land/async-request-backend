@@ -1,0 +1,9 @@
+{
+ "params": {
+   "type": "check_file",
+   "collection": "article_4_direction",
+   "dataset": "article_4_direction_area",
+   "original_filename": "force-error.geojson",
+   "uploaded_filename": "B1E16917-449C-4FC5-96D1-EE4255A79FB1"
+ }
+}

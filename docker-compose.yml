@@ -75,4 +75,3 @@ services:
     restart: on-failure
     deploy:
       replicas: 1
-    entrypoint: ["celery", "-A", "request_tasks.task", "worker", "-l", "INFO", "-P", "eventlet", "--concurrency", "1"]

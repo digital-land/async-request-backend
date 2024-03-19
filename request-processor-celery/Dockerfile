@@ -6,8 +6,8 @@ COPY request-processor-celery/src/. .
 COPY request-processor-celery/requirements.txt requirements.txt
 
 COPY ../request_model ./request_model
-COPY ../request_tasks ./request_tasks
+COPY ../task_interface ./task_interface
 
 RUN python -m pip install -r requirements.txt
 
-ENTRYPOINT ["celery", "-A", "request_tasks.task", "worker", "-l", "INFO", "-P", "eventlet", "--concurrency", "1"]
+ENTRYPOINT ["celery", "-A", "tasks", "worker", "-l", "INFO", "-P", "eventlet", "--concurrency", "1"]

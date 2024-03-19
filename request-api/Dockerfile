@@ -8,7 +8,7 @@ COPY request-api/src/. .
 
 COPY ../request_model ./request_model
 
-COPY ../request_tasks ./request_tasks
+COPY ../task_interface ./task_interface
 
 RUN python -m pip install -r requirements.txt
 

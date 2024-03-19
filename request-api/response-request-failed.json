@@ -1,0 +1,21 @@
+{
+    "id": 1,
+    "type": "check_url",
+    "status": "FAILED",
+    "created": "2024-03-13T16:50:59.472751Z",
+    "modified": "2024-03-13T16:50:59.472751Z",
+    "params": {
+      "type": "check_url",
+      "collection": "article_4_direction",
+      "dataset": "article_4_direction_area",
+      "url": "https://services3.arcgis.com/lCzPKKaGs7lhrnrV/ArcGIS/rest/services/Planning_Portal_Article_4_Direction_081223/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson"
+    },
+    "response": {
+      "error": {
+         "code": "404",
+         "type": "User error",
+         "msg": "The requested URL could not be downloaded: 404 error",
+         "time": "2024-03-14 17:11:45.086823"
+      }
+    }
+}

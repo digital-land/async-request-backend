@@ -1,0 +1,9 @@
+{
+ "params": {
+   "type": "check_url",
+   "collection": "tree_preservation_order",
+   "dataset": "tree",
+   "url": "https://services3.arcgis.com/lCzPKKaGs7lhrnrV/ArcGIS/rest/services/tree_081223/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson",
+   "geom_type": "point"
+ }
+}

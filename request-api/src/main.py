@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 import crud
 from request_model import models, schemas
 from database import SessionLocal, engine
-from request_tasks import task
+from task_interface.check_tasks import celery, CheckDataFileTask
+
+CheckDataFileTask = celery.register_task(CheckDataFileTask())
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -46,7 +48,7 @@ def create_request(request: schemas.RequestCreate, http_request: Request, http_r
 
     try:
         if use_celery:
-            task.check_datafile.delay(request_schema.model_dump())
+            CheckDataFileTask.delay(request_schema.model_dump())
         else:
             queue().send_message(
                 MessageBody=request_schema.model_dump_json(), MessageAttributes={}
