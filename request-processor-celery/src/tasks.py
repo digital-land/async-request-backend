@@ -36,11 +36,10 @@ def check_datafile(request: Dict):
         f"{tmp_dir}/{request_data.uploaded_filename}",
         max_file_size_mb,
     )
-    response_data = workflow.run_workflow(
+    workflow.run_workflow(
         request_data.collection, request_data.dataset, "", request_data.geom_type
     )
-
-    return {"request": _get_request(request_schema.id), "response_data": response_data}
+    return _get_request(request_schema.id)
 
 
 @task_prerun.connect
