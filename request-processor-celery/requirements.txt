@@ -3,3 +3,7 @@ eventlet==0.35.2
 SQLAlchemy>=2.0.27
 psycopg2_binary>=2.9.9
 pydantic>=2.6.1
+cchardet==2.1.7
+httpx
+pre-commit
+-e git+https://github.com/digital-land/pipeline.git#egg=digital-land

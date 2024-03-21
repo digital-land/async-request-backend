@@ -5,8 +5,8 @@ from pydantic import BaseModel, Field
 
 
 class RequestTypeEnum(str, Enum):
-    check_url = 'check_url'
-    check_file = 'check_file'
+    check_url = "check_url"
+    check_file = "check_file"
 
 
 class Params(BaseModel):
@@ -19,6 +19,7 @@ class CheckFileParams(Params):
     type: Literal[RequestTypeEnum.check_file] = RequestTypeEnum.check_file
     original_filename: str
     uploaded_filename: str
+    geom_type: Optional[str] = None
 
 
 class CheckUrlParams(Params):
@@ -28,7 +29,7 @@ class CheckUrlParams(Params):
 
 
 class RequestBase(BaseModel):
-    params: Union[CheckUrlParams, CheckFileParams] = Field(discriminator='type')
+    params: Union[CheckUrlParams, CheckFileParams] = Field(discriminator="type")
 
 
 class RequestCreate(RequestBase):
@@ -44,3 +45,7 @@ class Request(RequestBase):
 
     class Config:
         from_attributes = True
+
+
+class Reponse(BaseModel):
+    pass

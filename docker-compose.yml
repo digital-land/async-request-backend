@@ -75,3 +75,5 @@ services:
     restart: on-failure
     deploy:
       replicas: 1
+    volumes:
+      - "./request-processor-celery/docker_volume:/opt"

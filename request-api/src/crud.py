@@ -14,13 +14,9 @@ def get_requests(db: Session, skip: int = 0, limit: int = 100):
 
 def create_request(db: Session, request: schemas.RequestCreate):
     db_request = models.Request(
-        status='NEW',
-        type = request.params.type,
-        params=request.params
-        .model_dump()
+        status="NEW", type=request.params.type, params=request.params.model_dump()
     )
     db.add(db_request)
     db.commit()
     db.refresh(db_request)
     return db_request
-

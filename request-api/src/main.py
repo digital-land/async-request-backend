@@ -15,7 +15,7 @@ CheckDataFileTask = celery.register_task(CheckDataFileTask())
 
 models.Base.metadata.create_all(bind=engine)
 
-use_celery = bool(os.environ.get('USE_CELERY'))
+use_celery = bool(os.environ.get("USE_CELERY"))
 
 app = FastAPI()
 
@@ -41,10 +41,13 @@ def read_root():
 
 
 @app.post("/requests", status_code=202, response_model=schemas.Request)
-def create_request(request: schemas.RequestCreate, http_request: Request, http_response: Response, db: Session = Depends(get_db)):
-    request_schema = _map_to_schema(
-        request_model=crud.create_request(db, request)
-    )
+def create_request(
+    request: schemas.RequestCreate,
+    http_request: Request,
+    http_response: Response,
+    db: Session = Depends(get_db),
+):
+    request_schema = _map_to_schema(request_model=crud.create_request(db, request))
 
     try:
         if use_celery:
@@ -58,7 +61,10 @@ def create_request(request: schemas.RequestCreate, http_request: Request, http_r
         print("Send message failed: %s", request_schema)
         raise error
 
-    http_response.headers['Location'] = f"${http_request.headers['Host']}/requests/{request_schema.id}"
+    http_response.headers[
+        "Location"
+    ] = f"${http_request.headers['Host']}/requests/{request_schema.id}"
+
     return request_schema
 
 
@@ -66,13 +72,15 @@ def create_request(request: schemas.RequestCreate, http_request: Request, http_r
 def read_request(request_id: str, db: Session = Depends(get_db)):
     request_model = crud.get_request(db, request_id)
     if request_model is None:
-        raise HTTPException(status_code=404, detail=f"Request with ${request_id} was not found")
+        raise HTTPException(
+            status_code=404, detail=f"Request with ${request_id} was not found"
+        )
     return _map_to_schema(request_model)
 
 
 def _map_to_schema(request_model: models.Request) -> schemas.Request:
     return schemas.Request(
-        type = request_model.type,
+        type=request_model.type,
         id=request_model.id,
         status=request_model.status,
         created=request_model.created,

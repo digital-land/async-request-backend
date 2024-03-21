@@ -12,7 +12,7 @@ from database import SessionLocal
 
 import crud
 
-from request_model import schemas, models
+from request_model import schemas
 
 import s3_transfer_manager
 
@@ -31,20 +31,22 @@ def queue():
 
 
 def handle_messages():
-    messages = queue().receive_messages(MaxNumberOfMessages=1, WaitTimeSeconds=wait_seconds)
+    messages = queue().receive_messages(
+        MaxNumberOfMessages=1, WaitTimeSeconds=wait_seconds
+    )
     for message in messages:
         try:
             request = schemas.Request.model_validate_json(message.body)
-            request_data = models.RequestData.model_validate(request.data)
+            request_data = request.params
 
             # Set status to PROCESSING
-            update_request_status(request.id, 'PROCESSING')
+            update_request_status(request.id, "PROCESSING")
 
             s3_transfer_manager.download_with_default_configuration(
                 os.environ["REQUEST_FILES_BUCKET_NAME"],
                 request_data.uploaded_file.uploaded_filename,
                 f"/tmp/{request_data.uploaded_file.uploaded_filename}",
-                max_file_size_mb
+                max_file_size_mb,
             )
 
             # Future: call pipeline here and write error summary to database
@@ -52,7 +54,7 @@ def handle_messages():
             # time.sleep(20)
 
             # Set status to COMPLETE when processing successful
-            update_request_status(request.id, 'COMPLETE')
+            update_request_status(request.id, "COMPLETE")
 
             # Remove downloaded file
             os.remove(f"/tmp/{request_data.uploaded_file.uploaded_filename}")
@@ -63,7 +65,7 @@ def handle_messages():
             print(f"exception while processing message: {repr(e)}", flush=True)
             logger.error(f"exception while processing message: {repr(e)}")
             # Set status to NEW since processing needs to be re-tried
-            update_request_status(request.id, 'NEW')
+            update_request_status(request.id, "NEW")
             continue
 
         message.delete()
@@ -75,6 +77,7 @@ def update_request_status(request_id, status):
         model.status = status
         session.commit()
         session.flush()
+
 
 # def db_session():
 #     db = SessionLocal()
@@ -92,4 +95,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
