@@ -30,7 +30,7 @@ def check_datafile(request: Dict):
 
     # Future: call pipeline here and write error summary to database
     # Simulate processing delay
-    time.sleep(20)
+    time.sleep(5)
 
     # Remove downloaded file
     os.remove(f"/tmp/{request_data.uploaded_filename}")

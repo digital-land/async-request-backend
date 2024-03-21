@@ -3,4 +3,4 @@ name = "request-processor-celery"
 version = "0.0.1"
 
 [tool.pytest.ini_options]
-pythonpath = "src"
+pythonpath = "src ../."
