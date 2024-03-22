@@ -1,6 +1,10 @@
 import datetime
 from unittest.mock import patch
 
+import pytest
+from botocore.exceptions import ClientError
+from pydantic import ValidationError
+
 from request_model import models, schemas
 from tasks import check_datafile
 
@@ -22,6 +26,28 @@ def test_check_datafile(s3_transfer_manager, os_remove):
         ).model_dump()
     )
     check_datafile(request)
+    assert s3_transfer_manager.called
+    assert os_remove.called
 
 
+def test_check_datafile_with_invalid_request():
+    with pytest.raises(ValidationError):
+        check_datafile({"type": "invalid"})
 
+
+def test_check_datafile_with_uploaded_file_ref():
+    with pytest.raises(ClientError):
+        request = models.Request(
+            id=1,
+            type=schemas.RequestTypeEnum.check_url,
+            created=datetime.datetime.now(),
+            modified=datetime.datetime.now(),
+            status='NEW',
+            params=schemas.CheckFileParams(
+                collection="article_4_direction",
+                dataset="article_4_direction_area",
+                original_filename="article_4_direction_area.csv",
+                uploaded_filename="unknown.csv"
+            ).model_dump()
+        )
+        check_datafile(request)
