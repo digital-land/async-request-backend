@@ -54,7 +54,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.DEPLOY_AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-2
 
-      - uses: aws-actions/amazon-ecr-login@v1
+      - uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
 
       - run: docker pull $DOCKER_REPO:${GITHUB_REF_NAME} || echo "no current latest image"
       
@@ -94,7 +96,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.DEPLOY_AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-2
 
-      - uses: aws-actions/amazon-ecr-login@v1
+      - uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
 
       - run: docker pull $DOCKER_REPO:${GITHUB_REF_NAME} || echo "no current latest image"
 
