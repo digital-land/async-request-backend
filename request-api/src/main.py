@@ -16,14 +16,15 @@ CheckDataFileTask = celery.register_task(CheckDataFileTask())
 
 use_celery = bool(os.environ.get('USE_CELERY'))
 
-app = FastAPI()
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Temporary: to be replaced with DB migrations
     models.Base.metadata.create_all(bind=engine())
     yield
+
+app = FastAPI(lifespan=lifespan)
+
 
 @cache
 def queue():
