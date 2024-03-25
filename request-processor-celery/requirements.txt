@@ -7,3 +7,4 @@ cchardet==2.1.7
 httpx
 pre-commit
 -e git+https://github.com/digital-land/pipeline.git#egg=digital-land
+shortuuid==1.0.13

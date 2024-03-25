@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from sqlalchemy import Column, Integer, String, DateTime, JSON, func, ForeignKey
 from sqlalchemy.orm import declarative_base, relationship
+import shortuuid
 
 Base = declarative_base()
 
@@ -8,7 +9,7 @@ Base = declarative_base()
 class Request(Base):
     __tablename__ = "request"
 
-    id = Column(Integer, primary_key=True)
+    id = Column(String, primary_key=True, default=lambda: shortuuid.uuid(), unique=True)
     created = Column(DateTime(timezone=True), server_default=func.now())
     modified = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -24,7 +25,7 @@ class Response(Base):
     __tablename__ = "response"
 
     id = Column(Integer, primary_key=True)
-    request_id = Column(Integer, ForeignKey("request.id"))
+    request_id = Column(String, ForeignKey("request.id"))
     data = Column(JSON)
     error = Column(JSON)
 
