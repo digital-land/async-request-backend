@@ -9,7 +9,7 @@ import s3_transfer_manager
 import crud
 import database
 from task_interface.check_tasks import celery, CheckDataFileTask
-
+import json
 from application.core import workflow
 from application.configurations.config import Directories
 from pathlib import Path
@@ -18,15 +18,25 @@ logger = get_task_logger(__name__)
 # Threshold for s3_transfer_manager to automatically use multipart download
 max_file_size_mb = 30
 
-tmp_dir = os.path.join(Directories.COLLECTION_DIR + "resource")
-
 
 @celery.task(base=CheckDataFileTask, name=CheckDataFileTask.name)
-def check_datafile(request: Dict):
+def check_datafile(request: Dict, directories=None):
     logger.info("check datafile")
     request_schema = schemas.Request.model_validate(request)
     request_data = request_schema.params
 
+    if not directories:
+        directories = Directories
+    elif directories:
+        data_dict = json.loads(directories)
+        # Create an instance of the Directories class
+        directories = Directories()
+
+        # Update attribute values based on the dictionary
+        for key, value in data_dict.items():
+            setattr(directories, key, value)
+
+    tmp_dir = os.path.join(directories.COLLECTION_DIR + "/resource")
     # Ensure tmp_dir exists, create it if it doesn't
     Path(tmp_dir).mkdir(parents=True, exist_ok=True)
 
@@ -37,7 +47,11 @@ def check_datafile(request: Dict):
         max_file_size_mb,
     )
     workflow.run_workflow(
-        request_data.collection, request_data.dataset, "", request_data.geom_type
+        request_data.collection,
+        request_data.dataset,
+        "",
+        request_data.geom_type,
+        directories,
     )
     return _get_request(request_schema.id)
 

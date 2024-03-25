@@ -7,19 +7,16 @@ import shutil
 from application.core.utils import detect_encoding
 from application.logging.logger import get_logger
 from application.core.pipeline import fetch_response_data, resource_from_path
-from application.configurations.config import Directories, source_url
+from application.configurations.config import source_url
 from collections import defaultdict
 
 
 logger = get_logger(__name__)
 
 
-def run_workflow(collection, dataset, organisation, geom_type, directories=None):
+def run_workflow(collection, dataset, organisation, geom_type, directories):
     additional_column_mappings = None
     additional_concats = None
-
-    if not directories:
-        directories = Directories
 
     try:
         # pipeline directory structure & download
@@ -52,7 +49,10 @@ def run_workflow(collection, dataset, organisation, geom_type, directories=None)
             additional_concats=additional_concats,
         )
         # Need to get the mandatory fields from specification/central place. Hardcoding for MVP
-        required_fields_path = os.path.join("application/configs/mandatory_fields.yaml")
+        required_fields_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "../application/configs/mandatory_fields.yaml",
+        )
 
         required_fields = getMandatoryFields(required_fields_path, dataset)
         converted_json = []
@@ -86,6 +86,7 @@ def run_workflow(collection, dataset, organisation, geom_type, directories=None)
             "error-summary": summary_data,
         }
         # logger.info("Error Summary: %s", summary_data)
+        # print("***********response data****************", response_data)
     except Exception as e:
         logger.error(f"An error occurred: {e}")
 
@@ -101,7 +102,6 @@ def run_workflow(collection, dataset, organisation, geom_type, directories=None)
             directories.DATASET_RESOURCE_DIR,
             directories.PIPELINE_DIR,
         )
-
     return response_data
 
 
@@ -241,7 +241,10 @@ def error_summary(issue_log, column_field):
 
 def convert_error_summary_to_json(error_summary):
     # Load mappings
-    mappings_file_path = os.path.join("application/configs/mapping.yaml")
+    mappings_file_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        "../application/configs/mapping.yaml",
+    )
     mappings = load_mappings(mappings_file_path)
 
     json_data = []

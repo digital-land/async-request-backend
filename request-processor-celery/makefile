@@ -100,18 +100,10 @@ jslint-fix::
 # Testing
 # =============================
 
-test: test-unit test-integration test-acceptance
+test: test-unit test-integration
 
 test-unit:
 	python -m pytest tests/unit
 
 test-integration:
 	python -m pytest tests/integration
-
-test-integration-docker:
-	docker-compose run web python -m pytest tests/integration --junitxml=.junitxml/integration.xml $(PYTEST_RUNTIME_ARGS)
-
-test-acceptance:
-	python -m pytest tests/acceptance
-
-# Security

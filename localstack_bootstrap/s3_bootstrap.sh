@@ -24,6 +24,6 @@ upload_file_to_bucket() {
 }
 
 create_upload_bucket "dluhc-data-platform-request-files-local"
-upload_file_to_bucket "B1E16917-449C-4FC5-96D1-EE4255A79FB1" \
-  "/etc/localstack/init/ready.d/bogdan-farca-CEx86maLUSc-unsplash.jpg" \
+upload_file_to_bucket "492f15d8-45e4-427e-bde0-f60d69889f40" \
+  "/etc/localstack/init/ready.d/article-direction-area.csv" \
   "dluhc-data-platform-request-files-local"

@@ -94,7 +94,6 @@ def fetch_response_data(
         os.makedirs(os.path.join(issue_dir, dataset), exist_ok=True)
         os.makedirs(os.path.join(column_field_dir, dataset), exist_ok=True)
         os.makedirs(os.path.join(dataset_resource_dir, dataset), exist_ok=True)
-
         try:
             pipeline_run(
                 dataset=dataset,
@@ -112,34 +111,6 @@ def fetch_response_data(
             )
         except Exception as err:
             logger.error("An exception occured during pipeline_run: ", str(err))
-
-        # COMMENTING OUT CREATING THE FLATTENED CSV FOR NOW
-        # build dataset
-        # dataset_input_path = os.path.join(transformed_dir, dataset, f"{file_name}.csv")
-        # with open(dataset_input_path, "r", newline="") as csvfile:
-        #     reader = csv.DictReader(csvfile)
-        #     for row in reader:
-        #         print("1.", row)
-        # dataset_create(
-        #     input_paths=[dataset_input_path],
-        #     output_path=os.path.join(dataset_dir, f"{dataset}.sqlite3"),
-        #     organisation_path=os.path.join(cache_dir, "organisation.csv"),
-        #     pipeline=pipeline,
-        #     dataset=dataset,
-        #     specification=specification,
-        #     issue_dir=issue_dir,
-        # )
-        # dataset_dump(
-        #     os.path.join(dataset_dir, f"{dataset}.sqlite3"),
-        #     os.path.join(dataset_dir, f"{dataset}.csv"),
-        # )
-        # if os.path.getsize(os.path.join(dataset_dir, f"{dataset}.csv")) != 0:
-        #     dataset_dump_flattened(
-        #         os.path.join(dataset_dir, f"{dataset}.csv"),
-        #         flattened_dir,
-        #         specification,
-        #         dataset,
-        #     )
 
 
 def pipeline_run(
@@ -271,6 +242,7 @@ def assign_entries(resource_path, dataset, organisation, pipeline_dir, specifica
         pipeline=pipeline,
         specification=specification,
     )
+
     unassigned_entries = []
     unassigned_entries.append(resource_lookups)
 
