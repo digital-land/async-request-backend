@@ -78,7 +78,8 @@ def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
 
 
 def _update_request_status(request_id, status):
-    with database.SessionLocal() as session:
+    db_session = database.session_maker()
+    with db_session() as session:
         model = crud.get_request(session, request_id)
         model.status = status
         session.commit()
@@ -86,5 +87,6 @@ def _update_request_status(request_id, status):
 
 
 def _get_request(request_id):
-    with database.SessionLocal() as session:
+    db_session = database.session_maker()
+    with db_session() as session:
         yield crud.get_request(session, request_id)

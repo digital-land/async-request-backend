@@ -1,3 +1,4 @@
+
 import os
 
 import boto3
@@ -9,11 +10,11 @@ import database
 from request_model import models
 
 os.environ["AWS_DEFAULT_REGION"] = "eu-west-2"
+os.environ["SQS_QUEUE_NAME"] = "request-queue"
 os.environ["AWS_ACCESS_KEY_ID"] = "testing"
 os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
 os.environ["AWS_SECURITY_TOKEN"] = "testing"
 os.environ["AWS_SESSION_TOKEN"] = "testing"
-os.environ["REQUEST_FILES_BUCKET_NAME"] = "dluhc-data-platform-request-files-local"
 os.environ["CELERY_BROKER_URL"] = "memory://"
 
 postgres_container = PostgresContainer("postgres:16.2-alpine")
@@ -36,22 +37,11 @@ def db(postgres):
 
 
 @pytest.fixture(scope="module")
-def s3_client():
+def sqs_client():
     with mock_aws():
-        yield boto3.client("s3")
+        yield boto3.resource('sqs')
 
 
 @pytest.fixture(scope="module")
-def s3_bucket(request, s3_client):
-    s3_client.create_bucket(
-        Bucket=os.environ["REQUEST_FILES_BUCKET_NAME"],
-        CreateBucketConfiguration={
-            "LocationConstraint": os.environ["AWS_DEFAULT_REGION"]
-        },
-    )
-    test_dir = "tests"
-    s3_client.put_object(
-        Bucket=os.environ["REQUEST_FILES_BUCKET_NAME"],
-        Key="492f15d8-45e4-427e-bde0-f60d69889f40",
-        Body=open(f"{test_dir}/data/files/article-direction-area.csv", "rb"),
-    )
+def sqs_queue(sqs_client):
+    sqs_client.create_queue(QueueName=os.environ["SQS_QUEUE_NAME"])
