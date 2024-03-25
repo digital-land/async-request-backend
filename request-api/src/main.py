@@ -8,16 +8,20 @@ from sqlalchemy.orm import Session
 
 import crud
 from request_model import models, schemas
-from database import SessionLocal, engine
+from database import session_maker, engine
 from task_interface.check_tasks import celery, CheckDataFileTask
 
 CheckDataFileTask = celery.register_task(CheckDataFileTask())
 
-models.Base.metadata.create_all(bind=engine)
-
 use_celery = bool(os.environ.get('USE_CELERY'))
 
 app = FastAPI()
+
+
+# Temporary: to be replaced with DB migrations
+@app.on_event("startup")
+async def startup_event():
+    models.Base.metadata.create_all(bind=engine())
 
 
 @cache
@@ -28,7 +32,7 @@ def queue():
 
 # Dependency
 def get_db():
-    db = SessionLocal()
+    db = session_maker()()
     try:
         yield db
     finally:
