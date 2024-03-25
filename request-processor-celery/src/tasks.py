@@ -5,7 +5,9 @@ from typing import Dict
 from celery.utils.log import get_task_logger
 from celery.signals import task_prerun, task_success, task_failure
 
-import s3_transfer_manager, crud, database
+import s3_transfer_manager
+import crud
+import database
 from request_model import schemas
 from task_interface.check_tasks import celery, CheckDataFileTask
 
@@ -60,7 +62,8 @@ def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
 
 
 def _update_request_status(request_id, status):
-    with database.SessionLocal() as session:
+    db_session = database.session_maker()
+    with db_session() as session:
         model = crud.get_request(session, request_id)
         model.status = status
         session.commit()
@@ -68,5 +71,6 @@ def _update_request_status(request_id, status):
 
 
 def _get_request(request_id):
-    with database.SessionLocal() as session:
+    db_session = database.session_maker()
+    with db_session() as session:
         yield crud.get_request(session, request_id)

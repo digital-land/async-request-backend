@@ -1,28 +1,14 @@
 import datetime
-import os
 import time
 
 import pytest
-from sqlalchemy import create_engine, StaticPool
-from sqlalchemy.orm import sessionmaker
 
 import database
 from request_model import models, schemas
 from tasks import check_datafile
 
-engine = create_engine(
-    os.environ.get('DATABASE_URL'),
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-    echo=True
-)
 
-models.Base.metadata.create_all(bind=engine)
-
-database.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-def test_check_datafile(celery_app, celery_worker, s3_bucket):
+def test_check_datafile(celery_app, celery_worker, s3_bucket, db):
     request_model = models.Request(
         type=schemas.RequestTypeEnum.check_url,
         created=datetime.datetime.now(),
@@ -35,7 +21,8 @@ def test_check_datafile(celery_app, celery_worker, s3_bucket):
             uploaded_filename="B1E16917-449C-4FC5-96D1-EE4255A79FB1.jpg"
         ).model_dump()
     )
-    with database.SessionLocal() as session:
+    db_session = database.session_maker()
+    with db_session() as session:
         session.add(request_model)
         session.commit()
         session.refresh(request_model)
@@ -56,7 +43,8 @@ def _wait_for_request_status(request_id, expected_status, timeout_seconds=10, in
     seconds_waited = 0
     actual_status = 'UNKNOWN'
     while seconds_waited <= timeout_seconds:
-        with database.SessionLocal() as session:
+        db_session = database.session_maker()
+        with db_session() as session:
             result = (session.query(models.Request)
                       .filter(models.Request.id == request_id)
                       .first())
