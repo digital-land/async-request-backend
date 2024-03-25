@@ -1,7 +1,7 @@
 import datetime
 from enum import Enum
 from typing import Union, Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class RequestTypeEnum(str, Enum):
@@ -36,11 +36,14 @@ class RequestCreate(RequestBase):
 
 
 class Request(RequestBase):
-    id: int
+    id: str
     type: RequestTypeEnum
     status: str
     created: datetime.datetime
     modified: datetime.datetime
 
-    class Config:
-        from_attributes = True
+    model_config: ConfigDict(from_attributes=True)
+
+
+class Response(BaseModel):
+    pass

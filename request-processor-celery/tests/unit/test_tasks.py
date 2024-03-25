@@ -2,18 +2,19 @@ import datetime
 from unittest.mock import patch
 
 import pytest
+import shortuuid
 from botocore.exceptions import ClientError
 from pydantic import ValidationError
 
-from request_model import models, schemas
+from request_model import schemas
 from tasks import check_datafile
 
 
 @patch('s3_transfer_manager.download_with_default_configuration')
 @patch('os.remove')
 def test_check_datafile(s3_transfer_manager, os_remove):
-    request = models.Request(
-        id=1,
+    request = schemas.Request(
+        id=shortuuid.uuid(),
         type=schemas.RequestTypeEnum.check_url,
         created=datetime.datetime.now(),
         modified=datetime.datetime.now(),
@@ -37,8 +38,8 @@ def test_check_datafile_with_invalid_request():
 
 def test_check_datafile_with_uploaded_file_ref():
     with pytest.raises(ClientError):
-        request = models.Request(
-            id=1,
+        request = schemas.Request(
+            id=shortuuid.uuid(),
             type=schemas.RequestTypeEnum.check_url,
             created=datetime.datetime.now(),
             modified=datetime.datetime.now(),
