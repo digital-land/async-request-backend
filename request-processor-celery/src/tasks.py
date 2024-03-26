@@ -21,7 +21,6 @@ max_file_size_mb = 30
 
 @celery.task(base=CheckDataFileTask, name=CheckDataFileTask.name)
 def check_datafile(request: Dict, directories=None):
-    logger.info("check datafile")
     request_schema = schemas.Request.model_validate(request)
     request_data = request_schema.params
 

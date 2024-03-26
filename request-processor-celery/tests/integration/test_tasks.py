@@ -1,65 +1,12 @@
 import datetime
 import time
-from collections import namedtuple
 import pytest
-import csv
 import json
 import shutil
 import os
 import database
 from request_model import models, schemas
 from tasks import check_datafile
-
-
-@pytest.fixture
-def mock_directories(tmpdir):
-    Directories = namedtuple(
-        "Directories",
-        [
-            "COLLECTION_DIR",
-            "CONVERTED_DIR",
-            "ISSUE_DIR",
-            "COLUMN_FIELD_DIR",
-            "TRANSFORMED_DIR",
-            "FLATTENED_DIR",
-            "DATASET_DIR",
-            "DATASET_RESOURCE_DIR",
-            "PIPELINE_DIR",
-            "SPECIFICATION_DIR",
-            "CACHE_DIR",
-        ],
-    )
-    VAR_DIR = tmpdir.mkdir("var")
-    return Directories(
-        COLLECTION_DIR=tmpdir.mkdir("collection"),
-        CONVERTED_DIR=tmpdir.mkdir("converted"),
-        ISSUE_DIR=tmpdir.mkdir("issue"),
-        COLUMN_FIELD_DIR=VAR_DIR.mkdir("column-field"),
-        TRANSFORMED_DIR=tmpdir.mkdir("transformed"),
-        FLATTENED_DIR=tmpdir.mkdir("flattened"),
-        DATASET_DIR=tmpdir.mkdir("dataset"),
-        DATASET_RESOURCE_DIR=VAR_DIR.mkdir("dataset-resource"),
-        PIPELINE_DIR=tmpdir.mkdir("pipeline"),
-        SPECIFICATION_DIR="specification",
-        CACHE_DIR=VAR_DIR.mkdir("cache"),
-    )
-
-
-@pytest.fixture
-def mock_fetch_pipeline_csvs(tmpdir, mock_directories):
-    # create a mock column.csv in the pipeline folder
-    mock_column_csv = os.path.join(tmpdir, mock_directories.PIPELINE_DIR, "column.csv")
-    row = {
-        "dataset": "article-4-direction-area",
-        "resource": "",
-        "column": "wkt",
-        "field": "geometry",
-    }
-    fieldnames = row.keys()
-    with open(mock_column_csv, "w") as f:
-        dictwriter = csv.DictWriter(f, fieldnames=fieldnames)
-        dictwriter.writeheader()
-        dictwriter.writerow(row)
 
 
 def test_check_datafile(
