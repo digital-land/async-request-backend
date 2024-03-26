@@ -1,13 +1,13 @@
 import os
-from typing import Dict
+from typing import Dict, Optional
 
 from celery import Task, Celery
 
-celery = Celery('async-request-processor', broker=os.environ['CELERY_BROKER_URL'])
+celery = Celery("async-request-processor", broker=os.environ["CELERY_BROKER_URL"])
 
 
 class CheckDataFileTask(Task):
-    name = 'request_tasks.check_datafile_task'
+    name = "task_interface.check_datafile_task"
 
-    def run(self, request: Dict):
-        raise NotImplemented('Base class must implement')
+    def run(self, request: Dict, directories: Optional[str] = None):
+        raise NotImplementedError("Base class must implement")

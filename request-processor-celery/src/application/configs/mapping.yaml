@@ -1,0 +1,176 @@
+mappings:
+- field: documentation-url
+  issue-type: missing value
+  description: Documentation URL missing
+  summary-singular: "1 documentation URL missing"
+  summary-plural: "{count} documentation URLs missing"
+- field: documentation-url
+  issue-type: invalid URI
+  description: Documentation URL must be a real URL
+  summary-singular: "1 documentation URL must be a real URL"
+  summary-plural: "{count} documentation URLs must be a real URL"
+- field: document-url
+  issue-type: missing value
+  description: Document URL missing
+  summary-singular: "1 document URL missing"
+  summary-plural: "{count} document URLs missing"
+- field: document-url
+  issue-type: invalid URI
+  description: Document URL must be a real URL
+  summary-singular: "1 document URL must be a real URL"
+  summary-plural: "{count} document URLs must be a real URL"
+- field: start-date
+  issue-type: missing value
+  description: Start date missing
+  summary-singular: "1 start date missing"
+  summary-plural: "{count} start dates missing"
+- field: start-date
+  issue-type: invalid date
+  description: Start date must be a real date
+  summary-singular: "1 start date must be a real date"
+  summary-plural: "{count} start dates must be a real date"
+- field: made-date
+  issue-type: missing value
+  description: Made date missing
+  summary-singular: "1 made date missing"
+  summary-plural: "{count} made dates missing"
+- field: made-date
+  issue-type: invalid date
+  description: Made date must be a real date
+  summary-singular: "1 made date must be a real date"
+  summary-plural: "{count} made dates must be a real date"
+- field: confirmed-date
+  issue-type: missing value
+  description: Confirmed date missing
+  summary-singular: "1 confirmed date missing"
+  summary-plural: "{count} confirmed dates missing"
+- field: confirmed-date
+  issue-type: invalid date
+  description: Confirmed date must be a real date
+  summary-singular: "1 confirmed date must be a real date"
+  summary-plural: "{count} confirmed dates must be a real date"
+- field: entry-date
+  issue-type: missing value
+  description: Entry date missing
+  summary-singular: "1 entry date missing"
+  summary-plural: "{count} entry dates missing"
+- field: entry-date
+  issue-type: invalid date
+  description: Entry date must be a real date
+  summary-singular: "1 entry date must be a real date"
+  summary-plural: "{count} entry dates must be a real date"
+- field: entry-date
+  issue-type: future entry-date
+  description: Entry date must be today or in the past
+  summary-singular: "1 entry date must be today or in the past"
+  summary-plural: "{count} entry dates must be today or in the past"
+- field: end-date
+  issue-type: missing value
+  description: End date missing
+  summary-singular: "1 end date missing"
+  summary-plural: "{count} end dates missing"
+- field: end-date
+  issue-type: invalid date
+  description: End date must be a real date
+  summary-singular: "1 end date must be a real date"
+  summary-plural: "{count} end dates must be a real date"
+- field: geometry
+  issue-type: missing value
+  description: Geometry missing
+  summary-singular: "1 geometry missing"
+  summary-plural: "{count} geometries missing"
+- field: point
+  issue-type: missing value
+  description: Geometry missing
+  summary-singular: "1 point missing"
+  summary-plural: "{count} points missing"
+- field: geometry
+  issue-type: OSGB out of bounds of England
+  description: Geometry must be in England
+  summary-singular: "1 geometry must be in England"
+  summary-plural: "{count} geometries must be in England"
+- field: geometry
+  issue-type: Unexpected geom type
+  description: Geometry must be a polygon
+  summary-singular: "1 geometry must be a polygon"
+  summary-plural: "{count} geometries must be a polygon"
+- field: point
+  issue-type: Unexpected geom type
+  description: Geometry must be a point
+  summary-singular: "1 geometry must be a point"
+  summary-plural: "{count} geometries must be a point"
+- field: geometry
+  issue-type: Unexpected geom type within GeometryCollection
+  description: Geometry must be a polygon
+  summary-singular: "1 geometry must be a polygon"
+  summary-plural: "{count} geometries must be a polygon"
+- field: geometry
+  issue-type: WGS84 out of bounds
+  description: Geometry must be in England
+  summary-singular: "1 geometry must be in England"
+  summary-plural: "{count} geometries must be in England"
+- field: geometry
+  issue-type: WGS84 out of bounds of England
+  description: Geometry must be in England
+  summary-singular: "1 geometry must be in England"
+  summary-plural: "{count} geometries must be in England"
+- field: geometry
+  issue-type: invalid WKT
+  description: Geometry must be in Well-Known Text (WKT) format
+  summary-singular: "1 geometry must be in Well-Known Text (WKT) format"
+  summary-plural: "{count} geometries must be in Well-Known Text (WKT) format"
+- field: point
+  issue-type: invalid WKT
+  description: Point must be in Well-Known Text (WKT) format
+  summary-singular: "1 point must be in Well-Known Text (WKT) format"
+  summary-plural: "{count} points must be in Well-Known Text (WKT) format"
+- field: geometry
+  issue-type: invalid coordinates
+  description: Geometry must use WGS84, OSGB or Mercator coordinates
+  summary-singular: "1 geometry must use WGS84, OSGB or Mercator coordinates"
+  summary-plural: "{count} geometries must use WGS84, OSGB or Mercator coordinates"
+- field: point
+  issue-type: invalid coordinates
+  description: Point must use WGS84, OSGB or Mercator coordinates
+  summary-singular: "1 point must use WGS84, OSGB or Mercator coordinates"
+  summary-plural: "{count} points must use WGS84, OSGB or Mercator coordinates"
+- field: geometry
+  issue-type: invalid geometry - not fixable
+  description: Geometry must be correctly formatted
+  summary-singular: "1 geometry must be correctly formatted"
+  summary-plural: "{count} geometries must be correctly formatted"
+- field: point
+  issue-type: invalid geometry - not fixable
+  description: Geometry must be correctly formatted
+  summary-singular: "1 geometry must be correctly formatted"
+  summary-plural: "{count} geometries must be correctly formatted"
+- field: reference
+  issue-type: missing value
+  description: Reference missing
+  summary-singular: "1 reference missing"
+  summary-plural: "{count} references missing"
+- field: name
+  issue-type: missing value
+  description: Name missing
+  summary-singular: "1 name missing"
+  summary-plural: "{count} names missing"
+- field: description
+  issue-type: missing value
+  description: Description missing
+  summary-singular: "1 description missing"
+  summary-plural: "{count} descriptions missing"
+- field: permitted-development-rights
+  issue-type: missing value
+  description: Permitted development rights missing
+  summary-singular: "1 permitted development rights missing"
+  summary-plural: "{count} permitted development rights missing"
+- field: document-type
+  issue-type: missing value
+  description: Document type missing
+  summary-singular: "1 document type missing"
+  summary-plural: "{count} document types missing"
+- field: listed-building
+  issue-type: missing value
+  description: Listed building missing
+  summary-singular: "1 listed building missing"
+  summary-plural: "{count} listed buildings missing"
