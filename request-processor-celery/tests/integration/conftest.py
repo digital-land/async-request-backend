@@ -31,7 +31,7 @@ def postgres(request):
     os.environ["DATABASE_URL"] = postgres_container.get_connection_url()
 
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def db(postgres):
     models.Base.metadata.create_all(bind=database.engine())
 
