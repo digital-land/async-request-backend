@@ -69,6 +69,7 @@ def fetch_response_data(
                 organisation=organisation,
                 pipeline_dir=pipeline_dir,
                 specification=specification,
+                cache_dir=cache_dir
             )
     except Exception as err:
         logger.error("An exception occured during assign_entries process: ", str(err))
@@ -233,7 +234,7 @@ def default_output_path(command, input_path):
     return f"{directory}{command}/{resource_from_path(input_path)}.csv"
 
 
-def assign_entries(resource_path, dataset, organisation, pipeline_dir, specification):
+def assign_entries(resource_path, dataset, organisation, pipeline_dir, specification, cache_dir):
     pipeline = Pipeline(pipeline_dir, dataset)
     resource_lookups = get_resource_unidentified_lookups(
         resource_path,
@@ -241,6 +242,7 @@ def assign_entries(resource_path, dataset, organisation, pipeline_dir, specifica
         organisations=[organisation],
         pipeline=pipeline,
         specification=specification,
+        org_csv_path=f"{cache_dir}/organisation.csv"
     )
 
     unassigned_entries = []

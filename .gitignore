@@ -2,3 +2,8 @@
 volume
 __pycache__
 .venv
+
+request-processor-celery/src/digital-land
+request-processor-celery/specification
+request-processor-celery/var
+request-processor-celery/tests/converted

@@ -88,7 +88,7 @@ def run_workflow(collection, dataset, organisation, geom_type, directories):
         # logger.info("Error Summary: %s", summary_data)
         # print("***********response data****************", response_data)
     except Exception as e:
-        logger.error(f"An error occurred: {e}")
+        logger.exception(f"An error occurred: {e}")
 
     finally:
         clean_up(
