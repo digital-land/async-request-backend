@@ -1,6 +1,6 @@
 import datetime
 from enum import Enum
-from typing import Union, Literal, Optional
+from typing import Union, Literal, Optional, List, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -46,5 +46,36 @@ class Request(RequestBase):
     model_config: ConfigDict(from_attributes=True)
 
 
+class ResponseData(BaseModel):
+    error_summary: Optional[List[str]]
+    column_field_log: Optional[List[Dict[str, Any]]]
+
+
+class ResponseError(BaseModel):
+    code: Optional[str]
+    type: Optional[str]
+    msg: Optional[str]
+    time: Optional[datetime.datetime]
+
+
+class ResponseDetails(BaseModel):
+    converted_csv: Optional[Dict[str, Any]]
+    issue_log: Optional[List[Dict[str, Any]]]
+    entry_number: Optional[int]
+
+
+class ResponseModel(BaseModel):
+    data: Optional[ResponseData]
+    error: Optional[Dict[str, Any]]
+    details: Optional[List[Dict[Any, Any]]]
+
+
 class Response(BaseModel):
-    pass
+    id: int
+    request_id: str
+    type: RequestTypeEnum
+    status: str
+    created: datetime.datetime
+    modified: datetime.datetime
+    request: Dict[str, Any]
+    response: Optional[ResponseModel]
