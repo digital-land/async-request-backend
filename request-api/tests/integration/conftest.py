@@ -1,13 +1,14 @@
 
 import os
 
+import alembic
 import boto3
 import pytest
+from alembic.config import Config
 from moto import mock_aws
+from sqlalchemy_utils import database_exists, create_database, drop_database
+from testcontainers.core.waiting_utils import wait_container_is_ready
 from testcontainers.postgres import PostgresContainer
-
-import database
-from request_model import models
 
 os.environ["AWS_DEFAULT_REGION"] = "eu-west-2"
 os.environ["SQS_QUEUE_NAME"] = "request-queue"
@@ -29,11 +30,20 @@ def postgres(request):
 
     request.addfinalizer(remove_postgres_container)
     os.environ["DATABASE_URL"] = postgres_container.get_connection_url()
+    wait_container_is_ready(postgres_container)
 
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def db(postgres):
-    models.Base.metadata.create_all(bind=database.engine())
+    if not database_exists(os.environ["DATABASE_URL"]):
+        print("Database does not exist, creating...")
+        create_database(os.environ["DATABASE_URL"])
+    # Apply migrations in postgres DB
+    config = Config("alembic.ini")
+    alembic.command.upgrade(config, "head")
+
+    yield
+    drop_database(os.environ["DATABASE_URL"])
 
 
 @pytest.fixture(scope="module")

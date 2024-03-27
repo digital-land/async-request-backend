@@ -1,8 +1,11 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 from functools import cache
 
 import boto3
+from alembic import command
+from alembic.config import Config
 from botocore.exceptions import ClientError
 from fastapi import FastAPI, Depends, Request, Response, HTTPException
 from sqlalchemy.orm import Session
@@ -17,13 +20,7 @@ CheckDataFileTask = celery.register_task(CheckDataFileTask())
 use_celery = bool(os.environ.get("USE_CELERY"))
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Temporary: to be replaced with DB migrations
-    models.Base.metadata.create_all(bind=engine())
-    yield
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
 
 @cache

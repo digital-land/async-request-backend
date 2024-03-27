@@ -6,10 +6,16 @@ COPY request-api/requirements.txt requirements.txt
 
 COPY request-api/src/. .
 
+RUN python -m pip install -r requirements.txt
+
 COPY ../request_model ./request_model
 
 COPY ../task_interface ./task_interface
 
-RUN python -m pip install -r requirements.txt
+COPY request-api/alembic.ini alembic.ini
 
-ENTRYPOINT ["uvicorn", "main:app", "--host", "0.0.0.0"]
+COPY request-api/docker-entrypoint.sh docker-entrypoint.sh
+
+COPY request-api/migrations migrations
+
+ENTRYPOINT ["./docker-entrypoint.sh"]
