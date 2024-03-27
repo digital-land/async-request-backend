@@ -1,4 +1,0 @@
-boto3>=1.26.79
-SQLAlchemy>=2.0.27
-psycopg2_binary>=2.9.9
-pydantic>=2.6.1
