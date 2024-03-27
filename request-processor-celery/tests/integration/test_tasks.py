@@ -17,6 +17,7 @@ def test_check_datafile(
     db,
     mock_directories,
     mock_fetch_pipeline_csvs,
+    test_data_dir,
 ):
     request_model = models.Request(
         type=schemas.RequestTypeEnum.check_file,
@@ -43,11 +44,13 @@ def test_check_datafile(
         modified=request_model.modified,
         params=request_model.params,
     )
-    source_organisation_csv = "tests/data/csvs/organisation.csv"
+    source_organisation_csv = f"{test_data_dir}/csvs/organisation.csv"
     destination_organisation_csv = os.path.join(
         mock_directories.CACHE_DIR, "organisation.csv"
     )
+    print("destination_organisation_csv="+destination_organisation_csv)
     shutil.copy(source_organisation_csv, destination_organisation_csv)
+    print("destination_organisation_csv exists? "+str(os.path.exists(destination_organisation_csv)))
 
     mocker.patch(
         "application.core.workflow.fetch_pipeline_csvs",
@@ -72,6 +75,7 @@ def test_check_datafile_invalid(
     db,
     mock_directories,
     mock_fetch_pipeline_csvs,
+    test_data_dir,
 ):
     request_model = models.Request(
         type=schemas.RequestTypeEnum.check_file,
@@ -98,7 +102,7 @@ def test_check_datafile_invalid(
         modified=request_model.modified,
         params=request_model.params,
     )
-    source_organisation_csv = "tests/data/csvs/organisation.csv"
+    source_organisation_csv = f"{test_data_dir}/csvs/organisation.csv"
     destination_organisation_csv = os.path.join(
         mock_directories.CACHE_DIR, "organisation.csv"
     )

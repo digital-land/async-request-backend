@@ -43,23 +43,37 @@ def s3_client():
 
 
 @pytest.fixture(scope="module")
-def s3_bucket(request, s3_client):
+def test_dir(request):
+    return os.path.dirname(request.module.__file__)
+
+
+@pytest.fixture(scope="module")
+def project_dir(test_dir):
+    return os.path.realpath(f"{test_dir}/../../")
+
+
+@pytest.fixture(scope="module")
+def test_data_dir(test_dir):
+    return os.path.realpath(f"{test_dir}/../data")
+
+
+@pytest.fixture(scope="module")
+def s3_bucket(test_data_dir, s3_client):
     s3_client.create_bucket(
         Bucket=os.environ["REQUEST_FILES_BUCKET_NAME"],
         CreateBucketConfiguration={
             "LocationConstraint": os.environ["AWS_DEFAULT_REGION"]
         },
     )
-    test_dir = "tests"
     s3_client.put_object(
         Bucket=os.environ["REQUEST_FILES_BUCKET_NAME"],
         Key="492f15d8-45e4-427e-bde0-f60d69889f40",
-        Body=open(f"{test_dir}/data/files/article-direction-area.csv", "rb"),
+        Body=open(f"{test_data_dir}/files/article-direction-area.csv", "rb"),
     )
 
 
 @pytest.fixture
-def mock_directories(tmpdir):
+def mock_directories(tmpdir, project_dir):
     Directories = namedtuple(
         "Directories",
         [
@@ -76,19 +90,19 @@ def mock_directories(tmpdir):
             "CACHE_DIR",
         ],
     )
-    VAR_DIR = tmpdir.mkdir("var")
+    var_dir = tmpdir.mkdir("var")
     return Directories(
         COLLECTION_DIR=tmpdir.mkdir("collection"),
         CONVERTED_DIR=tmpdir.mkdir("converted"),
         ISSUE_DIR=tmpdir.mkdir("issue"),
-        COLUMN_FIELD_DIR=VAR_DIR.mkdir("column-field"),
+        COLUMN_FIELD_DIR=var_dir.mkdir("column-field"),
         TRANSFORMED_DIR=tmpdir.mkdir("transformed"),
         FLATTENED_DIR=tmpdir.mkdir("flattened"),
         DATASET_DIR=tmpdir.mkdir("dataset"),
-        DATASET_RESOURCE_DIR=VAR_DIR.mkdir("dataset-resource"),
+        DATASET_RESOURCE_DIR=var_dir.mkdir("dataset-resource"),
         PIPELINE_DIR=tmpdir.mkdir("pipeline"),
-        SPECIFICATION_DIR="specification",
-        CACHE_DIR=VAR_DIR.mkdir("cache"),
+        SPECIFICATION_DIR=f"{project_dir}/specification",
+        CACHE_DIR=var_dir.mkdir("cache"),
     )
 
 
