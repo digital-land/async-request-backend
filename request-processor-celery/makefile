@@ -1,4 +1,3 @@
-
 # deduce the repository
 ifeq ($(REPOSITORY),)
 REPOSITORY=$(shell basename -s .git `git config --get remote.origin.url`)
@@ -15,6 +14,7 @@ endif
 ifeq ($(CACHE_DIR),)
 CACHE_DIR=var/cache/
 endif
+
 
 # =============================
 # Utils
@@ -39,7 +39,6 @@ dependencies::
 
 pre-commit-install::
 	pre-commit install
-
 
 ifeq (,$(wildcard ./makerules/specification.mk))
 # update local copies of specification files

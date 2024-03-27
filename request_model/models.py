@@ -30,7 +30,7 @@ class Response(Base):
     error = Column(JSON)
 
     request = relationship("Request", back_populates="response")
-    details = relationship("ResponseDetails", back_populates="response", uselist=False)
+    details = relationship("ResponseDetails", back_populates="response", uselist=True)
 
 
 class ResponseDetails(Base):

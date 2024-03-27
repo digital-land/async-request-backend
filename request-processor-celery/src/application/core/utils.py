@@ -4,6 +4,7 @@ import hashlib
 from application.configurations.config import Directories
 import requests
 from cchardet import UniversalDetector
+from enum import Enum
 
 logger = get_logger(__name__)
 
@@ -100,3 +101,8 @@ def detect_encoding(path):
         detector.close()
 
         return detector.result["encoding"]
+
+
+class ErrorMap(Enum):
+    USER_ERROR = "User error"
+    SYSTEM_ERROR = "System error"

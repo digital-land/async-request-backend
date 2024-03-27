@@ -11,6 +11,8 @@
       "url": "https://services3.arcgis.com/lCzPKKaGs7lhrnrV/ArcGIS/rest/services/Planning_Portal_Article_4_Direction_081223/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson"
     },
     "response": {
+      "data": null,
+      "details": null,
       "error": {
          "code": "404",
          "type": "User error",

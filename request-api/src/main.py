@@ -1,19 +1,18 @@
-import logging
 import os
-from contextlib import asynccontextmanager
 from functools import cache
 
 import boto3
-from alembic import command
-from alembic.config import Config
+
 from botocore.exceptions import ClientError
 from fastapi import FastAPI, Depends, Request, Response, HTTPException
 from sqlalchemy.orm import Session
+from datetime import datetime
 
 import crud
 from request_model import models, schemas
-from database import session_maker, engine
+from database import session_maker
 from task_interface.check_tasks import celery, CheckDataFileTask
+
 
 CheckDataFileTask = celery.register_task(CheckDataFileTask())
 
@@ -71,14 +70,21 @@ def create_request(
     return request_schema
 
 
-@app.get("/requests/{request_id}", response_model=schemas.Request)
+@app.get("/requests/{request_id}")
 def read_request(request_id: str, db: Session = Depends(get_db)):
-    request_model = crud.get_request(db, request_id)
-    if request_model is None:
+    response_model = crud.get_response(db, request_id)
+    if response_model is None:
         raise HTTPException(
-            status_code=404, detail=f"Request with ${request_id} was not found"
+            status_code=404,
+            detail={
+                "errCode": 400,
+                "errType": "User Error",
+                "errMsg": f"Response with ${request_id} was not found",
+                "errTime": str(datetime.now()),
+            },
         )
-    return _map_to_schema(request_model)
+    response_schemas = _map_to_response_schema(response_model)
+    return response_schemas
 
 
 def _map_to_schema(request_model: models.Request) -> schemas.Request:
@@ -89,4 +95,29 @@ def _map_to_schema(request_model: models.Request) -> schemas.Request:
         created=request_model.created,
         modified=request_model.modified,
         params=request_model.params,
+    )
+
+
+def _map_to_response_schema(response_model: models.Response) -> schemas.Response:
+    details_data = []
+    if response_model.details:
+        for detail in response_model.details:
+            details_data.append(detail.detail)
+
+    return schemas.Response(
+        id=response_model.id,
+        request_id=response_model.request_id,
+        type=response_model.request.type,
+        status=response_model.request.status,
+        created=response_model.request.created,
+        modified=response_model.request.modified,
+        request=response_model.request.params,
+        response={
+            "data": {
+                "error_summary": response_model.data["error-summary"],
+                "column_field_log": response_model.data["column-field-log"],
+            },
+            "details": details_data,
+            "error": response_model.error,
+        },
     )
