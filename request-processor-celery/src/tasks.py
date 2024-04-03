@@ -37,12 +37,12 @@ def check_datafile(request: Dict, directories=None):
         # Update attribute values based on the dictionary
         for key, value in data_dict.items():
             setattr(directories, key, value)
-
+    fileName = ""
     if request_data.type == "check_file":
         tmp_dir = os.path.join(directories.COLLECTION_DIR + "/resource")
         # Ensure tmp_dir exists, create it if it doesn't
         Path(tmp_dir).mkdir(parents=True, exist_ok=True)
-
+        fileName = request_data.uploaded_filename
         s3_transfer_manager.download_with_default_configuration(
             os.environ["REQUEST_FILES_BUCKET_NAME"],
             request_data.uploaded_filename,
@@ -52,14 +52,15 @@ def check_datafile(request: Dict, directories=None):
     elif request_data.type == "check_url":
         log, content = utils.get_request(request_data.url)
         if content:
-            utils.save_content(content)
+            fileName = utils.save_content(content)
         else:
             save_response_to_db(request_schema.id, log)
-            # raise URLException(log)
+            raise URLException(log)
     else:
         raise KeyError("upload_file or upload_url")
 
     response = workflow.run_workflow(
+        fileName,
         request_data.collection,
         request_data.dataset,
         "",
