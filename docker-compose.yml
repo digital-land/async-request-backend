@@ -52,6 +52,7 @@ services:
       AWS_ACCESS_KEY_ID: example
       AWS_SECRET_ACCESS_KEY: example
       # CELERY_BROKER_URL: sqs://@sqs.eu-west-2.amazonaws.com
+      CELERY_BROKER_URL: sqs://example:example@localstack:4566
       CELERY_BROKER_REGION: eu-west-2
       CELERY_BROKER_IS_SECURE: "false"
       DATABASE_URL: postgresql://postgres:password@request-db/request_database
