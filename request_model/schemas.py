@@ -65,7 +65,7 @@ class ResponseDetails(BaseModel):
 
 
 class ResponseModel(BaseModel):
-    data: Optional[ResponseData]
+    data: Optional[Dict[str, Any]]
     error: Optional[Dict[str, Any]]
     details: Optional[List[Dict[Any, Any]]]
 

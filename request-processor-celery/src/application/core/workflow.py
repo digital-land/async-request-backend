@@ -36,6 +36,7 @@ def run_workflow(collection, dataset, organisation, geom_type, directories):
             dataset,
             organisation,
             directories.COLLECTION_DIR,
+            directories.CONVERTED_DIR,
             directories.ISSUE_DIR,
             directories.COLUMN_FIELD_DIR,
             directories.TRANSFORMED_DIR,

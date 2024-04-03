@@ -39,6 +39,7 @@ def fetch_response_data(
     dataset,
     organisation,
     collection_dir,
+    converted_dir,
     issue_dir,
     column_field_dir,
     transformed_dir,
@@ -69,7 +70,7 @@ def fetch_response_data(
                 organisation=organisation,
                 pipeline_dir=pipeline_dir,
                 specification=specification,
-                cache_dir=cache_dir
+                cache_dir=cache_dir,
             )
     except Exception as err:
         logger.error("An exception occured during assign_entries process: ", str(err))
@@ -109,6 +110,7 @@ def fetch_response_data(
                 save_harmonised=False,
                 organisations=[organisation],
                 custom_temp_dir=os.path.join(cache_dir),
+                converted_dir=converted_dir,
             )
         except Exception as err:
             logger.error("An exception occured during pipeline_run: ", str(err))
@@ -121,6 +123,7 @@ def pipeline_run(
     input_path,
     output_path,
     organisations,
+    converted_dir,
     null_path=None,  # TBD: remove this
     issue_dir=None,
     organisation_path=None,
@@ -158,12 +161,16 @@ def pipeline_run(
     if len(organisations) == 1:
         default_values["organisation"] = organisations[0]
 
+    print(
+        "converted path::: ",
+        os.path.abspath(os.path.join(converted_dir, f"{resource}.csv")),
+    )
     run_pipeline(
         ConvertPhase(
             path=input_path,
             dataset_resource_log=dataset_resource_log,
             custom_temp_dir=custom_temp_dir,
-            output_path=os.path.join("converted", f"{resource}.csv"),
+            output_path=os.path.join(converted_dir, f"{resource}.csv"),
         ),
         NormalisePhase(skip_patterns=skip_patterns, null_path=null_path),
         ParsePhase(),
@@ -234,7 +241,9 @@ def default_output_path(command, input_path):
     return f"{directory}{command}/{resource_from_path(input_path)}.csv"
 
 
-def assign_entries(resource_path, dataset, organisation, pipeline_dir, specification, cache_dir):
+def assign_entries(
+    resource_path, dataset, organisation, pipeline_dir, specification, cache_dir
+):
     pipeline = Pipeline(pipeline_dir, dataset)
     resource_lookups = get_resource_unidentified_lookups(
         resource_path,
@@ -242,7 +251,7 @@ def assign_entries(resource_path, dataset, organisation, pipeline_dir, specifica
         organisations=[organisation],
         pipeline=pipeline,
         specification=specification,
-        org_csv_path=f"{cache_dir}/organisation.csv"
+        org_csv_path=f"{cache_dir}/organisation.csv",
     )
 
     unassigned_entries = []

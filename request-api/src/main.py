@@ -104,6 +104,12 @@ def _map_to_response_schema(response_model: models.Response) -> schemas.Response
         for detail in response_model.details:
             details_data.append(detail.detail)
 
+    # error_summary = None
+    # column_field_log = None
+
+    # if response_model.data is not None:
+    #     error_summary = response_model.data.get("error-summary")
+    #     column_field_log = response_model.data.get("column-field-log")
     return schemas.Response(
         id=response_model.id,
         request_id=response_model.request_id,
@@ -113,10 +119,11 @@ def _map_to_response_schema(response_model: models.Response) -> schemas.Response
         modified=response_model.request.modified,
         request=response_model.request.params,
         response={
-            "data": {
-                "error_summary": response_model.data["error-summary"],
-                "column_field_log": response_model.data["column-field-log"],
-            },
+            "data": response_model.data,
+            # {
+            #     "error_summary": error_summary,
+            #     "column_field_log": column_field_log,
+            # },
             "details": details_data,
             "error": response_model.error,
         },

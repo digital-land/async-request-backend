@@ -38,7 +38,6 @@ def check_datafile(request: Dict, directories=None):
         for key, value in data_dict.items():
             setattr(directories, key, value)
 
-    # try:
     if request_data.type == "check_file":
         tmp_dir = os.path.join(directories.COLLECTION_DIR + "/resource")
         # Ensure tmp_dir exists, create it if it doesn't
@@ -55,29 +54,10 @@ def check_datafile(request: Dict, directories=None):
         if content:
             utils.save_content(content)
         else:
-            raise URLException(log)
+            save_response_to_db(request_schema.id, log)
+            # raise URLException(log)
     else:
         raise KeyError("upload_file or upload_url")
-    # except KeyError as err:
-    #     logger.error(f"Exception occured: {str(err)}")
-    #     raise HTTPException(
-    #         status_code=status.HTTP_400_BAD_REQUEST,
-    #         detail={
-    #             "errCode": str(status.HTTP_400_BAD_REQUEST),
-    #             "errType": utils.ErrorMap.USER_ERROR.value,
-    #             "errMsg": f"Missing required field: {str(err)}",
-    #             "errTime": str(datetime.now()),
-    #         },
-    #     )
-
-    # except URLException as err:
-    #     logger.error(f"Exception occured: {str(err)}")
-    #     raise HTTPException(
-    #         status_code=status.HTTP_400_BAD_REQUEST,
-    #         detail={
-    #             **err.detail,
-    #         },
-    #     )
 
     response = workflow.run_workflow(
         request_data.collection,
@@ -137,17 +117,15 @@ def save_response_to_db(request_id, response_data):
     with db_session() as session:
         try:
             if (
-                response_data.hasattr("column-field-log")
-                and response_data.hasattr("error-summary")
-                and response_data.hasattr("converted-csv")
-                and response_data.hasattr("issue-log")
+                "column-field-log" in response_data
+                and "error-summary" in response_data
+                and "converted-csv" in response_data
+                and "issue-log" in response_data
             ):
                 data = {
                     "column-field-log": response_data.get("column-field-log", {}),
                     "error-summary": response_data.get("error-summary", {}),
                 }
-                converted_row_data = response_data.get("converted-csv")
-                issue_log_data = response_data.get("issue-log")
                 # Create a new Response instance
                 new_response = models.Response(request_id=request_id, data=data)
 
@@ -157,6 +135,8 @@ def save_response_to_db(request_id, response_data):
 
                 # Initialize line number
                 entry_number = 1
+                converted_row_data = response_data.get("converted-csv")
+                issue_log_data = response_data.get("issue-log")
                 # Save converted_row_data and issue_log_data in ResponseDetails
                 for converted_row in converted_row_data:
                     # Collect issue logs corresponding to the current line number
@@ -183,6 +163,19 @@ def save_response_to_db(request_id, response_data):
 
                 # Commit the changes to the database
                 session.commit()
+
+            elif "message" in response_data:
+                error = URLException(response_data)
+                # error_detail_json = json.dumps(error.detail)
+                # error_details = {
+                #     "detail": error.as_dict()
+                # }
+                new_response = models.Response(
+                    request_id=request_id, error=error.detail
+                )
+                session.add(new_response)
+                session.commit()
+
         except Exception as e:
             session.rollback()
             raise e
