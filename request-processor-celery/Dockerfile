@@ -13,4 +13,4 @@ COPY ../task_interface ./task_interface
 
 RUN make init
 
-ENTRYPOINT ["celery", "-A", "tasks", "worker", "-l", "INFO", "-P", "eventlet", "--concurrency", "1"]
+ENTRYPOINT ["celery", "--config", "celeryconfig", "-A", "tasks", "worker", "-l", "INFO", "-P", "eventlet", "--concurrency", "1"]

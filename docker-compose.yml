@@ -51,7 +51,9 @@ services:
       AWS_DEFAULT_REGION: eu-west-2
       AWS_ACCESS_KEY_ID: example
       AWS_SECRET_ACCESS_KEY: example
-      CELERY_BROKER_URL: sqs://ABCDEFGHIJKLMNOPQRST:ZYXK7NiynGlTogH8Nj+P9nlE73sq3@localstack:4566
+      # CELERY_BROKER_URL: sqs://@sqs.eu-west-2.amazonaws.com
+      CELERY_BROKER_REGION: eu-west-2
+      CELERY_BROKER_IS_SECURE: "true"
       DATABASE_URL: postgresql://postgres:password@request-db/request_database
       REQUEST_FILES_BUCKET_NAME: dluhc-data-platform-request-files-local
     restart: on-failure
