@@ -70,10 +70,10 @@ def create_request(
     return request_schema
 
 
-@app.get("/requests/{request_id}")
+@app.get("/requests/{request_id}", response_model=schemas.Request)
 def read_request(request_id: str, db: Session = Depends(get_db)):
-    response_model = crud.get_response(db, request_id)
-    if response_model is None:
+    request_model = crud.get_request(db, request_id)
+    if request_model is None:
         raise HTTPException(
             status_code=404,
             detail={
@@ -83,11 +83,30 @@ def read_request(request_id: str, db: Session = Depends(get_db)):
                 "errTime": str(datetime.now()),
             },
         )
-    response_schemas = _map_to_response_schema(response_model)
-    return response_schemas
+    request_schema = _map_to_schema(request_model)
+    return request_schema
 
 
 def _map_to_schema(request_model: models.Request) -> schemas.Request:
+    response = None
+    if request_model.response:
+        response_details = None
+        if request_model.response.details:
+            response_details = []
+            for detail in request_model.response.details:
+                response_details.append(detail.detail)
+
+        response_error = None
+        if request_model.response.details:
+            for detail in request_model.response.details:
+                response_details.append(detail.detail)
+
+        response = schemas.ResponseModel(
+            data=request_model.response.data,
+            details=response_details,
+            error=response_error
+        )
+
     return schemas.Request(
         type=request_model.type,
         id=request_model.id,
@@ -95,36 +114,6 @@ def _map_to_schema(request_model: models.Request) -> schemas.Request:
         created=request_model.created,
         modified=request_model.modified,
         params=request_model.params,
+        response=response
     )
 
-
-def _map_to_response_schema(response_model: models.Response) -> schemas.Response:
-    details_data = []
-    if response_model.details:
-        for detail in response_model.details:
-            details_data.append(detail.detail)
-
-    # error_summary = None
-    # column_field_log = None
-
-    # if response_model.data is not None:
-    #     error_summary = response_model.data.get("error-summary")
-    #     column_field_log = response_model.data.get("column-field-log")
-    return schemas.Response(
-        id=response_model.id,
-        request_id=response_model.request_id,
-        type=response_model.request.type,
-        status=response_model.request.status,
-        created=response_model.request.created,
-        modified=response_model.request.modified,
-        request=response_model.request.params,
-        response={
-            "data": response_model.data,
-            # {
-            #     "error_summary": error_summary,
-            #     "column_field_log": column_field_log,
-            # },
-            "details": details_data,
-            "error": response_model.error,
-        },
-    )

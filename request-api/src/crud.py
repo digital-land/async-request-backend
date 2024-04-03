@@ -20,11 +20,3 @@ def create_request(db: Session, request: schemas.RequestCreate):
     db.commit()
     db.refresh(db_request)
     return db_request
-
-
-def get_response(db: Session, request_id: int):
-    return (
-        db.query(models.Response)
-        .filter(models.Response.request_id == request_id)
-        .first()
-    )

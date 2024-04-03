@@ -36,12 +36,19 @@ class RequestCreate(RequestBase):
     pass
 
 
+class ResponseModel(BaseModel):
+    data: Optional[Dict[str, Any]]
+    error: Optional[Dict[str, Any]]
+    details: Optional[List[Dict[Any, Any]]]
+
+
 class Request(RequestBase):
     id: str
     type: RequestTypeEnum
     status: str
     created: datetime.datetime
     modified: datetime.datetime
+    response: Optional[ResponseModel]
 
     model_config: ConfigDict(from_attributes=True)
 
@@ -57,25 +64,3 @@ class ResponseError(BaseModel):
     msg: Optional[str]
     time: Optional[datetime.datetime]
 
-
-class ResponseDetails(BaseModel):
-    converted_csv: Optional[Dict[str, Any]]
-    issue_log: Optional[List[Dict[str, Any]]]
-    entry_number: Optional[int]
-
-
-class ResponseModel(BaseModel):
-    data: Optional[Dict[str, Any]]
-    error: Optional[Dict[str, Any]]
-    details: Optional[List[Dict[Any, Any]]]
-
-
-class Response(BaseModel):
-    id: int
-    request_id: str
-    type: RequestTypeEnum
-    status: str
-    created: datetime.datetime
-    modified: datetime.datetime
-    request: Dict[str, Any]
-    response: Optional[ResponseModel]
