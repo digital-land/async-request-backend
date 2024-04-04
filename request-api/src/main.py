@@ -1,3 +1,4 @@
+import logging
 import os
 from functools import cache
 
@@ -52,15 +53,10 @@ def create_request(
     request_schema = _map_to_schema(request_model=crud.create_request(db, request))
 
     try:
-        if use_celery:
-            CheckDataFileTask.delay(request_schema.model_dump())
-        else:
-            queue().send_message(
-                MessageBody=request_schema.model_dump_json(), MessageAttributes={}
-            )
+        CheckDataFileTask.delay(request_schema.model_dump())
 
-    except ClientError as error:
-        print("Send message failed: %s", request_schema)
+    except Exception as error:
+        logging.error("Async call to celery check data file task failed: %s", error)
         raise error
 
     http_response.headers[

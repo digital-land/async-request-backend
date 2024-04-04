@@ -29,7 +29,6 @@ services:
       AWS_SECRET_ACCESS_KEY: example
       SQS_QUEUE_NAME: request-queue
       DATABASE_URL: postgresql://postgres:password@request-db/request_database
-      USE_CELERY: true
     restart: on-failure
     ports:
       - "8000:8000"
