@@ -8,6 +8,8 @@ def get_request(db: Session, request_id: int):
     return db.query(models.Request).filter(models.Request.id == request_id).first()
 
 
+# TODO: Remove since it is unused
+
 def get_requests(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.Request).offset(skip).limit(limit).all()
 

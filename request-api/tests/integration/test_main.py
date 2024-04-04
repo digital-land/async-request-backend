@@ -9,6 +9,8 @@ from sqlalchemy.orm import sessionmaker
 from main import app, get_db
 from request_model import schemas, models
 
+# TODO: Remove unused code
+
 # engine = create_engine(
 #     os.environ.get('DATABASE_URL'),
 #     connect_args={"check_same_thread": False},

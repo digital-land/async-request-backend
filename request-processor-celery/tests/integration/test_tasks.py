@@ -8,6 +8,10 @@ import database
 from request_model import models, schemas
 from tasks import check_datafile
 
+# TODO: Happy path for check_url
+
+# TODO: Unhappy path for unknown request type
+
 
 def test_check_datafile(
     mocker,

@@ -85,6 +85,8 @@ def after_task_success(sender, result, **kwargs):
     _update_request_status(request_id, "COMPLETE")
 
 
+# TODO: Look into retry mechanism with Celery
+
 @task_failure.connect
 def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
     request_id = args[0]["id"]
