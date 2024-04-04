@@ -20,7 +20,8 @@ logger = get_task_logger(__name__)
 # Threshold for s3_transfer_manager to automatically use multipart download
 max_file_size_mb = 30
 
-
+# TODO: Consider making the pipeline execution safe for concurrency;
+#   could use request.id as a subdirectory in pipeline Directories config
 @celery.task(base=CheckDataFileTask, name=CheckDataFileTask.name)
 def check_datafile(request: Dict, directories=None):
     logger.info("check datafile")
