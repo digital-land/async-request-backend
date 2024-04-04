@@ -1,38 +1,11 @@
-import os
-
 import pytest
 from fastapi.testclient import TestClient
 from pydantic_core import ValidationError
-from sqlalchemy import create_engine, StaticPool
-from sqlalchemy.orm import sessionmaker
 
-from main import app, get_db
-from request_model import schemas, models
-
-# TODO: Remove unused code
-
-# engine = create_engine(
-#     os.environ.get('DATABASE_URL'),
-#     connect_args={"check_same_thread": False},
-#     poolclass=StaticPool,
-# )
-
-# models.Base.metadata.create_all(bind=engine)
-#
-# TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+from main import app
+from request_model import schemas
 
 client = TestClient(app)
-
-
-# def override_get_db():
-#     try:
-#         db = TestingSessionLocal()
-#         yield db
-#     finally:
-#         db.close()
-#
-
-# app.dependency_overrides[get_db] = override_get_db
 
 
 def test_read_root():
