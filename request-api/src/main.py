@@ -1,19 +1,16 @@
 import logging
 import os
+from datetime import datetime
 from functools import cache
 
 import boto3
-
-from botocore.exceptions import ClientError
 from fastapi import FastAPI, Depends, Request, Response, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime
 
 import crud
-from request_model import models, schemas
 from database import session_maker
+from request_model import models, schemas
 from task_interface.check_tasks import celery, CheckDataFileTask
-
 
 CheckDataFileTask = celery.register_task(CheckDataFileTask())
 
