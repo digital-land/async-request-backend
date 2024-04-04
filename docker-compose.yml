@@ -40,24 +40,6 @@ services:
       POSTGRES_DB: request_database
     restart: on-failure
 
-  request-processor:
-    build:
-      context: .
-      dockerfile: request-processor/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: 1
-      AWS_ENDPOINT_URL: http://localstack:4566
-      AWS_DEFAULT_REGION: eu-west-2
-      AWS_ACCESS_KEY_ID: example
-      AWS_SECRET_ACCESS_KEY: example
-      SQS_QUEUE_NAME: request-queue
-      SQS_RECEIVE_WAIT_SECONDS: 10
-      DATABASE_URL: postgresql://postgres:password@request-db/request_database
-      REQUEST_FILES_BUCKET_NAME: dluhc-data-platform-request-files-local
-    restart: on-failure
-    deploy:
-      replicas: 2
-
   request-processor-celery:
     build:
       context: .
@@ -68,7 +50,10 @@ services:
       AWS_DEFAULT_REGION: eu-west-2
       AWS_ACCESS_KEY_ID: example
       AWS_SECRET_ACCESS_KEY: example
-      CELERY_BROKER_URL: sqs://ABCDEFGHIJKLMNOPQRST:ZYXK7NiynGlTogH8Nj+P9nlE73sq3@localstack:4566
+      # CELERY_BROKER_URL: sqs://@sqs.eu-west-2.amazonaws.com
+      CELERY_BROKER_URL: sqs://example:example@localstack:4566
+      CELERY_BROKER_REGION: eu-west-2
+      CELERY_BROKER_IS_SECURE: "false"
       DATABASE_URL: postgresql://postgres:password@request-db/request_database
       REQUEST_FILES_BUCKET_NAME: dluhc-data-platform-request-files-local
     restart: on-failure
