@@ -1,18 +1,15 @@
 import logging
 import os
-from contextlib import asynccontextmanager
+from datetime import datetime
 from functools import cache
 
 import boto3
-from alembic import command
-from alembic.config import Config
-from botocore.exceptions import ClientError
 from fastapi import FastAPI, Depends, Request, Response, HTTPException
 from sqlalchemy.orm import Session
 
 import crud
+from database import session_maker
 from request_model import models, schemas
-from database import session_maker, engine
 from task_interface.check_tasks import celery, CheckDataFileTask
 
 CheckDataFileTask = celery.register_task(CheckDataFileTask())
@@ -53,15 +50,10 @@ def create_request(
     request_schema = _map_to_schema(request_model=crud.create_request(db, request))
 
     try:
-        if use_celery:
-            CheckDataFileTask.delay(request_schema.model_dump())
-        else:
-            queue().send_message(
-                MessageBody=request_schema.model_dump_json(), MessageAttributes={}
-            )
+        CheckDataFileTask.delay(request_schema.model_dump())
 
-    except ClientError as error:
-        print("Send message failed: %s", request_schema)
+    except Exception as error:
+        logging.error("Async call to celery check data file task failed: %s", error)
         raise error
 
     http_response.headers[
@@ -76,12 +68,33 @@ def read_request(request_id: str, db: Session = Depends(get_db)):
     request_model = crud.get_request(db, request_id)
     if request_model is None:
         raise HTTPException(
-            status_code=404, detail=f"Request with ${request_id} was not found"
+            status_code=404,
+            detail={
+                "errCode": 400,
+                "errType": "User Error",
+                "errMsg": f"Response with ${request_id} was not found",
+                "errTime": str(datetime.now()),
+            },
         )
-    return _map_to_schema(request_model)
+    request_schema = _map_to_schema(request_model)
+    return request_schema
 
 
 def _map_to_schema(request_model: models.Request) -> schemas.Request:
+    response = None
+    if request_model.response:
+        response_details = None
+        if request_model.response.details:
+            response_details = []
+            for detail in request_model.response.details:
+                response_details.append(detail.detail)
+
+        response = schemas.ResponseModel(
+            data=request_model.response.data,
+            details=response_details,
+            error=request_model.response.error,
+        )
+
     return schemas.Request(
         type=request_model.type,
         id=request_model.id,
@@ -89,4 +102,5 @@ def _map_to_schema(request_model: models.Request) -> schemas.Request:
         created=request_model.created,
         modified=request_model.modified,
         params=request_model.params,
+        response=response,
     )

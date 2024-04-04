@@ -14,7 +14,7 @@ from collections import defaultdict
 logger = get_logger(__name__)
 
 
-def run_workflow(collection, dataset, organisation, geom_type, directories):
+def run_workflow(fileName, collection, dataset, organisation, geom_type, directories):
     additional_column_mappings = None
     additional_concats = None
 
@@ -23,11 +23,8 @@ def run_workflow(collection, dataset, organisation, geom_type, directories):
         pipeline_dir = os.path.join(directories.PIPELINE_DIR)
 
         input_path = os.path.join(directories.COLLECTION_DIR, "resource")
-        # List all files in the "resource" directory
-        files_in_resource = os.listdir(input_path)
 
-        for file_name in files_in_resource:
-            file_path = os.path.join(input_path, file_name)
+        file_path = os.path.join(input_path, fileName)
         resource = resource_from_path(file_path)
 
         fetch_pipeline_csvs(collection, dataset, pipeline_dir, geom_type, resource)
@@ -36,6 +33,7 @@ def run_workflow(collection, dataset, organisation, geom_type, directories):
             dataset,
             organisation,
             directories.COLLECTION_DIR,
+            directories.CONVERTED_DIR,
             directories.ISSUE_DIR,
             directories.COLUMN_FIELD_DIR,
             directories.TRANSFORMED_DIR,

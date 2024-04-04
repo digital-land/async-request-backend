@@ -27,3 +27,6 @@ create_upload_bucket "dluhc-data-platform-request-files-local"
 upload_file_to_bucket "492f15d8-45e4-427e-bde0-f60d69889f40" \
   "/etc/localstack/init/ready.d/article-direction-area.csv" \
   "dluhc-data-platform-request-files-local"
+upload_file_to_bucket "5af8ff6d-3b19-4bda-aa9c-e61828b8ad4c" \
+  "/etc/localstack/init/ready.d/conservation-area-errors.csv" \
+  "dluhc-data-platform-request-files-local"

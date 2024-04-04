@@ -43,6 +43,7 @@ def test_check_datafile(
         created=request_model.created,
         modified=request_model.modified,
         params=request_model.params,
+        response=None
     )
     source_organisation_csv = f"{test_data_dir}/csvs/organisation.csv"
     destination_organisation_csv = os.path.join(
@@ -101,6 +102,7 @@ def test_check_datafile_invalid(
         created=request_model.created,
         modified=request_model.modified,
         params=request_model.params,
+        response=None
     )
     source_organisation_csv = f"{test_data_dir}/csvs/organisation.csv"
     destination_organisation_csv = os.path.join(
