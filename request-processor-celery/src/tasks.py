@@ -107,12 +107,6 @@ def _get_request(request_id):
         yield crud.get_request(session, request_id)
 
 
-def _get_response(request_id: int):
-    db_session = database.session_maker()
-    with db_session() as session:
-        yield crud.get_response(session, request_id)
-
-
 def save_response_to_db(request_id, response_data):
     db_session = database.session_maker()
     with db_session() as session:

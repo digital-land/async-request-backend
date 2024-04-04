@@ -89,15 +89,10 @@ def _map_to_schema(request_model: models.Request) -> schemas.Request:
             for detail in request_model.response.details:
                 response_details.append(detail.detail)
 
-        response_error = None
-        if request_model.response.details:
-            for detail in request_model.response.details:
-                response_details.append(detail.detail)
-
         response = schemas.ResponseModel(
             data=request_model.response.data,
             details=response_details,
-            error=response_error
+            error=request_model.response.error,
         )
 
     return schemas.Request(
@@ -107,6 +102,5 @@ def _map_to_schema(request_model: models.Request) -> schemas.Request:
         created=request_model.created,
         modified=request_model.modified,
         params=request_model.params,
-        response=response
+        response=response,
     )
-

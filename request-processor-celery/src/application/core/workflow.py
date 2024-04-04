@@ -23,11 +23,6 @@ def run_workflow(fileName, collection, dataset, organisation, geom_type, directo
         pipeline_dir = os.path.join(directories.PIPELINE_DIR)
 
         input_path = os.path.join(directories.COLLECTION_DIR, "resource")
-        # List all files in the "resource" directory
-        # files_in_resource = os.listdir(input_path)
-
-        # for file_name in files_in_resource:
-        #     file_path = os.path.join(input_path, file_name)
 
         file_path = os.path.join(input_path, fileName)
         resource = resource_from_path(file_path)
