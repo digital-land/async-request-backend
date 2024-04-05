@@ -20,6 +20,7 @@ logger = get_task_logger(__name__)
 # Threshold for s3_transfer_manager to automatically use multipart download
 max_file_size_mb = 30
 
+
 # TODO: Consider making the pipeline execution safe for concurrency;
 #   could use request.id as a subdirectory in pipeline Directories config
 @celery.task(base=CheckDataFileTask, name=CheckDataFileTask.name)
@@ -53,12 +54,10 @@ def check_datafile(request: Dict, directories=None):
     elif request_data.type == "check_url":
         log, content = utils.get_request(request_data.url)
         if content:
-            fileName = utils.save_content(content)
+            fileName = utils.save_content(content, directories.COLLECTION_DIR)
         else:
             save_response_to_db(request_schema.id, log)
             raise URLException(log)
-    else:
-        raise KeyError("upload_file or upload_url")
 
     response = workflow.run_workflow(
         fileName,
@@ -87,6 +86,7 @@ def after_task_success(sender, result, **kwargs):
 
 
 # TODO: Look into retry mechanism with Celery
+
 
 @task_failure.connect
 def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):

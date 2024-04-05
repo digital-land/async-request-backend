@@ -36,6 +36,32 @@ class RequestCreate(RequestBase):
     pass
 
 
+class ResponseData(BaseModel):
+    pass
+
+
+class ResponseDetail(BaseModel):
+    pass
+
+
+class CheckDataFileResponseDetails(ResponseDetail):
+    converted_csv: Optional[Dict[str, Any]]
+    issue_log: Optional[List[Dict[str, Any]]]
+    entry_number: Optional[int]
+
+
+class CheckDataFileResponse(ResponseData):
+    error_summary: Optional[List[str]]
+    column_field_log: Optional[List[Dict[str, Any]]]
+
+
+class ResponseError(BaseModel):
+    code: Optional[str]
+    type: Optional[str]
+    msg: Optional[str]
+    time: Optional[datetime.datetime]
+
+
 class ResponseModel(BaseModel):
     data: Optional[Dict[str, Any]]
     error: Optional[Dict[str, Any]]
@@ -51,16 +77,3 @@ class Request(RequestBase):
     response: Optional[ResponseModel]
 
     model_config: ConfigDict(from_attributes=True)
-
-
-class ResponseData(BaseModel):
-    error_summary: Optional[List[str]]
-    column_field_log: Optional[List[Dict[str, Any]]]
-
-
-class ResponseError(BaseModel):
-    code: Optional[str]
-    type: Optional[str]
-    msg: Optional[str]
-    time: Optional[datetime.datetime]
-

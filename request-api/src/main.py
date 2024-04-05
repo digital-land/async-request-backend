@@ -13,17 +13,16 @@ from request_model import models, schemas
 from task_interface.check_tasks import celery, CheckDataFileTask
 
 CheckDataFileTask = celery.register_task(CheckDataFileTask())
-# TODO: Remove
-use_celery = bool(os.environ.get("USE_CELERY"))
-
 
 app = FastAPI()
+
 
 # TODO: Make private with underscore
 @cache
 def queue():
     sqs = boto3.resource("sqs")
     return sqs.get_queue_by_name(QueueName=os.environ["SQS_QUEUE_NAME"])
+
 
 # TODO: Make private with underscore _get_db()
 # Dependency
@@ -93,6 +92,10 @@ def _map_to_schema(request_model: models.Request) -> schemas.Request:
             data=request_model.response.data,
             details=response_details,
             error=request_model.response.error,
+            # {
+            #     "error_summary": error_summary,
+            #     "column_field_log": column_field_log,
+            # },
         )
 
     return schemas.Request(
