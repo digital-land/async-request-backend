@@ -1,9 +1,6 @@
 import logging
-import os
 from datetime import datetime
-from functools import cache
 
-import boto3
 from fastapi import FastAPI, Depends, Request, Response, HTTPException
 from sqlalchemy.orm import Session
 
@@ -26,13 +23,12 @@ def queue():
 
 # TODO: Make private with underscore _get_db()
 # Dependency
-def get_db():
+def _get_db():
     db = session_maker()()
     try:
         yield db
     finally:
         db.close()
-
 
 @app.get("/")
 def read_root():
@@ -44,7 +40,7 @@ def create_request(
     request: schemas.RequestCreate,
     http_request: Request,
     http_response: Response,
-    db: Session = Depends(get_db),
+    db: Session = Depends(_get_db),
 ):
     request_schema = _map_to_schema(request_model=crud.create_request(db, request))
 
@@ -63,7 +59,7 @@ def create_request(
 
 
 @app.get("/requests/{request_id}", response_model=schemas.Request)
-def read_request(request_id: str, db: Session = Depends(get_db)):
+def read_request(request_id: str, db: Session = Depends(_get_db)):
     request_model = crud.get_request(db, request_id)
     if request_model is None:
         raise HTTPException(
@@ -87,15 +83,10 @@ def _map_to_schema(request_model: models.Request) -> schemas.Request:
             response_details = []
             for detail in request_model.response.details:
                 response_details.append(detail.detail)
-
         response = schemas.ResponseModel(
             data=request_model.response.data,
             details=response_details,
             error=request_model.response.error,
-            # {
-            #     "error_summary": error_summary,
-            #     "column_field_log": column_field_log,
-            # },
         )
 
     return schemas.Request(
@@ -107,3 +98,4 @@ def _map_to_schema(request_model: models.Request) -> schemas.Request:
         params=request_model.params,
         response=response,
     )
+
