@@ -22,6 +22,7 @@ def _get_db():
     finally:
         db.close()
 
+
 @app.get("/")
 def read_root():
     return {"msg": "Hello World"}
