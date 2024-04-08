@@ -90,6 +90,17 @@ jobs:
   test-request-processor:
     runs-on: ubuntu-latest
     steps:
+      - name: Install GDAL binary package
+        run: |
+#          add-apt-repository ppa:ubuntugis/ppa
+          apt-get update
+          apt-get install gdal-bin
+#          libgdal-dev
+
+#           export CPLUS_INCLUDE_PATH=/usr/include/gdal
+#           export C_INCLUDE_PATH=/usr/include/gdal
+# pip install GDAL
+
       - uses: actions/checkout@v4
 
       - name: Install test dependencies with pip
