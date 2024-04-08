@@ -1,6 +1,6 @@
 all:: lint test coverage
 
-lint:: black flake8
+lint:: black-check flake8
 
 black-check:
 	black --check .
