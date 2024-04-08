@@ -101,7 +101,7 @@ def mock_directories(tmpdir, project_dir):
         DATASET_DIR=tmpdir.mkdir("dataset"),
         DATASET_RESOURCE_DIR=var_dir.mkdir("dataset-resource"),
         PIPELINE_DIR=tmpdir.mkdir("pipeline"),
-        SPECIFICATION_DIR=f"{project_dir}/specification",
+        SPECIFICATION_DIR="specification",
         CACHE_DIR=var_dir.mkdir("cache"),
     )
 
