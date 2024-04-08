@@ -1,15 +1,14 @@
 all:: lint test coverage
 
-lint:: black-check flake8
+lint:
+	make black ./src
+	python3 -m flake8 ./src
 
 black-check:
 	black --check .
 
 black:
-	black .
-
-flake8:
-	flake8 .
+	python3 -m black .
 
 test:: test-unit test-integration
 
