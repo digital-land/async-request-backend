@@ -97,6 +97,10 @@ jobs:
         run: |
           pip install -r test_requirements.txt
 
+      - name: Download specification files
+        working-directory: ./request-processor-celery
+        run: make specification
+
       - name: Lint, Test, Coverage
         working-directory: ./request-processor-celery
         run: make all

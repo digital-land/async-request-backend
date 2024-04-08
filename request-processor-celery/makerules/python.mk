@@ -13,10 +13,10 @@ black:
 test:: test-unit test-integration
 
 test-unit:
-	[ -d tests/unit ] && python -m pytest tests/unit
+	[ -d tests/unit ] && python -m pytest tests/unit/
 
 test-integration:
-	[ -d tests/integration ] && python -m pytest tests/integration
+	[ -d tests/integration ] && python -m pytest tests/integration/
 
 coverage:: coverage-unit coverage-integration
 
