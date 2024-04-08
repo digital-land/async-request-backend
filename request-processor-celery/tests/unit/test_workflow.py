@@ -1,4 +1,11 @@
-from src.application.core.workflow import updateColumnFieldLog, error_summary
+from src.application.core.workflow import (
+    updateColumnFieldLog,
+    error_summary,
+    csv_to_json,
+    fetch_pipeline_csvs,
+)
+import csv
+import os
 
 
 def test_updateColumnFieldLog():
@@ -104,3 +111,108 @@ def test_error_summary():
     ]
 
     assert any(message in json_data for message in expected_messages)
+
+
+def test_csv_to_json_with_valid_file(mocker, test_dir):
+    # Prepare a CSV file
+    row1 = {
+        "dataset": "conservation-area",
+        "column": "documentation-url",
+        "field": "documentation-url",
+    }
+    row2 = {
+        "dataset": "article-4-direction",
+        "column": "name",
+        "field": "name",
+    }
+    mock_csv = os.path.join(test_dir, "test.csv")
+    fieldnames = row1.keys()
+    with open(mock_csv, "w") as f:
+        dictwriter = csv.DictWriter(f, fieldnames=fieldnames)
+        dictwriter.writeheader()
+        dictwriter.writerow(row1)
+        dictwriter.writerow(row2)
+
+    # Patch the detect_encoding function
+    # mocker.patch("application.core.util.detect_encoding", mock_detect_encoding)
+
+    # Test the function
+    json_data = csv_to_json(mock_csv)
+
+    # Assertions
+    assert len(json_data) == 2
+    assert json_data[0]["dataset"] == "conservation-area"
+    assert json_data[1]["field"] == "name"
+
+
+def test_fetch_pipelines(mocker, mock_directories, mock_fetch_pipeline_csvs):
+    collection = "test_collection"
+    dataset = "tree"
+    pipeline_dir = mock_directories.PIPELINE_DIR
+    geom_type = ""
+    resource = ""
+
+    # Mock urllib.request.urlretrieve
+    mocked_urlretrieve = mocker.patch("urllib.request.urlretrieve")
+
+    # Call the function
+    fetch_pipeline_csvs(collection, dataset, pipeline_dir, geom_type, resource)
+
+    source_url = "https://raw.githubusercontent.com/digital-land//"
+    expected_url = f"{source_url}{collection + '-collection'}/main/pipeline/column.csv"
+    expected_file_path = os.path.join(pipeline_dir, "column.csv")
+    mocked_urlretrieve.assert_called_with(expected_url, expected_file_path)
+
+    expected_row = {
+        "dataset": "tree",
+        "": "",
+        "resource": "",
+        "column": "id",
+        "field": "reference",
+    }
+    with open(os.path.join(pipeline_dir, "column.csv"), newline="") as csv_file:
+        reader = csv.DictReader(csv_file)
+        csv_rows = list(reader)
+
+    print(csv_rows)
+    assert expected_row in csv_rows
+
+
+def test_fetch_pipelines_for_tree(mocker, mock_directories, mock_fetch_pipeline_csvs):
+    collection = "test_collection"
+    dataset = "tree"
+    pipeline_dir = mock_directories.PIPELINE_DIR
+    geom_type = "polygon"
+    resource = ""
+
+    # Mock urllib.request.urlretrieve
+    mocker.patch("urllib.request.urlretrieve")
+
+    expected_row_before_execution = {
+        "dataset": "tree",
+        "": "",
+        "resource": "",
+        "column": "id",
+        "field": "reference",
+    }
+    expected_row_after_execution = {
+        "dataset": "tree",
+        "": "",
+        "resource": "",
+        "column": "WKT",
+        "field": "geometry",
+    }
+
+    with open(os.path.join(pipeline_dir, "column.csv"), newline="") as csv_file:
+        reader = csv.DictReader(csv_file)
+        csv_rows = list(reader)
+
+    assert expected_row_before_execution in csv_rows
+    # Call the function
+    fetch_pipeline_csvs(collection, dataset, pipeline_dir, geom_type, resource)
+
+    with open(os.path.join(pipeline_dir, "column.csv"), newline="") as csv_file:
+        reader = csv.DictReader(csv_file)
+        csv_rows_after = list(reader)
+    assert expected_row_before_execution in csv_rows_after
+    assert expected_row_after_execution in csv_rows_after

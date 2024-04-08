@@ -1,0 +1,4 @@
+[run]
+omit =
+    celeryconfig.py
+    s3_transfer_manager.py
