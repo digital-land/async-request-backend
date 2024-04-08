@@ -1,15 +1,15 @@
 all:: lint test coverage
 
-lint:: black-check flake8
+lint:
+	make black ./application
+	python3 -m flake8 ./application
+	make jslint
 
 black-check:
 	black --check .
 
 black:
-	black .
-
-flake8:
-	flake8 .
+	python3 -m black .
 
 test:: test-unit test-integration
 
