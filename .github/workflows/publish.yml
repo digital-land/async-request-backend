@@ -28,7 +28,6 @@ jobs:
 
   test-request-api:
     runs-on: ubuntu-latest
-    needs: [detect-environments]
     steps:
       - uses: actions/checkout@v4
 
@@ -48,7 +47,7 @@ jobs:
 
   publish-request-api:
     runs-on: ubuntu-latest
-    needs: [test-request-api]
+    needs: [detect-environments, test-request-api]
     strategy:
       matrix:
         environment: ${{ fromJSON(needs.detect-environments.outputs.environments) }}
