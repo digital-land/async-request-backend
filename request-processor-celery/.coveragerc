@@ -1,5 +1,5 @@
 [run]
 omit =
-    digital-land/digital_land/*
+    src/digital-land/digital_land/*
     celeryconfig.py
     s3_transfer_manager.py
