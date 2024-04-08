@@ -32,17 +32,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - run: |
-          cd request-api
-
-      - run: |
+      - name: Install test dependencies with pip
+        working-directory: ./request-api
+        run: |
           pip install -r test_requirements.txt
 
-      - run: |
-          pytest --cov=src tests/unit/
+      - name: Run unit tests
+        working-directory: ./request-api
+        run: pytest --cov=src tests/unit/
 
-      - run: |
-          pytest --cov=src --cov-append --cov-fail-under=85 tests/integration/
+      - name: Run integration tests with coverage threshold
+        working-directory: ./request-api
+        run: pytest --cov=src --cov-append --cov-fail-under=85 tests/integration/
 
 
   publish-request-api:
