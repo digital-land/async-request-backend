@@ -43,7 +43,7 @@ jobs:
 
       - name: Run integration tests with coverage threshold
         working-directory: ./request-api
-        run: pytest --cov=src --cov-append --cov-fail-under=85 tests/integration/
+        run: pytest --cov=src --cov-append --cov-fail-under=90 tests/integration/
 
 
   publish-request-api:
