@@ -4,3 +4,7 @@ celery[pytest]>=5.3.6
 moto[sqs]>=5.0.2
 pytest-mock
 testcontainers-postgres==0.0.1rc1
+pytest-cov>=5.0.0
+requests-mock
+black==23.3.0
+flake8==6.0.0

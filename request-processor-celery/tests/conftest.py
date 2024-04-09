@@ -101,7 +101,7 @@ def mock_directories(tmpdir, project_dir):
         DATASET_DIR=tmpdir.mkdir("dataset"),
         DATASET_RESOURCE_DIR=var_dir.mkdir("dataset-resource"),
         PIPELINE_DIR=tmpdir.mkdir("pipeline"),
-        SPECIFICATION_DIR=f"{project_dir}/specification",
+        SPECIFICATION_DIR="specification",
         CACHE_DIR=var_dir.mkdir("cache"),
     )
 
@@ -111,10 +111,11 @@ def mock_fetch_pipeline_csvs(tmpdir, mock_directories):
     # create a mock column.csv in the pipeline folder
     mock_column_csv = os.path.join(tmpdir, mock_directories.PIPELINE_DIR, "column.csv")
     row = {
-        "dataset": "article-4-direction-area",
+        "dataset": "tree",
+        "": "",
         "resource": "",
-        "column": "wkt",
-        "field": "geometry",
+        "column": "id",
+        "field": "reference",
     }
     fieldnames = row.keys()
     with open(mock_column_csv, "w") as f:

@@ -12,6 +12,8 @@ RUN apk update && \
 COPY request-processor-celery/src/. .
 COPY request-processor-celery/requirements.txt requirements.txt
 COPY request-processor-celery/makefile makefile
+COPY request-processor-celery/makerules/makerules.mk makerules/makerules.mk
+COPY request-processor-celery/makerules/python.mk makerules/python.mk
 COPY request-processor-celery/docker-entrypoint.sh docker-entrypoint.sh
 
 COPY ../request_model ./request_model
