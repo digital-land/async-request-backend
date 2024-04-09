@@ -3,6 +3,9 @@ import os
 broker_transport_options = {
     "region": os.environ["CELERY_BROKER_REGION"],
     "is_secure": os.environ.get("CELERY_BROKER_IS_SECURE", "false").lower() == "true",
+    # Wait time before allowing a message to be read again. Our default is 60 seconds (1 minute).
+    # Celery default is 1800 seconds (30 minutes)
+    "visibility_timeout": int(os.environ.get("CELERY_BROKER_VISIBILITY_TIMEOUT", "60"))
 }
 
 broker_connection_retry_on_startup = True
@@ -14,6 +17,3 @@ task_acks_late = True
 # Even if task_acks_late is enabled, the worker will acknowledge tasks
 # when the worker process executing them abruptly exits or is signaled (e.g., KILL/INT, etc).
 task_reject_on_worker_lost = True
-
-# Do not acknowledge messages for tasks when they fail or time out.  The default behaviour is to still acknowledge.
-task_acks_on_failure_or_timeout = False
