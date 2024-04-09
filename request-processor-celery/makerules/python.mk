@@ -1,4 +1,4 @@
-all:: lint test coverage
+all:: lint test-coverage
 
 lint:
 	make black ./src/application
@@ -10,15 +10,7 @@ black-check:
 black:
 	python3 -m black .
 
-test:: test-unit test-integration
-
-test-unit:
-	[ -d tests/unit ] && python -m pytest tests/unit/
-
-test-integration:
-	[ -d tests/integration ] && python -m pytest tests/integration/
-
-coverage:: coverage-unit coverage-integration
+test-coverage:: coverage-unit coverage-integration
 
 coverage-unit:
 	pytest --cov=src tests/unit/
