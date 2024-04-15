@@ -2,7 +2,7 @@ name: Test & Publish
 
 on:
   push:
-    branches: [main, development]
+    branches: [main, development, ecs-deployment]
   workflow_dispatch:
     inputs:
       environment:
@@ -86,6 +86,17 @@ jobs:
       - run: docker push $DOCKER_REPO:${{ steps.vars.outputs.sha_short }}
 
       - run: docker push $DOCKER_REPO:${GITHUB_REF_NAME}
+
+      - uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.DEPLOY_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.DEPLOY_AWS_SECRET_ACCESS_KEY }}
+          aws-region: uu-west-2 
+
+      - name: Update ECS Service
+        run: |
+          aws ecs update-service --cluster ${{ matrix.environment }}-cluster --service ${{ matrix.environment }}-pub-async-request-api  --task-definition ${{ matrix.environment }}-pub-async-request-api-task --force-new-deployment
+
 
   test-request-processor:
     runs-on: ubuntu-latest
