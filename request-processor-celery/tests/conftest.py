@@ -82,8 +82,6 @@ def mock_directories(tmpdir, project_dir):
             "ISSUE_DIR",
             "COLUMN_FIELD_DIR",
             "TRANSFORMED_DIR",
-            "FLATTENED_DIR",
-            "DATASET_DIR",
             "DATASET_RESOURCE_DIR",
             "PIPELINE_DIR",
             "SPECIFICATION_DIR",
@@ -97,8 +95,6 @@ def mock_directories(tmpdir, project_dir):
         ISSUE_DIR=tmpdir.mkdir("issue"),
         COLUMN_FIELD_DIR=var_dir.mkdir("column-field"),
         TRANSFORMED_DIR=tmpdir.mkdir("transformed"),
-        FLATTENED_DIR=tmpdir.mkdir("flattened"),
-        DATASET_DIR=tmpdir.mkdir("dataset"),
         DATASET_RESOURCE_DIR=var_dir.mkdir("dataset-resource"),
         PIPELINE_DIR=tmpdir.mkdir("pipeline"),
         SPECIFICATION_DIR="specification",
@@ -106,19 +102,48 @@ def mock_directories(tmpdir, project_dir):
     )
 
 
+# @pytest.fixture
+# def mock_fetch_pipeline_csvs(mock_directories):
+#     # create a mock column.csv in the pipeline folder
+#     pipeline_dir = os.path.join(mock_directories.PIPELINE_DIR, "tree")
+
+#     os.makedirs(pipeline_dir, exist_ok=True)
+#     mock_column_csv = os.path.join(pipeline_dir, "column.csv")
+#     row = {
+#         "dataset": "tree",
+#         "": "",
+#         "resource": "",
+#         "column": "id",
+#         "field": "reference",
+#     }
+#     fieldnames = row.keys()
+#     with open(mock_column_csv, "w") as f:
+#         dictwriter = csv.DictWriter(f, fieldnames=fieldnames)
+#         dictwriter.writeheader()
+#         dictwriter.writerow(row)
+
+
 @pytest.fixture
-def mock_fetch_pipeline_csvs(tmpdir, mock_directories):
-    # create a mock column.csv in the pipeline folder
-    mock_column_csv = os.path.join(tmpdir, mock_directories.PIPELINE_DIR, "column.csv")
-    row = {
-        "dataset": "tree",
-        "": "",
-        "resource": "",
-        "column": "id",
-        "field": "reference",
-    }
-    fieldnames = row.keys()
-    with open(mock_column_csv, "w") as f:
-        dictwriter = csv.DictWriter(f, fieldnames=fieldnames)
-        dictwriter.writeheader()
-        dictwriter.writerow(row)
+def mock_fetch_pipeline_csvs(mock_directories):
+    def _mock_fetch_pipeline_csvs(dataset_name, request_id):
+        # create a mock column.csv in the pipeline folder
+        pipeline_dir = os.path.join(
+            mock_directories.PIPELINE_DIR, dataset_name, request_id
+        )
+
+        os.makedirs(pipeline_dir, exist_ok=True)
+        mock_column_csv = os.path.join(pipeline_dir, "column.csv")
+        row = {
+            "dataset": dataset_name,
+            "": "",
+            "resource": "",
+            "column": "id",
+            "field": "reference",
+        }
+        fieldnames = row.keys()
+        with open(mock_column_csv, "w") as f:
+            dictwriter = csv.DictWriter(f, fieldnames=fieldnames)
+            dictwriter.writeheader()
+            dictwriter.writerow(row)
+
+    return _mock_fetch_pipeline_csvs

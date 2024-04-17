@@ -13,7 +13,7 @@ import json
 from application.core import workflow
 from application.configurations.config import Directories
 import application.core.utils as utils
-from application.exceptions.customExceptions import URLException
+from application.exceptions.customExceptions import CustomException
 from pathlib import Path
 
 logger = get_task_logger(__name__)
@@ -21,8 +21,6 @@ logger = get_task_logger(__name__)
 max_file_size_mb = 30
 
 
-# TODO: Consider making the pipeline execution safe for concurrency;
-#   could use request.id as a subdirectory in pipeline Directories config
 @celery.task(base=CheckDataFileTask, name=CheckDataFileTask.name)
 def check_datafile(request: Dict, directories=None):
     logger.info("check datafile")
@@ -35,32 +33,45 @@ def check_datafile(request: Dict, directories=None):
         data_dict = json.loads(directories)
         # Create an instance of the Directories class
         directories = Directories()
-
         # Update attribute values based on the dictionary
         for key, value in data_dict.items():
             setattr(directories, key, value)
+
     fileName = ""
+    tmp_dir = os.path.join(
+        directories.COLLECTION_DIR + "/resource" + f"/{request_schema.id}"
+    )
+    # Ensure tmp_dir exists, create it if it doesn't
+    Path(tmp_dir).mkdir(parents=True, exist_ok=True)
     if request_data.type == "check_file":
-        tmp_dir = os.path.join(directories.COLLECTION_DIR + "/resource")
-        # Ensure tmp_dir exists, create it if it doesn't
-        Path(tmp_dir).mkdir(parents=True, exist_ok=True)
         fileName = request_data.uploaded_filename
-        s3_transfer_manager.download_with_default_configuration(
-            os.environ["REQUEST_FILES_BUCKET_NAME"],
-            request_data.uploaded_filename,
-            f"{tmp_dir}/{request_data.uploaded_filename}",
-            max_file_size_mb,
-        )
+        try:
+            s3_transfer_manager.download_with_default_configuration(
+                os.environ["REQUEST_FILES_BUCKET_NAME"],
+                request_data.uploaded_filename,
+                f"{tmp_dir}/{request_data.uploaded_filename}",
+                max_file_size_mb,
+            )
+        except Exception as e:
+            logger.error(str(e))
+            log = {}
+            log["message"] = "The uploaded file not found in S3 bucket"
+            log["status"] = ""
+            log["exception_type"] = type(e).__name__
+            save_response_to_db(request_schema.id, log)
+            raise CustomException(log)
+
     elif request_data.type == "check_url":
         log, content = utils.get_request(request_data.url)
         if content:
-            fileName = utils.save_content(content, directories.COLLECTION_DIR)
+            fileName = utils.save_content(content, tmp_dir)
         else:
             save_response_to_db(request_schema.id, log)
-            raise URLException(log)
+            raise CustomException(log)
 
     response = workflow.run_workflow(
         fileName,
+        request_schema.id,
         request_data.collection,
         request_data.dataset,
         "",
@@ -110,70 +121,80 @@ def _get_request(request_id):
         yield crud.get_request(session, request_id)
 
 
+def _get_response(request_id):
+    db_session = database.session_maker()
+    with db_session() as session:
+        return crud.get_response(session, request_id)
+
+
 def save_response_to_db(request_id, response_data):
     db_session = database.session_maker()
     with db_session() as session:
         try:
-            if (
-                "column-field-log" in response_data
-                and "error-summary" in response_data
-                and "converted-csv" in response_data
-                and "issue-log" in response_data
-            ):
-                data = {
-                    "column-field-log": response_data.get("column-field-log", {}),
-                    "error-summary": response_data.get("error-summary", {}),
-                }
-                # Create a new Response instance
-                new_response = models.Response(request_id=request_id, data=data)
+            existing = _get_response(request_id)
+            print("existing:: ", existing)
+            if not existing:
+                if (
+                    "column-field-log" in response_data
+                    and "error-summary" in response_data
+                    and "converted-csv" in response_data
+                    and "issue-log" in response_data
+                ):
+                    data = {
+                        "column-field-log": response_data.get("column-field-log", {}),
+                        "error-summary": response_data.get("error-summary", {}),
+                    }
+                    # Create a new Response instance
+                    new_response = models.Response(request_id=request_id, data=data)
 
-                # Add the response to the session
-                session.add(new_response)
-                session.flush()  # Flush to get the response ID
+                    # Add the response to the session
+                    session.add(new_response)
+                    session.flush()  # Flush to get the response ID
 
-                # Initialize line number
-                entry_number = 1
-                converted_row_data = response_data.get("converted-csv")
-                issue_log_data = response_data.get("issue-log")
-                # Save converted_row_data and issue_log_data in ResponseDetails
-                for converted_row in converted_row_data:
-                    # Collect issue logs corresponding to the current line number
-                    current_issue_logs = [
-                        issue_log
-                        for issue_log in issue_log_data
-                        if issue_log.get("entry-number") == str(entry_number)
-                    ]
+                    # Initialize line number
+                    entry_number = 1
+                    converted_row_data = response_data.get("converted-csv")
+                    issue_log_data = response_data.get("issue-log")
+                    # Save converted_row_data and issue_log_data in ResponseDetails
+                    for converted_row in converted_row_data:
+                        # Collect issue logs corresponding to the current line number
+                        current_issue_logs = [
+                            issue_log
+                            for issue_log in issue_log_data
+                            if issue_log.get("entry-number") == str(entry_number)
+                        ]
 
-                    new_response_detail = models.ResponseDetails(
-                        response_id=new_response.id,
-                        detail={
-                            "converted_row": converted_row,
-                            "issue_logs": current_issue_logs,
-                            "entry_number": entry_number,
-                        },
+                        new_response_detail = models.ResponseDetails(
+                            response_id=new_response.id,
+                            detail={
+                                "converted_row": converted_row,
+                                "issue_logs": current_issue_logs,
+                                "entry_number": entry_number,
+                            },
+                        )
+                        session.add(new_response_detail)
+
+                        # Increment line number for the next iteration
+                        entry_number += 1
+
+                        session.add(new_response_detail)
+
+                    # Commit the changes to the database
+                    session.commit()
+
+                elif "message" in response_data:
+                    error = CustomException(response_data)
+                    # error_detail_json = json.dumps(error.detail)
+                    # error_details = {
+                    #     "detail": error.as_dict()
+                    # }
+                    new_response = models.Response(
+                        request_id=request_id, error=error.detail
                     )
-                    session.add(new_response_detail)
-
-                    # Increment line number for the next iteration
-                    entry_number += 1
-
-                    session.add(new_response_detail)
-
-                # Commit the changes to the database
-                session.commit()
-
-            elif "message" in response_data:
-                error = URLException(response_data)
-                # error_detail_json = json.dumps(error.detail)
-                # error_details = {
-                #     "detail": error.as_dict()
-                # }
-                new_response = models.Response(
-                    request_id=request_id, error=error.detail
-                )
-                session.add(new_response)
-                session.commit()
-
+                    session.add(new_response)
+                    session.commit()
+            else:
+                print("response already exists in DB for request: ", request_id)
         except Exception as e:
             session.rollback()
             raise e
