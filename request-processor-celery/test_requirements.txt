@@ -1,6 +1,6 @@
 -r requirements.txt
 pytest>=7.2.1
-celery[pytest]>=5.3.6
+celery[pytest]==5.3.6
 moto[sqs]>=5.0.2
 pytest-mock
 testcontainers-postgres==0.0.1rc1
