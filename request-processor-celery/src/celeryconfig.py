@@ -17,3 +17,9 @@ task_acks_late = True
 # Even if task_acks_late is enabled, the worker will acknowledge tasks
 # when the worker process executing them abruptly exits or is signaled (e.g., KILL/INT, etc).
 task_reject_on_worker_lost = True
+
+# How many messages to prefetch at a time multiplied by the number of concurrent processes.
+# The default is 4 (four messages for each process).
+# We only want 1 message prefetched per worker to give maximum possibility for other workers (including other instances)
+# to have visibility of messages on the SQS queue
+worker_prefetch_multiplier = 1
