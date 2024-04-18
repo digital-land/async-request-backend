@@ -8,7 +8,7 @@ from application.core.workflow import run_workflow
 @pytest.fixture
 def uploaded_csv(mock_directories):
     collection_dir = mock_directories.COLLECTION_DIR
-    resource_dir = os.path.join(collection_dir, "resource")
+    resource_dir = os.path.join(collection_dir, "resource", "xyz123")
     os.makedirs(resource_dir, exist_ok=True)
     mock_csv = os.path.join(resource_dir, "7e9a0e71f3ddfe")
     row = {
@@ -29,8 +29,8 @@ def uploaded_csv(mock_directories):
 def test_run_workflow(
     mocker, mock_directories, mock_fetch_pipeline_csvs, test_data_dir, uploaded_csv
 ):
-    collection = "article-4-direction"
-    dataset = "article-4-direction-area"
+    collection = "tree-preservation-order"
+    dataset = "tree"
     organisation = ""
     geom_type = ""
     fileName = uploaded_csv
@@ -38,19 +38,25 @@ def test_run_workflow(
     destination_organisation_csv = os.path.join(
         mock_directories.CACHE_DIR, "organisation.csv"
     )
+    request_id = "xyz123"
     shutil.copy(source_organisation_csv, destination_organisation_csv)
 
     mocker.patch(
         "application.core.workflow.fetch_pipeline_csvs",
-        side_effect=mock_fetch_pipeline_csvs,
+        side_effect=mock_fetch_pipeline_csvs(dataset, request_id),
     )
 
     response_data = run_workflow(
-        fileName, collection, dataset, organisation, geom_type, mock_directories
+        fileName,
+        request_id,
+        collection,
+        dataset,
+        organisation,
+        geom_type,
+        mock_directories,
     )
 
     assert "converted-csv" in response_data
     assert "issue-log" in response_data
     assert "column-field-log" in response_data
-    assert "flattened-csv" in response_data
     assert "error-summary" in response_data

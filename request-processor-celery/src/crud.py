@@ -9,5 +9,7 @@ def get_request(db: Session, request_id: int):
 
 def get_response(db: Session, request_id: int):
     return (
-        db.query(models.Response).filter(models.Response.request_id == request_id).all()
+        db.query(models.Response)
+        .filter(models.Response.request_id == request_id)
+        .first()
     )
