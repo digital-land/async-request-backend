@@ -2,7 +2,7 @@ import pytest
 import shutil
 import os
 import csv
-from application.core.workflow import run_workflow
+from src.application.core.workflow import run_workflow
 
 
 @pytest.fixture

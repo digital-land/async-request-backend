@@ -6,7 +6,7 @@ import shutil
 import os
 import database
 from request_model import models, schemas
-from tasks import check_datafile
+from src.tasks import check_datafile
 
 
 def test_check_datafile(

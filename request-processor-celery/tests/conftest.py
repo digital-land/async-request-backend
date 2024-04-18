@@ -102,27 +102,6 @@ def mock_directories(tmpdir, project_dir):
     )
 
 
-# @pytest.fixture
-# def mock_fetch_pipeline_csvs(mock_directories):
-#     # create a mock column.csv in the pipeline folder
-#     pipeline_dir = os.path.join(mock_directories.PIPELINE_DIR, "tree")
-
-#     os.makedirs(pipeline_dir, exist_ok=True)
-#     mock_column_csv = os.path.join(pipeline_dir, "column.csv")
-#     row = {
-#         "dataset": "tree",
-#         "": "",
-#         "resource": "",
-#         "column": "id",
-#         "field": "reference",
-#     }
-#     fieldnames = row.keys()
-#     with open(mock_column_csv, "w") as f:
-#         dictwriter = csv.DictWriter(f, fieldnames=fieldnames)
-#         dictwriter.writeheader()
-#         dictwriter.writerow(row)
-
-
 @pytest.fixture
 def mock_fetch_pipeline_csvs(mock_directories):
     def _mock_fetch_pipeline_csvs(dataset_name, request_id):
