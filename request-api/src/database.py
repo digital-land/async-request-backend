@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 @cache
 def engine():
-    return create_engine(os.environ['DATABASE_URL'])
+    return create_engine(os.environ["DATABASE_URL"])
 
 
 @cache

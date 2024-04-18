@@ -18,4 +18,6 @@ COPY request-api/docker-entrypoint.sh docker-entrypoint.sh
 
 COPY request-api/migrations migrations
 
+COPY request-api/makefile makefile
+
 ENTRYPOINT ["./docker-entrypoint.sh"]

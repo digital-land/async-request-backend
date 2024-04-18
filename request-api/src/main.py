@@ -91,4 +91,3 @@ def _map_to_schema(request_model: models.Request) -> schemas.Request:
         params=request_model.params,
         response=response,
     )
-
