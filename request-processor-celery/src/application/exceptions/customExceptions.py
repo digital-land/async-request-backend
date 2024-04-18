@@ -1,7 +1,7 @@
 from datetime import datetime
 
 
-class CustomException(Exception):
+class URLException(Exception):
     """Exception raised when URL fetch function fails.
     Attributes: response
     """

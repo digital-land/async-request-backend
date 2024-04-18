@@ -38,12 +38,13 @@ logger = get_logger(__name__)
 def fetch_response_data(
     dataset,
     organisation,
-    request_id,
     collection_dir,
     converted_dir,
     issue_dir,
     column_field_dir,
     transformed_dir,
+    flattened_dir,
+    dataset_dir,
     dataset_resource_dir,
     pipeline_dir,
     specification_dir,
@@ -55,10 +56,10 @@ def fetch_response_data(
     pipeline = Pipeline(pipeline_dir, dataset)
     specification = Specification(specification_dir)
 
-    input_path = os.path.join(collection_dir, "resource", request_id)
+    input_path = os.path.join(collection_dir, "resource")
     # List all files in the "resource" directory
     files_in_resource = os.listdir(input_path)
-    os.makedirs(os.path.join(issue_dir, dataset, request_id), exist_ok=True)
+    os.makedirs(os.path.join(issue_dir, dataset), exist_ok=True)
     try:
         for file_name in files_in_resource:
             file_path = os.path.join(input_path, file_name)
@@ -80,35 +81,31 @@ def fetch_response_data(
         issue_dir,
         column_field_dir,
         transformed_dir,
+        flattened_dir,
+        dataset_dir,
     ]:
         os.makedirs(directory, exist_ok=True)
 
-    os.makedirs(os.path.join(transformed_dir, dataset, request_id), exist_ok=True)
+    os.makedirs(os.path.join(transformed_dir, dataset))
+    os.makedirs(os.path.join(flattened_dir, dataset))
 
     # Access each file in the "resource" directory
     for file_name in files_in_resource:
         file_path = os.path.join(input_path, file_name)
 
-        os.makedirs(os.path.join(issue_dir, dataset, request_id), exist_ok=True)
-        os.makedirs(os.path.join(column_field_dir, dataset, request_id), exist_ok=True)
-        os.makedirs(
-            os.path.join(dataset_resource_dir, dataset, request_id), exist_ok=True
-        )
+        os.makedirs(os.path.join(issue_dir, dataset), exist_ok=True)
+        os.makedirs(os.path.join(column_field_dir, dataset), exist_ok=True)
+        os.makedirs(os.path.join(dataset_resource_dir, dataset), exist_ok=True)
         try:
             pipeline_run(
                 dataset=dataset,
                 pipeline=pipeline,
-                request_id=request_id,
                 specification_dir=specification_dir,
                 input_path=file_path,
-                output_path=os.path.join(
-                    transformed_dir, dataset, request_id, f"{file_name}.csv"
-                ),
-                issue_dir=os.path.join(issue_dir, dataset, request_id),
-                column_field_dir=os.path.join(column_field_dir, dataset, request_id),
-                dataset_resource_dir=os.path.join(
-                    dataset_resource_dir, dataset, request_id
-                ),
+                output_path=os.path.join(transformed_dir, dataset, f"{file_name}.csv"),
+                issue_dir=os.path.join(issue_dir, dataset),
+                column_field_dir=os.path.join(column_field_dir, dataset),
+                dataset_resource_dir=os.path.join(dataset_resource_dir, dataset),
                 organisation_path=os.path.join(cache_dir, "organisation.csv"),
                 save_harmonised=False,
                 organisations=[organisation],
@@ -122,7 +119,6 @@ def fetch_response_data(
 def pipeline_run(
     dataset,
     pipeline,
-    request_id,
     specification_dir,
     input_path,
     output_path,
@@ -165,12 +161,16 @@ def pipeline_run(
     if len(organisations) == 1:
         default_values["organisation"] = organisations[0]
 
+    print(
+        "converted path::: ",
+        os.path.abspath(os.path.join(converted_dir, f"{resource}.csv")),
+    )
     run_pipeline(
         ConvertPhase(
             path=input_path,
             dataset_resource_log=dataset_resource_log,
             custom_temp_dir=custom_temp_dir,
-            output_path=os.path.join(converted_dir, request_id, f"{resource}.csv"),
+            output_path=os.path.join(converted_dir, f"{resource}.csv"),
         ),
         NormalisePhase(skip_patterns=skip_patterns, null_path=null_path),
         ParsePhase(),
@@ -185,11 +185,7 @@ def pipeline_run(
             issues=issue_log,
             patches=patches,
         ),
-        HarmonisePhase(
-            field_datatype_map=specification.get_field_datatype_map(),
-            issues=issue_log,
-            dataset=dataset,
-        ),
+        HarmonisePhase(specification=specification, issues=issue_log, dataset=dataset),
         DefaultPhase(
             default_fields=default_fields,
             default_values=default_values,
@@ -206,7 +202,7 @@ def pipeline_run(
         FieldPrunePhase(fields=specification.current_fieldnames(schema)),
         EntityReferencePhase(
             dataset=dataset,
-            prefix=specification.dataset_prefix(dataset),
+            specification=specification,
         ),
         EntityPrefixPhase(dataset=dataset),
         EntityLookupPhase(lookups),
@@ -219,10 +215,7 @@ def pipeline_run(
         PivotPhase(),
         FactCombinePhase(issue_log=issue_log, fields=combine_fields),
         FactorPhase(),
-        FactReferencePhase(
-            field_typology_map=specification.get_field_typology_map(),
-            field_prefix_map=specification.get_field_prefix_map(),
-        ),
+        FactReferencePhase(dataset=dataset, specification=specification),
         FactLookupPhase(lookups),
         FactPrunePhase(),
         SavePhase(

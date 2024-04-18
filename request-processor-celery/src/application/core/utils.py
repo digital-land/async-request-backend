@@ -3,6 +3,7 @@ import os
 import hashlib
 import requests
 from cchardet import UniversalDetector
+from enum import Enum
 
 logger = get_logger(__name__)
 
@@ -29,6 +30,8 @@ def get_request(url, verify_ssl=True):
     content = None
     if response is not None:
         log["status"] = str(response.status_code)
+        print("status: ", log["status"])
+        print("response: ", response.headers.get("Content-Type"))
         if log["status"] == "200":
             if not response.headers.get("Content-Type", "").startswith("text/html"):
                 content = response.content
@@ -43,7 +46,8 @@ def get_request(url, verify_ssl=True):
     return log, content
 
 
-def save_content(content, tmp_dir):
+def save_content(content, dir):
+    tmp_dir = os.path.join(dir + "/resource")
     resource = hashlib.sha256(content).hexdigest()
     path = os.path.join(tmp_dir, resource)
     save(path, content)
@@ -70,3 +74,8 @@ def detect_encoding(path):
         detector.close()
 
         return detector.result["encoding"]
+
+
+class ErrorMap(Enum):
+    USER_ERROR = "User error"
+    SYSTEM_ERROR = "System error"

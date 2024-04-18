@@ -3,6 +3,7 @@ import csv
 import urllib
 import yaml
 from urllib.error import HTTPError
+import shutil
 from application.core.utils import detect_encoding
 from application.logging.logger import get_logger
 from application.core.pipeline import fetch_response_data, resource_from_path
@@ -13,17 +14,15 @@ from collections import defaultdict
 logger = get_logger(__name__)
 
 
-def run_workflow(
-    fileName, request_id, collection, dataset, organisation, geom_type, directories
-):
+def run_workflow(fileName, collection, dataset, organisation, geom_type, directories):
     additional_column_mappings = None
     additional_concats = None
 
     try:
         # pipeline directory structure & download
-        pipeline_dir = os.path.join(directories.PIPELINE_DIR, dataset, request_id)
+        pipeline_dir = os.path.join(directories.PIPELINE_DIR)
 
-        input_path = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
+        input_path = os.path.join(directories.COLLECTION_DIR, "resource")
 
         file_path = os.path.join(input_path, fileName)
         resource = resource_from_path(file_path)
@@ -33,14 +32,15 @@ def run_workflow(
         fetch_response_data(
             dataset,
             organisation,
-            request_id,
             directories.COLLECTION_DIR,
             directories.CONVERTED_DIR,
             directories.ISSUE_DIR,
             directories.COLUMN_FIELD_DIR,
             directories.TRANSFORMED_DIR,
+            directories.FLATTENED_DIR,
+            directories.DATASET_DIR,
             directories.DATASET_RESOURCE_DIR,
-            pipeline_dir,
+            directories.PIPELINE_DIR,
             directories.SPECIFICATION_DIR,
             directories.CACHE_DIR,
             additional_col_mappings=additional_column_mappings,
@@ -54,56 +54,52 @@ def run_workflow(
 
         required_fields = getMandatoryFields(required_fields_path, dataset)
         converted_json = []
-        if os.path.exists(
-            os.path.join(directories.CONVERTED_DIR, request_id, f"{resource}.csv")
-        ):
+        if os.path.exists(os.path.join(directories.CONVERTED_DIR, f"{resource}.csv")):
             converted_json = csv_to_json(
-                os.path.join(directories.CONVERTED_DIR, request_id, f"{resource}.csv")
+                os.path.join(directories.CONVERTED_DIR, f"{resource}.csv")
             )
         else:
             converted_json = csv_to_json(
-                os.path.join(
-                    directories.COLLECTION_DIR, "resource", request_id, f"{resource}"
-                )
+                os.path.join(directories.COLLECTION_DIR, "resource", f"{resource}")
             )
 
         issue_log_json = csv_to_json(
-            os.path.join(directories.ISSUE_DIR, dataset, request_id, f"{resource}.csv")
+            os.path.join(directories.ISSUE_DIR, dataset, f"{resource}.csv")
         )
         column_field_json = csv_to_json(
-            os.path.join(
-                directories.COLUMN_FIELD_DIR, dataset, request_id, f"{resource}.csv"
-            )
+            os.path.join(directories.COLUMN_FIELD_DIR, dataset, f"{resource}.csv")
         )
         updateColumnFieldLog(column_field_json, required_fields)
         summary_data = error_summary(issue_log_json, column_field_json)
 
+        # flattened_json = csv_to_json(
+        #     os.path.join(directories.FLATTENED_DIR, dataset, f"{dataset}.csv")
+        # )
+        flattened_json = []
         response_data = {
             "converted-csv": converted_json,
             "issue-log": issue_log_json,
             "column-field-log": column_field_json,
+            "flattened-csv": flattened_json,
             "error-summary": summary_data,
         }
         # logger.info("Error Summary: %s", summary_data)
+        # print("***********response data****************", response_data)
     except Exception as e:
         logger.exception(f"An error occurred: {e}")
 
     finally:
         clean_up(
-            request_id,
-            directories.COLLECTION_DIR + "resource",
             directories.COLLECTION_DIR,
             directories.CONVERTED_DIR,
-            directories.ISSUE_DIR + dataset,
             directories.ISSUE_DIR,
             directories.COLUMN_FIELD_DIR,
-            directories.TRANSFORMED_DIR + dataset,
             directories.TRANSFORMED_DIR,
+            directories.FLATTENED_DIR,
+            directories.DATASET_DIR,
             directories.DATASET_RESOURCE_DIR,
-            directories.PIPELINE_DIR + dataset,
             directories.PIPELINE_DIR,
         )
-
     return response_data
 
 
@@ -155,32 +151,11 @@ def fetch_pipeline_csvs(collection, dataset, pipeline_dir, geom_type, resource):
                 logger.error(f"Error saving new mapping: {e}")
 
 
-# def clean_up(*directories):
-#     try:
-#         for directory in directories:
-#             if os.path.exists(directory):
-#                 shutil.rmtree(directory)
-#     except Exception as e:
-#         logger.error(f"An error occurred during cleanup: {e}")
-
-
-def clean_up(request_id, *directories):
+def clean_up(*directories):
     try:
         for directory in directories:
-            dir_path = os.path.join(directory, str(request_id))
-            if os.path.exists(dir_path):
-                files = os.listdir(dir_path)
-                for file in files:
-                    file_path = os.path.join(dir_path, file)
-                    if os.path.isfile(file_path):
-                        os.remove(file_path)
-                    elif os.path.isdir(file_path):
-                        clean_up(request_id, file_path)
-                # Check if the directory is empty after removing files
-                if not os.listdir(dir_path):
-                    os.rmdir(dir_path)
-            if os.path.exists(directory) and not os.listdir(directory):
-                os.rmdir(directory)
+            if os.path.exists(directory):
+                shutil.rmtree(directory)
     except Exception as e:
         logger.error(f"An error occurred during cleanup: {e}")
 

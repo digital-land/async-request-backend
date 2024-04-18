@@ -68,9 +68,10 @@ def test_check_datafile(
         "destination_organisation_csv exists? "
         + str(os.path.exists(destination_organisation_csv))
     )
+
     mocker.patch(
         "application.core.workflow.fetch_pipeline_csvs",
-        side_effect=mock_fetch_pipeline_csvs("article-4-direction-area", request.id),
+        side_effect=mock_fetch_pipeline_csvs,
     )
     # Convert mock directory paths to strings
     mock_directories_str = {
@@ -140,7 +141,7 @@ def test_check_datafile_invalid(
 
     mocker.patch(
         "application.core.workflow.fetch_pipeline_csvs",
-        side_effect=mock_fetch_pipeline_csvs("article-4-direction-area", request.id),
+        side_effect=mock_fetch_pipeline_csvs,
     )
     # Convert mock directory paths to strings
     mock_directories_str = {
@@ -214,7 +215,7 @@ def test_check_datafile_url(
 
     mocker.patch(
         "application.core.workflow.fetch_pipeline_csvs",
-        side_effect=mock_fetch_pipeline_csvs("article-4-direction-area", request.id),
+        side_effect=mock_fetch_pipeline_csvs,
     )
     # Convert mock directory paths to strings
     mock_directories_str = {
