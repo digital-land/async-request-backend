@@ -1,4 +1,3 @@
-
 import os
 
 import alembic
@@ -43,7 +42,9 @@ def db(postgres, test_dir):
         create_database(os.environ["DATABASE_URL"])
     # Apply migrations in postgres DB
     config = Config(os.path.realpath(f"{test_dir}/../../alembic.ini"))
-    config.set_main_option("script_location", os.path.realpath(f"{test_dir}/../../migrations"))
+    config.set_main_option(
+        "script_location", os.path.realpath(f"{test_dir}/../../migrations")
+    )
     alembic.command.upgrade(config, "head")
 
     yield
@@ -53,7 +54,7 @@ def db(postgres, test_dir):
 @pytest.fixture(scope="module")
 def sqs_client():
     with mock_aws():
-        yield boto3.resource('sqs')
+        yield boto3.resource("sqs")
 
 
 @pytest.fixture(scope="module")
@@ -67,7 +68,6 @@ def test_dir(request):
 
 
 class Helpers:
-
     @staticmethod
     def build_request_create():
         return schemas.RequestCreate(
@@ -75,7 +75,7 @@ class Helpers:
                 collection="tree-preservation-order",
                 dataset="tree",
                 original_filename="something.csv",
-                uploaded_filename="generated.csv"
+                uploaded_filename="generated.csv",
             )
         )
 
@@ -89,5 +89,3 @@ class Helpers:
 @pytest.fixture
 def helpers():
     return Helpers
-
-
