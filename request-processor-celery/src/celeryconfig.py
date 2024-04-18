@@ -5,9 +5,7 @@ broker_transport_options = {
     "is_secure": os.environ.get("CELERY_BROKER_IS_SECURE", "false").lower() == "true",
     # Wait time before allowing a message to be read again. Our default is 60 seconds (1 minute).
     # Celery default is 1800 seconds (30 minutes)
-    "visibility_timeout": int(
-        os.environ.get("CELERY_BROKER_VISIBILITY_TIMEOUT", "900")
-    ),
+    "visibility_timeout": int(os.environ.get("CELERY_BROKER_VISIBILITY_TIMEOUT", "60")),
 }
 
 broker_connection_retry_on_startup = True
