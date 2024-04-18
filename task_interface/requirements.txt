@@ -1,2 +1,2 @@
-celery[sqs]>=5.3.6
+celery[sqs]==5.3.6
 pytest>=7.2.1

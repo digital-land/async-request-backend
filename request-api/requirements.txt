@@ -5,5 +5,5 @@ SQLAlchemy>=2.0.27
 psycopg2_binary>=2.9.9
 alembic==1.13.1
 boto3>=1.26.79
-celery[sqs]>=5.3.6
+celery[sqs]==5.3.6
 shortuuid==1.0.13
