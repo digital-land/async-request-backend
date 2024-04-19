@@ -1,0 +1,10 @@
+celery[sqs]
+eventlet
+SQLAlchemy
+psycopg2_binary
+pydantic
+cchardet
+httpx
+pre-commit
+shortuuid
+-e git+https://github.com/digital-land/pipeline.git#egg=digital-land

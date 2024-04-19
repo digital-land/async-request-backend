@@ -40,10 +40,10 @@ services:
       POSTGRES_DB: request_database
     restart: on-failure
 
-  request-processor-celery:
+  request-processor:
     build:
       context: .
-      dockerfile: request-processor-celery/Dockerfile
+      dockerfile: request-processor/Dockerfile
     environment:
       PYTHONUNBUFFERED: 1
       AWS_ENDPOINT_URL: http://localstack:4566
@@ -60,4 +60,4 @@ services:
     deploy:
       replicas: 1
     volumes:
-      - "./request-processor-celery/docker_volume:/opt"
+      - "./request-processor/docker_volume:/opt"

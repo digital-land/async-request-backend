@@ -49,12 +49,8 @@ def test_dir(request):
 
 @pytest.fixture(scope="module")
 def project_dir(test_dir):
+    print("PROJ DIR:: ", os.path.realpath(f"{test_dir}"))
     return os.path.realpath(f"{test_dir}/../../")
-
-
-@pytest.fixture(scope="module")
-def test_data_dir(test_dir):
-    return os.path.realpath(f"{test_dir}/../data")
 
 
 @pytest.fixture(scope="module")

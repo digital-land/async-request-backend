@@ -1,0 +1,14 @@
+-r requirements.txt
+fastapi
+uvicorn[standard]
+SQLAlchemy
+psycopg2_binary
+boto3
+pytest
+pytest-cov
+httpx
+moto[sqs]
+sqlalchemy-utils
+testcontainers-postgres
+black
+flake8

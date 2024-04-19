@@ -1,0 +1,5 @@
+pydantic
+SQLAlchemy
+boto3
+shortuuid
+pytest

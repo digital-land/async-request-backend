@@ -1,0 +1,10 @@
+-r requirements.txt
+pytest
+celery[pytest]
+moto[sqs]
+pytest-mock
+testcontainers-postgres
+pytest-cov
+requests-mock
+black
+flake8

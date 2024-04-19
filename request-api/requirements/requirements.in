@@ -1,0 +1,9 @@
+fastapi
+pydantic
+uvicorn[standard]
+SQLAlchemy
+psycopg2_binary
+alembic
+boto3
+celery[sqs]
+shortuuid
