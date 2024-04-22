@@ -9,12 +9,12 @@ RUN apk update && \
     apk add --no-cache gdal-dev gdal gdal-tools && \
     rm -rf /var/cache/apk/*
 
-COPY request-processor-celery/src/. .
-COPY request-processor-celery/requirements.txt requirements.txt
-COPY request-processor-celery/makefile makefile
-COPY request-processor-celery/makerules/makerules.mk makerules/makerules.mk
-COPY request-processor-celery/makerules/python.mk makerules/python.mk
-COPY request-processor-celery/docker-entrypoint.sh docker-entrypoint.sh
+COPY request-processor/src/. .
+COPY request-processor/requirements/requirements.txt requirements/requirements.txt
+COPY request-processor/makefile makefile
+COPY request-processor/makerules/makerules.mk makerules/makerules.mk
+COPY request-processor/makerules/python.mk makerules/python.mk
+COPY request-processor/docker-entrypoint.sh docker-entrypoint.sh
 
 COPY ../request_model ./request_model
 COPY ../task_interface ./task_interface

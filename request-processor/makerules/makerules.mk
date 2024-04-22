@@ -28,14 +28,14 @@ endif
 
 init::
 	python -m pip install pip-tools
-	python -m pip install -r requirements.txt
+	python -m pip install -r requirements/requirements.txt
 
 update-dependencies::
 	make dependencies
 	make config
 
 dependencies::
-	pip-sync requirements.txt  requirements.txt
+	pip-sync requirements/requirements.txt  requirements/requirements.txt
 
 pre-commit-install::
 	pre-commit install

@@ -9,6 +9,11 @@ from request_model import models, schemas
 from src.tasks import check_datafile
 
 
+@pytest.fixture(scope="module")
+def test_data_dir(test_dir):
+    return os.path.realpath(f"{test_dir}/../../data")
+
+
 def test_check_datafile(
     mocker,
     celery_app,

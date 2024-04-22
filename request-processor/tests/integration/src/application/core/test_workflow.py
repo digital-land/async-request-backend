@@ -5,6 +5,11 @@ import csv
 from src.application.core.workflow import run_workflow
 
 
+@pytest.fixture(scope="module")
+def test_data_dir(test_dir):
+    return os.path.realpath(f"{test_dir}/../../../../data")
+
+
 @pytest.fixture
 def uploaded_csv(mock_directories):
     collection_dir = mock_directories.COLLECTION_DIR

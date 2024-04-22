@@ -1,5 +1,5 @@
 [project]
-name = "request-processor-celery"
+name = "request-processor"
 version = "0.0.1"
 
 [tool.pytest.ini_options]
