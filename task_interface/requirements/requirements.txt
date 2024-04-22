@@ -44,7 +44,7 @@ kombu[sqs]==5.3.7
     # via celery
 packaging==24.0
     # via pytest
-pluggy==1.5.0
+pluggy==1.4.0
     # via pytest
 prompt-toolkit==3.0.43
     # via click-repl

@@ -273,7 +273,7 @@ platformdirs==4.2.0
     #   -r requirements/requirements.txt
     #   black
     #   virtualenv
-pluggy==1.5.0
+pluggy==1.4.0
     # via
     #   -r requirements/requirements.txt
     #   datasette
