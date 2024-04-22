@@ -6,6 +6,8 @@
 #
 amqp==5.2.0
     # via kombu
+attrs==23.2.0
+    # via pytest
 billiard==4.2.0
     # via celery
 boto3==1.34.88
@@ -50,7 +52,7 @@ pycurl==7.45.3
     # via
     #   celery
     #   kombu
-pytest==8.1.1
+pytest==7.2.1
     # via -r requirements/requirements.in
 python-dateutil==2.9.0.post0
     # via

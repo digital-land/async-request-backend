@@ -6,9 +6,11 @@
 #
 annotated-types==0.6.0
     # via pydantic
-boto3==1.34.88
+attrs==23.2.0
+    # via pytest
+boto3==1.26.79
     # via -r requirements/requirements.in
-botocore==1.34.88
+botocore==1.29.165
     # via
     #   boto3
     #   s3transfer
@@ -30,17 +32,17 @@ pydantic==2.7.0
     # via -r requirements/requirements.in
 pydantic-core==2.18.1
     # via pydantic
-pytest==8.1.1
+pytest==7.2.1
     # via -r requirements/requirements.in
 python-dateutil==2.9.0.post0
     # via botocore
-s3transfer==0.10.1
+s3transfer==0.6.2
     # via boto3
 shortuuid==1.0.13
     # via -r requirements/requirements.in
 six==1.16.0
     # via python-dateutil
-sqlalchemy==2.0.29
+sqlalchemy==2.0.27
     # via -r requirements/requirements.in
 tomli==2.0.1
     # via pytest
@@ -49,5 +51,5 @@ typing-extensions==4.11.0
     #   pydantic
     #   pydantic-core
     #   sqlalchemy
-urllib3==2.2.1
+urllib3==1.26.18
     # via botocore

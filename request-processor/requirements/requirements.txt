@@ -208,7 +208,7 @@ sparqlwrapper==2.0.0
     # via digital-land
 spatialite==0.0.3
     # via digital-land
-sqlalchemy==2.0.29
+sqlalchemy==2.0.27
     # via -r requirements/requirements.in
 typing-extensions==4.11.0
     # via
