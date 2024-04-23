@@ -6,9 +6,9 @@
 #
 annotated-types==0.6.0
     # via pydantic
-boto3==1.34.89
+boto3==1.34.87
     # via -r requirements.in
-botocore==1.34.89
+botocore==1.34.87
     # via
     #   boto3
     #   s3transfer
@@ -24,7 +24,7 @@ jmespath==1.0.1
     #   botocore
 packaging==24.0
     # via pytest
-pluggy==1.5.0
+pluggy==1.4.0
     # via pytest
 pydantic==2.7.0
     # via -r requirements.in
