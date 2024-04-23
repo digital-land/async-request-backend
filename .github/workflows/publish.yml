@@ -34,7 +34,7 @@ jobs:
       - name: Install test dependencies with pip
         working-directory: ./request-api
         run: |
-          pip install -r requirements/test_requirements.txt
+          pip3 install -r requirements/test_requirements.txt
 
       - name: Run Lint and Tests
         working-directory: ./request-api
@@ -95,7 +95,7 @@ jobs:
       - name: Install test dependencies with pip
         working-directory: ./request-processor
         run: |
-          pip install -r requirements/test_requirements.txt
+          pip3 install -r requirements/test_requirements.txt
 
       - name: Download specification files
         working-directory: ./request-processor
