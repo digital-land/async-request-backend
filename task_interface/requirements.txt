@@ -8,7 +8,7 @@ amqp==5.2.0
     # via kombu
 billiard==4.2.0
     # via celery
-boto3==1.34.87
+boto3==1.34.89
     # via
     #   celery
     #   kombu
@@ -42,7 +42,7 @@ kombu[sqs]==5.3.7
     # via celery
 packaging==24.0
     # via pytest
-pluggy==1.4.0
+pluggy==1.5.0
     # via pytest
 prompt-toolkit==3.0.43
     # via click-repl

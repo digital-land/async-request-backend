@@ -36,13 +36,13 @@ billiard==4.2.0
     #   celery
 black==23.3.0
     # via -r requirements/test_requirements.in
-boto3==1.34.87
+boto3==1.34.89
     # via
     #   -r requirements/requirements.txt
     #   celery
     #   kombu
     #   moto
-botocore==1.34.87
+botocore==1.34.89
     # via
     #   -r requirements/requirements.txt
     #   boto3
@@ -271,7 +271,7 @@ platformdirs==4.2.0
     #   -r requirements/requirements.txt
     #   black
     #   virtualenv
-pluggy==1.4.0
+pluggy==1.5.0
     # via
     #   -r requirements/requirements.txt
     #   datasette
