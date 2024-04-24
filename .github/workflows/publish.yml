@@ -2,11 +2,7 @@ name: Test & Publish
 
 on:
   push:
-<<<<<<< HEAD
-    branches: [main, development, ecs-deployment]
-=======
     branches: [main]
->>>>>>> main
   workflow_dispatch:
     inputs:
       environment:
