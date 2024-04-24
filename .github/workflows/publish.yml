@@ -2,7 +2,7 @@ name: Test & Publish
 
 on:
   push:
-    branches: [main, development]
+    branches: [main]
   workflow_dispatch:
     inputs:
       environment:

@@ -2,7 +2,7 @@
 
 Backend providing asynchronous request processing for frontends handling intensive workloads.
 
-This repository currently hosts proof of concept code as part of open design proposal 001:
+This repository implements open design proposal 001:
 
 https://digital-land.github.io/technical-documentation/architecture/design/proposals/001-publish-async/index.html
 
