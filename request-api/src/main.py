@@ -71,8 +71,12 @@ def read_request(request_id: str, db: Session = Depends(_get_db)):
 
 
 @app.get("/requests/{request_id}/response-details", response_model=List[Dict[Any, Any]])
-def read_response_details(request_id: str, http_response: Response, offset=0, limit=50, db: Session = Depends(_get_db)):
-    pagination_params = PaginationParams(offset=offset, limit=limit)
+def read_response_details(
+    request_id: str,
+    http_response: Response,
+    pagination_params: PaginationParams = Depends(),
+    db: Session = Depends(_get_db)
+):
     paginated_result = crud.get_response_details(db, request_id, pagination_params)
     http_response.headers["X-Pagination-Total-Results"] = str(paginated_result.total_results_available)
     http_response.headers["X-Pagination-Offset"] = str(paginated_result.params.offset)

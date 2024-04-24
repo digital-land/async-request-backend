@@ -1,13 +1,8 @@
-import logging
-
 from sqlalchemy.orm import Session
 
 from pagination_model import PaginatedResult, PaginationParams
 from request_model import models
 from request_model import schemas
-
-logging.basicConfig()
-logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
 
 
 def get_request(db: Session, request_id: int):
