@@ -1,5 +1,5 @@
 from datetime import datetime
-from unittest.mock import patch, Mock
+from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException
@@ -17,34 +17,38 @@ exception_msg = "Fake connection error message"
 
 def _create_request_model():
     return models.Request(
-            id="6WuEVYfuScqnW4oewgbyZd",
-            type="check_file",
-            created=datetime.now(),
-            modified=datetime.now(),
-            status="NEW",
-            params=schemas.CheckFileParams(
-                collection="tree-preservation-order",
-                dataset="tree",
-                original_filename="something.csv",
-                uploaded_filename="generated.csv"
-            ),
-            response=None
+        id="6WuEVYfuScqnW4oewgbyZd",
+        type="check_file",
+        created=datetime.now(),
+        modified=datetime.now(),
+        status="NEW",
+        params=schemas.CheckFileParams(
+            collection="tree-preservation-order",
+            dataset="tree",
+            original_filename="something.csv",
+            uploaded_filename="generated.csv",
+        ),
+        response=None,
     )
 
 
-@patch('crud.create_request', return_value=_create_request_model())
-@patch('task_interface.check_tasks.CheckDataFileTask.delay', side_effect=OperationalError(exception_msg))
-def test_create_request_when_celery_throws_exception(mock_task_delay, mock_create_request, helpers):
+@patch("crud.create_request", return_value=_create_request_model())
+@patch(
+    "task_interface.check_tasks.CheckDataFileTask.delay",
+    side_effect=OperationalError(exception_msg),
+)
+def test_create_request_when_celery_throws_exception(
+    mock_task_delay, mock_create_request, helpers
+):
     with pytest.raises(OperationalError) as error:
-        main.create_request(helpers.build_request_create(), http_request=None, http_response=None)
+        main.create_request(
+            helpers.build_request_create(), http_request=None, http_response=None
+        )
         assert exception_msg == error.value
 
 
-@patch('crud.get_request', return_value=None)
+@patch("crud.get_request", return_value=None)
 def test_read_request_when_not_found(mock_get_request):
     with pytest.raises(HTTPException) as exception:
         main.read_request("unknown")
         assert 400 == exception.value.detail["errCode"]
-
-
-

@@ -146,12 +146,13 @@ def test_csv_to_json_with_valid_file(mocker, test_dir):
 
 
 def test_fetch_pipelines(mocker, mock_directories, mock_fetch_pipeline_csvs):
+    request_id = "xyz123"
     collection = "test_collection"
     dataset = "tree"
-    pipeline_dir = mock_directories.PIPELINE_DIR
+    pipeline_dir = mock_directories.PIPELINE_DIR + f"/{dataset}" + f"/{request_id}"
     geom_type = ""
     resource = ""
-
+    mock_fetch_pipeline_csvs(dataset, request_id)
     # Mock urllib.request.urlretrieve
     mocked_urlretrieve = mocker.patch("urllib.request.urlretrieve")
 
@@ -179,12 +180,13 @@ def test_fetch_pipelines(mocker, mock_directories, mock_fetch_pipeline_csvs):
 
 
 def test_fetch_pipelines_for_tree(mocker, mock_directories, mock_fetch_pipeline_csvs):
+    request_id = "xyz123"
     collection = "test_collection"
     dataset = "tree"
-    pipeline_dir = mock_directories.PIPELINE_DIR
+    pipeline_dir = mock_directories.PIPELINE_DIR + f"/{dataset}" + f"/{request_id}"
     geom_type = "polygon"
     resource = ""
-
+    mock_fetch_pipeline_csvs(dataset, request_id)
     # Mock urllib.request.urlretrieve
     mocker.patch("urllib.request.urlretrieve")
 

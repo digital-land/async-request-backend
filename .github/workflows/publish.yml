@@ -2,7 +2,11 @@ name: Test & Publish
 
 on:
   push:
+<<<<<<< HEAD
     branches: [main, development, ecs-deployment]
+=======
+    branches: [main]
+>>>>>>> main
   workflow_dispatch:
     inputs:
       environment:
@@ -36,14 +40,9 @@ jobs:
         run: |
           pip install -r test_requirements.txt
 
-      - name: Run unit tests
+      - name: Run Lint and Tests
         working-directory: ./request-api
-        run: pytest --cov=src tests/unit/
-
-      - name: Run integration tests with coverage threshold
-        working-directory: ./request-api
-        run: pytest --cov=src --cov-append --cov-fail-under=90 tests/integration/
-
+        run: make test
 
   publish-request-api:
     runs-on: ubuntu-latest
