@@ -2,7 +2,7 @@
 pytest>=7.2.1
 celery[pytest]==5.3.6
 moto[sqs]>=5.0.2
-cryptography==3.4.8
+cryptography==3.4.8 #Needed to control version of transient dependency used by moto[sqs]
 pytest-mock
 testcontainers-postgres==0.0.1rc1
 pytest-cov>=5.0.0
