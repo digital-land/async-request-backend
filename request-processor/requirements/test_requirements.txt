@@ -108,6 +108,10 @@ click-repl==0.3.0
     #   celery
 coverage[toml]==7.4.4
     # via pytest-cov
+cryptography==3.4.8
+    # via
+    #   -r requirements/test_requirements.in
+    #   moto
 dataclasses-json==0.6.4
     # via
     #   -r requirements/requirements.txt
