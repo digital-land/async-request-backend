@@ -8,7 +8,7 @@ https://digital-land.github.io/technical-documentation/architecture/design/propo
 
 ## Local running
 
-A docker compose setup has been configured to run the async request backend.  This setup runs a Python/FastAPI for 
+A docker compose setup has been configured to run the async request backend.  This setup runs a Python/FastAPI for
 receiving requests, a Postgres database to store requests, an SQS queue using the excellent [Localstack](https://www.localstack.cloud/) container
 to trigger processing and a basic Python app to process the requests.
 
@@ -17,7 +17,14 @@ You can run the docker compose stack by executing the following command:
 ```shell
 docker compose up -d
 ```
-
+To view service logs, use:
+```shell
+docker compose logs -f <service_name>
+```
+To inspect the database tables and records via CLI, execute:
+```shell
+docker-compose exec request-db psql -U postgres -d request_database
+```
 ### Request API
 
 To create a new request, you can post via curl:
@@ -56,3 +63,12 @@ To delete the message, you'll need to run the following command making use of th
 aws --endpoint-url=http://localhost:4566 sqs delete-message --queue-url http://sqs.eu-west-2.localhost.localstack.cloud:4566/000000000000/async-request-queue \
  --receipt-handle "MzczYmIzODAtNmM2YS00ZDAyLThkOWYtMTgyYjcyYzZlOTA0IGFybjphd3M6c3FzOmV1LXdlc3QtMjowMDAwMDAwMDAwMDA6YXN5bmMtcmVxdWVzdC1xdWV1ZSBhMjk1ZGVhNi1jNGI2LTQ5ZDQtODEyNC0yNjMwMjFhOWZlOTMgMTcwNzgzNzc1My43NzMzOTk4"
 ```
+
+## Managing Dependencies
+
+To include new dependencies, update the requirements.in file with the desired packages. Afterward, run the following command to generate an updated requirements.txt file, which includes both direct and dependent dependencies:
+    ```
+    pip-compile -r requirements/requirements.in
+    ```
+
+This ensures that your project accurately reflects its dependencies, including any transitive dependencies required by the newly added packages.

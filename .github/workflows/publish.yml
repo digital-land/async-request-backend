@@ -34,7 +34,7 @@ jobs:
       - name: Install test dependencies with pip
         working-directory: ./request-api
         run: |
-          pip install -r test_requirements.txt
+          pip3 install -r requirements/test_requirements.txt
 
       - name: Run Lint and Tests
         working-directory: ./request-api
@@ -93,16 +93,16 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install test dependencies with pip
-        working-directory: ./request-processor-celery
+        working-directory: ./request-processor
         run: |
-          pip install -r test_requirements.txt
+          pip3 install -r requirements/test_requirements.txt
 
       - name: Download specification files
-        working-directory: ./request-processor-celery
+        working-directory: ./request-processor
         run: make specification
 
       - name: Lint, Test, Coverage
-        working-directory: ./request-processor-celery
+        working-directory: ./request-processor
         run: make all
 
 
@@ -140,7 +140,7 @@ jobs:
 
       - run: docker pull $DOCKER_REPO:${GITHUB_REF_NAME} || echo "no current latest image"
 
-      - run: docker build --build-arg DEPLOY_TIME="$(date +%Y-%m-%dT%H:%M:%S)" -t $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} -f request-processor-celery/Dockerfile .
+      - run: docker build --build-arg DEPLOY_TIME="$(date +%Y-%m-%dT%H:%M:%S)" -t $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} -f request-processor/Dockerfile .
 
       - run: docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:${GITHUB_REF_NAME}
 
