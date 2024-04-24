@@ -180,5 +180,7 @@ jobs:
 
       - name: Update ECS Task
         run: |
+          echo "Subnet IDs: ${{ secrets.SUBNET_PRIVATE_IDS }}"
+          echo "Security Group IDs: ${{ secrets.SECURITY_GROUP_PUBLIC_ID }}"
           aws ecs run-task --cluster ${{ matrix.environment }}-cluster --task-definition ${{ matrix.environment }}-pub-async-request-processor-task --count 2 --launch-type FARGATE --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.SUBNET_PRIVATE_IDS }}],securityGroups=[${{ secrets.SECURITY_GROUP_PUBLIC_ID }}],assignPublicIp=ENABLED}"
 
