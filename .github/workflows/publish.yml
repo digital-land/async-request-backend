@@ -180,5 +180,5 @@ jobs:
 
       - name: Update ECS Task
         run: |
-          aws ecs run-task --cluster ${{ matrix.environment }}-cluster --task-definition ${{ matrix.environment }}-pub-async-request-processor-task --count 2 --launch-type FARGATE --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_PRIVATE_IDS],securityGroups=[SECURITY_GROUP_PUBLIC_ID],assignPublicIp=ENABLED}"
+          aws ecs run-task --cluster ${{ matrix.environment }}-cluster --task-definition ${{ matrix.environment }}-pub-async-request-processor-task --count 2 --launch-type FARGATE --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_PRIVATE_IDS],securityGroups=[$SECURITY_GROUP_PUBLIC_ID],assignPublicIp=ENABLED}"
 
