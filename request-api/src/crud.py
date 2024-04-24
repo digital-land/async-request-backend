@@ -1,11 +1,29 @@
+import logging
+
 from sqlalchemy.orm import Session
 
+from pagination_model import PaginatedResult, PaginationParams
 from request_model import models
 from request_model import schemas
+
+logging.basicConfig()
+logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
 
 
 def get_request(db: Session, request_id: int):
     return db.query(models.Request).filter(models.Request.id == request_id).first()
+
+
+def get_response_details(db: Session, request_id: int, pagination_params=PaginationParams()):
+    base_query = (db.query(models.ResponseDetails)
+                  .join(models.ResponseDetails.response)
+                  .filter(models.Response.request_id == request_id))
+    response_details = base_query.offset(pagination_params.offset).limit(pagination_params.limit).all()
+    return PaginatedResult(
+        params=pagination_params,
+        total_results_available=base_query.count(),
+        data=response_details
+    )
 
 
 def create_request(db: Session, request: schemas.RequestCreate):

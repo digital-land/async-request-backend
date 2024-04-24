@@ -1,11 +1,13 @@
 import logging
 from datetime import datetime
+from typing import List, Dict, Any
 
 from fastapi import FastAPI, Depends, Request, Response, HTTPException
 from sqlalchemy.orm import Session
 
 import crud
 from database import session_maker
+from pagination_model import PaginationParams
 from request_model import models, schemas
 from task_interface.check_tasks import celery, CheckDataFileTask
 
@@ -68,6 +70,16 @@ def read_request(request_id: str, db: Session = Depends(_get_db)):
     return request_schema
 
 
+@app.get("/requests/{request_id}/response-details", response_model=List[Dict[Any, Any]])
+def read_response_details(request_id: str, http_response: Response, offset=0, limit=50, db: Session = Depends(_get_db)):
+    pagination_params = PaginationParams(offset=offset, limit=limit)
+    paginated_result = crud.get_response_details(db, request_id, pagination_params)
+    http_response.headers["X-Pagination-Total-Results"] = str(paginated_result.total_results_available)
+    http_response.headers["X-Pagination-Offset"] = str(paginated_result.params.offset)
+    http_response.headers["X-Pagination-Limit"] = str(paginated_result.params.limit)
+    return list(map(lambda detail: detail.detail, paginated_result.data))
+
+
 def _map_to_schema(request_model: models.Request) -> schemas.Request:
     response = None
     if request_model.response:
@@ -78,7 +90,6 @@ def _map_to_schema(request_model: models.Request) -> schemas.Request:
                 response_details.append(detail.detail)
         response = schemas.ResponseModel(
             data=request_model.response.data,
-            details=response_details,
             error=request_model.response.error,
         )
 
