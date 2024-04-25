@@ -65,7 +65,6 @@ class ResponseError(BaseModel):
 class ResponseModel(BaseModel):
     data: Optional[Dict[str, Any]]
     error: Optional[Dict[str, Any]]
-    details: Optional[List[Dict[Any, Any]]]
 
 
 class Request(RequestBase):

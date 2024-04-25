@@ -9,16 +9,17 @@ RUN apk update && \
     apk add --no-cache gdal-dev gdal gdal-tools && \
     rm -rf /var/cache/apk/*
 
-COPY request-processor/src/. .
 COPY request-processor/requirements/requirements.txt requirements/requirements.txt
 COPY request-processor/makefile makefile
 COPY request-processor/makerules/makerules.mk makerules/makerules.mk
 COPY request-processor/makerules/python.mk makerules/python.mk
-COPY request-processor/docker-entrypoint.sh docker-entrypoint.sh
+RUN make init
+
+COPY request-processor/src/. .
 
 COPY ../request_model ./request_model
 COPY ../task_interface ./task_interface
 
-RUN make init
+COPY request-processor/docker-entrypoint.sh docker-entrypoint.sh
 
 ENTRYPOINT ["./docker-entrypoint.sh"]

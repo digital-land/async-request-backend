@@ -4,9 +4,9 @@ RUN apk add --no-cache libcurl curl-dev build-base
 
 COPY request-api/requirements/requirements.txt requirements/requirements.txt
 
-COPY request-api/src/. .
-
 RUN python -m pip install -r requirements/requirements.txt
+
+COPY request-api/src/. .
 
 COPY ../request_model ./request_model
 
