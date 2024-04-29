@@ -1,0 +1,12 @@
+{
+  "name": "request-processor",
+  "version": "PLACEHOLDER",
+  "dependencies": {
+    "request-db": {
+      "status": "PLACEHOLDER"
+    },
+    "sqs": {
+      "status": "PLACEHOLDER"
+    }
+  }
+}
