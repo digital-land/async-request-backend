@@ -19,7 +19,6 @@ def test_read_root():
 
 def test_create_request(db, sqs_queue, helpers):
     response = client.post("/requests", json=helpers.request_create_dict())
-    print(response.json())
     request_id = response.json()["id"]
     assert response.status_code == 202
     assert response.headers["Location"] == f"$testserver/requests/{request_id}"
@@ -48,9 +47,9 @@ def test_read_response_details(db, helpers, test_request):
     read_details_response = client.get(f"/requests/{test_request.id}/response-details")
     assert read_details_response.status_code == 200
     assert read_details_response.json() == [
-        {"line": 1, "some_key": "some_value"},
-        {"line": 2, "some_key": "some_value"},
-        {"line": 3, "some_key": "some_value"}
+        {"line": 1, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]},
+        {"line": 2, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]},
+        {"line": 3, "issue_logs": [{"severity": "warning"}]}
     ]
     assert read_details_response.headers['X-Pagination-Total-Results'] == "3"
     assert read_details_response.headers['X-Pagination-Offset'] == "0"
@@ -61,7 +60,7 @@ def test_read_response_details_limit_1(db, helpers, test_request):
     read_details_response = client.get(f"/requests/{test_request.id}/response-details?limit=1")
     assert read_details_response.status_code == 200
     assert read_details_response.json() == [
-        {"line": 1, "some_key": "some_value"}
+        {"line": 1, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]}
     ]
     assert read_details_response.headers['X-Pagination-Total-Results'] == "3"
     assert read_details_response.headers['X-Pagination-Offset'] == "0"
@@ -72,7 +71,7 @@ def test_read_response_details_limit_offset1_limit1(db, helpers, test_request):
     read_details_response = client.get(f"/requests/{test_request.id}/response-details?offset=1&limit=1")
     assert read_details_response.status_code == 200
     assert read_details_response.json() == [
-        {"line": 2, "some_key": "some_value"}
+        {"line": 2, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]}
     ]
     assert read_details_response.headers['X-Pagination-Total-Results'] == "3"
     assert read_details_response.headers['X-Pagination-Offset'] == "1"
@@ -83,10 +82,34 @@ def test_read_response_details_limit_offset2_limit1(db, helpers, test_request):
     read_details_response = client.get(f"/requests/{test_request.id}/response-details?offset=2&limit=1")
     assert read_details_response.status_code == 200
     assert read_details_response.json() == [
-        {"line": 3, "some_key": "some_value"}
+        {"line": 3, "issue_logs": [{"severity": "warning"}]}
     ]
     assert read_details_response.headers['X-Pagination-Total-Results'] == "3"
     assert read_details_response.headers['X-Pagination-Offset'] == "2"
+    assert read_details_response.headers['X-Pagination-Limit'] == "1"
+
+
+def test_read_response_details_limit1_jsonpath(db, helpers, test_request):
+    jsonpath = '$.issue_logs[*].severity=="error"'
+    read_details_response = client.get(f"/requests/{test_request.id}/response-details?offset=0&limit=1&jsonpath={jsonpath}")
+    assert read_details_response.status_code == 200
+    assert read_details_response.json() == [
+        {"line": 1, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]}
+    ]
+    assert read_details_response.headers['X-Pagination-Total-Results'] == "2"
+    assert read_details_response.headers['X-Pagination-Offset'] == "0"
+    assert read_details_response.headers['X-Pagination-Limit'] == "1"
+
+
+def test_read_response_details_offset1_limit1_jsonpath(db, helpers, test_request):
+    jsonpath = '$.issue_logs[*].severity=="error"'
+    read_details_response = client.get(f"/requests/{test_request.id}/response-details?offset=1&limit=1&jsonpath={jsonpath}")
+    assert read_details_response.status_code == 200
+    assert read_details_response.json() == [
+        {"line": 2, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]}
+    ]
+    assert read_details_response.headers['X-Pagination-Total-Results'] == "2"
+    assert read_details_response.headers['X-Pagination-Offset'] == "1"
     assert read_details_response.headers['X-Pagination-Limit'] == "1"
 
 
@@ -112,13 +135,13 @@ def test_request():
             data='{ "some_key": "some_value" }',
             details=[
                 models.ResponseDetails(
-                    detail={"line": 1, "some_key": "some_value"}
+                    detail={"line": 1, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]}
                 ),
                 models.ResponseDetails(
-                    detail={"line": 2, "some_key": "some_value"}
+                    detail={"line": 2, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]}
                 ),
                 models.ResponseDetails(
-                    detail={"line": 3, "some_key": "some_value"}
+                    detail={"line": 3, "issue_logs": [{"severity": "warning"}]}
                 )
             ]
         )

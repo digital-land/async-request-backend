@@ -39,6 +39,8 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: request_database
     restart: on-failure
+    ports:
+      - "54320:5432"
 
   request-processor:
     build:

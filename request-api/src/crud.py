@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from pagination_model import PaginatedResult, PaginationParams
@@ -9,10 +10,13 @@ def get_request(db: Session, request_id: int):
     return db.query(models.Request).filter(models.Request.id == request_id).first()
 
 
-def get_response_details(db: Session, request_id: int, pagination_params=PaginationParams()):
+def get_response_details(db: Session, request_id: int, jsonpath: str = None, pagination_params=PaginationParams()):
     base_query = (db.query(models.ResponseDetails)
                   .join(models.ResponseDetails.response)
                   .filter(models.Response.request_id == request_id))
+    if jsonpath is not None:
+        base_query = base_query.filter(func.jsonb_path_match(models.ResponseDetails.detail, jsonpath))
+
     response_details = base_query.offset(pagination_params.offset).limit(pagination_params.limit).all()
     return PaginatedResult(
         params=pagination_params,

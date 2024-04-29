@@ -1,6 +1,7 @@
 import shortuuid
 from pydantic import BaseModel
-from sqlalchemy import Column, Integer, String, DateTime, JSON, func, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, func, ForeignKey
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -15,7 +16,7 @@ class Request(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     status = Column(String)
-    params = Column(JSON)
+    params = Column(JSONB)
     type = Column(String)
 
     response = relationship("Response", uselist=False, back_populates="request", lazy='joined')
@@ -26,8 +27,8 @@ class Response(Base):
 
     id = Column(Integer, primary_key=True)
     request_id = Column(String, ForeignKey("request.id"))
-    data = Column(JSON)
-    error = Column(JSON)
+    data = Column(JSONB)
+    error = Column(JSONB)
 
     request = relationship("Request", back_populates="response")
     details = relationship("ResponseDetails", back_populates="response", uselist=True, lazy='noload')
@@ -38,7 +39,7 @@ class ResponseDetails(Base):
 
     id = Column(Integer, primary_key=True)
     response_id = Column(Integer, ForeignKey("response.id"))
-    detail = Column(JSON)
+    detail = Column(JSONB)
 
     response = relationship("Response", back_populates="details")
 
