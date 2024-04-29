@@ -6,7 +6,7 @@ RUN apk add --no-cache libcurl curl-dev build-base git proj proj-dev proj-util g
 
 # Install GDAL dependencies
 RUN apk update && \
-    apk add --no-cache gdal-dev gdal gdal-tools && \
+    apk add --no-cache gdal-dev gdal gdal-tools aws-cli postgresql-client && \
     rm -rf /var/cache/apk/*
 
 COPY request-processor/requirements/requirements.txt requirements/requirements.txt
@@ -19,6 +19,10 @@ COPY request-processor/src/. .
 
 COPY ../request_model ./request_model
 COPY ../task_interface ./task_interface
+
+COPY request-processor/docker-healthcheck.sh docker-healthcheck.sh
+
+HEALTHCHECK CMD "./docker-healthcheck.sh"
 
 COPY request-processor/docker-entrypoint.sh docker-entrypoint.sh
 
