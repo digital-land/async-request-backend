@@ -68,15 +68,9 @@ def test_healthcheck(mock_db, mock_sqs):
         name="request-api",
         version="unknown",
         dependencies=[
-            DependencyHealth(
-                name="request-db",
-                status=HealthStatus.HEALTHY
-            ),
-            DependencyHealth(
-                name="sqs",
-                status=HealthStatus.HEALTHY
-            )
-        ]
+            DependencyHealth(name="request-db", status=HealthStatus.HEALTHY),
+            DependencyHealth(name="sqs", status=HealthStatus.HEALTHY),
+        ],
     )
 
 
@@ -87,15 +81,9 @@ def test_healthcheck_when_db_down(mock_db, mock_sqs):
         name="request-api",
         version="unknown",
         dependencies=[
-            DependencyHealth(
-                name="request-db",
-                status=HealthStatus.UNHEALTHY
-            ),
-            DependencyHealth(
-                name="sqs",
-                status=HealthStatus.HEALTHY
-            )
-        ]
+            DependencyHealth(name="request-db", status=HealthStatus.UNHEALTHY),
+            DependencyHealth(name="sqs", status=HealthStatus.HEALTHY),
+        ],
     )
 
 
@@ -106,15 +94,9 @@ def test_healthcheck_when_sqs_down(mock_db, mock_sqs):
         name="request-api",
         version="unknown",
         dependencies=[
-            DependencyHealth(
-                name="request-db",
-                status=HealthStatus.HEALTHY
-            ),
-            DependencyHealth(
-                name="sqs",
-                status=HealthStatus.UNHEALTHY
-            )
-        ]
+            DependencyHealth(name="request-db", status=HealthStatus.HEALTHY),
+            DependencyHealth(name="sqs", status=HealthStatus.UNHEALTHY),
+        ],
     )
 
 

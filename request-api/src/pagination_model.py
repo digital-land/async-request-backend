@@ -12,4 +12,3 @@ class PaginatedResult(BaseModel):
     params: PaginationParams
     total_results_available: int = Field(ge=0)
     data: List[Any]
-
