@@ -14,7 +14,12 @@ import crud
 from database import session_maker
 from pagination_model import PaginationParams
 from request_model import models, schemas
-from schema import ReadResponseDetailsParams, HealthCheckResponse, HealthStatus, DependencyHealth
+from schema import (
+    ReadResponseDetailsParams,
+    HealthCheckResponse,
+    HealthStatus,
+    DependencyHealth,
+)
 from task_interface.check_tasks import celery, CheckDataFileTask
 
 CheckDataFileTask = celery.register_task(CheckDataFileTask())
@@ -55,13 +60,15 @@ def healthcheck(db: Session = Depends(_get_db), sqs=Depends(_get_sqs_client)):
         dependencies=[
             DependencyHealth(
                 name="request-db",
-                status=HealthStatus.HEALTHY if db_reachable else HealthStatus.UNHEALTHY
+                status=HealthStatus.HEALTHY if db_reachable else HealthStatus.UNHEALTHY,
             ),
             DependencyHealth(
                 name="sqs",
-                status=HealthStatus.HEALTHY if queue_reachable else HealthStatus.UNHEALTHY
-            )
-        ]
+                status=HealthStatus.HEALTHY
+                if queue_reachable
+                else HealthStatus.UNHEALTHY,
+            ),
+        ],
     )
 
 
@@ -104,16 +111,21 @@ def read_request(request_id: str, db: Session = Depends(_get_db)):
     request_schema = _map_to_schema(request_model)
     return request_schema
 
+
 @app.get("/requests/{request_id}/response-details", response_model=List[Dict[Any, Any]])
 def read_response_details(
     request_id: str,
     http_response: Response,
     params: ReadResponseDetailsParams = Depends(),
-    db: Session = Depends(_get_db)
+    db: Session = Depends(_get_db),
 ):
     pagination_params = PaginationParams(offset=params.offset, limit=params.limit)
-    paginated_result = crud.get_response_details(db, request_id, params.jsonpath, pagination_params)
-    http_response.headers["X-Pagination-Total-Results"] = str(paginated_result.total_results_available)
+    paginated_result = crud.get_response_details(
+        db, request_id, params.jsonpath, pagination_params
+    )
+    http_response.headers["X-Pagination-Total-Results"] = str(
+        paginated_result.total_results_available
+    )
     http_response.headers["X-Pagination-Offset"] = str(paginated_result.params.offset)
     http_response.headers["X-Pagination-Limit"] = str(paginated_result.params.limit)
     return list(map(lambda detail: detail.detail, paginated_result.data))

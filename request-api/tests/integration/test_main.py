@@ -43,68 +43,78 @@ def test_read_response_details(db, helpers, test_request):
     assert read_details_response.json() == [
         {"line": 1, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]},
         {"line": 2, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]},
-        {"line": 3, "issue_logs": [{"severity": "warning"}]}
+        {"line": 3, "issue_logs": [{"severity": "warning"}]},
     ]
-    assert read_details_response.headers['X-Pagination-Total-Results'] == "3"
-    assert read_details_response.headers['X-Pagination-Offset'] == "0"
-    assert read_details_response.headers['X-Pagination-Limit'] == "50"
+    assert read_details_response.headers["X-Pagination-Total-Results"] == "3"
+    assert read_details_response.headers["X-Pagination-Offset"] == "0"
+    assert read_details_response.headers["X-Pagination-Limit"] == "50"
 
 
 def test_read_response_details_limit_1(db, helpers, test_request):
-    read_details_response = client.get(f"/requests/{test_request.id}/response-details?limit=1")
+    read_details_response = client.get(
+        f"/requests/{test_request.id}/response-details?limit=1"
+    )
     assert read_details_response.status_code == 200
     assert read_details_response.json() == [
         {"line": 1, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]}
     ]
-    assert read_details_response.headers['X-Pagination-Total-Results'] == "3"
-    assert read_details_response.headers['X-Pagination-Offset'] == "0"
-    assert read_details_response.headers['X-Pagination-Limit'] == "1"
+    assert read_details_response.headers["X-Pagination-Total-Results"] == "3"
+    assert read_details_response.headers["X-Pagination-Offset"] == "0"
+    assert read_details_response.headers["X-Pagination-Limit"] == "1"
 
 
 def test_read_response_details_limit_offset1_limit1(db, helpers, test_request):
-    read_details_response = client.get(f"/requests/{test_request.id}/response-details?offset=1&limit=1")
+    read_details_response = client.get(
+        f"/requests/{test_request.id}/response-details?offset=1&limit=1"
+    )
     assert read_details_response.status_code == 200
     assert read_details_response.json() == [
         {"line": 2, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]}
     ]
-    assert read_details_response.headers['X-Pagination-Total-Results'] == "3"
-    assert read_details_response.headers['X-Pagination-Offset'] == "1"
-    assert read_details_response.headers['X-Pagination-Limit'] == "1"
+    assert read_details_response.headers["X-Pagination-Total-Results"] == "3"
+    assert read_details_response.headers["X-Pagination-Offset"] == "1"
+    assert read_details_response.headers["X-Pagination-Limit"] == "1"
 
 
 def test_read_response_details_limit_offset2_limit1(db, helpers, test_request):
-    read_details_response = client.get(f"/requests/{test_request.id}/response-details?offset=2&limit=1")
+    read_details_response = client.get(
+        f"/requests/{test_request.id}/response-details?offset=2&limit=1"
+    )
     assert read_details_response.status_code == 200
     assert read_details_response.json() == [
         {"line": 3, "issue_logs": [{"severity": "warning"}]}
     ]
-    assert read_details_response.headers['X-Pagination-Total-Results'] == "3"
-    assert read_details_response.headers['X-Pagination-Offset'] == "2"
-    assert read_details_response.headers['X-Pagination-Limit'] == "1"
+    assert read_details_response.headers["X-Pagination-Total-Results"] == "3"
+    assert read_details_response.headers["X-Pagination-Offset"] == "2"
+    assert read_details_response.headers["X-Pagination-Limit"] == "1"
 
 
 def test_read_response_details_limit1_jsonpath(db, helpers, test_request):
     jsonpath = '$.issue_logs[*].severity=="error"'
-    read_details_response = client.get(f"/requests/{test_request.id}/response-details?offset=0&limit=1&jsonpath={jsonpath}")
+    read_details_response = client.get(
+        f"/requests/{test_request.id}/response-details?offset=0&limit=1&jsonpath={jsonpath}"
+    )
     assert read_details_response.status_code == 200
     assert read_details_response.json() == [
         {"line": 1, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]}
     ]
-    assert read_details_response.headers['X-Pagination-Total-Results'] == "2"
-    assert read_details_response.headers['X-Pagination-Offset'] == "0"
-    assert read_details_response.headers['X-Pagination-Limit'] == "1"
+    assert read_details_response.headers["X-Pagination-Total-Results"] == "2"
+    assert read_details_response.headers["X-Pagination-Offset"] == "0"
+    assert read_details_response.headers["X-Pagination-Limit"] == "1"
 
 
 def test_read_response_details_offset1_limit1_jsonpath(db, helpers, test_request):
     jsonpath = '$.issue_logs[*].severity=="error"'
-    read_details_response = client.get(f"/requests/{test_request.id}/response-details?offset=1&limit=1&jsonpath={jsonpath}")
+    read_details_response = client.get(
+        f"/requests/{test_request.id}/response-details?offset=1&limit=1&jsonpath={jsonpath}"
+    )
     assert read_details_response.status_code == 200
     assert read_details_response.json() == [
         {"line": 2, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]}
     ]
-    assert read_details_response.headers['X-Pagination-Total-Results'] == "2"
-    assert read_details_response.headers['X-Pagination-Offset'] == "1"
-    assert read_details_response.headers['X-Pagination-Limit'] == "1"
+    assert read_details_response.headers["X-Pagination-Total-Results"] == "2"
+    assert read_details_response.headers["X-Pagination-Offset"] == "1"
+    assert read_details_response.headers["X-Pagination-Limit"] == "1"
 
 
 def test_read_unknown_request(db):
@@ -129,16 +139,22 @@ def test_request():
             data='{ "some_key": "some_value" }',
             details=[
                 models.ResponseDetails(
-                    detail={"line": 1, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]}
+                    detail={
+                        "line": 1,
+                        "issue_logs": [{"severity": "warning"}, {"severity": "error"}],
+                    }
                 ),
                 models.ResponseDetails(
-                    detail={"line": 2, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]}
+                    detail={
+                        "line": 2,
+                        "issue_logs": [{"severity": "warning"}, {"severity": "error"}],
+                    }
                 ),
                 models.ResponseDetails(
                     detail={"line": 3, "issue_logs": [{"severity": "warning"}]}
-                )
-            ]
-        )
+                ),
+            ],
+        ),
     )
     db_session = database.session_maker()
     with db_session() as session:
