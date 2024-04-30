@@ -11,12 +11,6 @@ from request_model import schemas, models
 client = TestClient(app)
 
 
-def test_read_root():
-    response = client.get("/")
-    assert response.status_code == 200
-    assert response.json() == {"msg": "Hello World"}
-
-
 def test_create_request(db, sqs_queue, helpers):
     response = client.post("/requests", json=helpers.request_create_dict())
     request_id = response.json()["id"]

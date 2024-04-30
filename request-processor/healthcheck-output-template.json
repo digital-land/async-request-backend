@@ -1,12 +1,14 @@
 {
   "name": "request-processor",
   "version": "PLACEHOLDER",
-  "dependencies": {
-    "request-db": {
+  "dependencies": [
+    {
+      "name": "request-db",
       "status": "PLACEHOLDER"
     },
-    "sqs": {
+    {
+      "name": "sqs",
       "status": "PLACEHOLDER"
     }
-  }
+  ]
 }
