@@ -20,6 +20,8 @@ services:
     build:
       context: .
       dockerfile: request-api/Dockerfile
+      args:
+        GIT_COMMIT: placeholder
     environment:
       PYTHONUNBUFFERED: 1
       AWS_ENDPOINT_URL: http://localstack:4566

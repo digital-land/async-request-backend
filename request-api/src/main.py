@@ -1,15 +1,20 @@
 import logging
+import os
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
+import boto3
+from botocore.exceptions import ClientError, BotoCoreError
 from fastapi import FastAPI, Depends, Request, Response, HTTPException
-from pydantic import BaseModel, Field
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 import crud
 from database import session_maker
 from pagination_model import PaginationParams
 from request_model import models, schemas
+from schema import ReadResponseDetailsParams, HealthCheckResponse, HealthStatus, DependencyHealth
 from task_interface.check_tasks import celery, CheckDataFileTask
 
 CheckDataFileTask = celery.register_task(CheckDataFileTask())
@@ -26,9 +31,38 @@ def _get_db():
         db.close()
 
 
-@app.get("/")
-def read_root():
-    return {"msg": "Hello World"}
+def _get_sqs_client():
+    return boto3.client("sqs")
+
+
+@app.get("/health", response_model=HealthCheckResponse)
+def healthcheck(db: Session = Depends(_get_db), sqs=Depends(_get_sqs_client)):
+    try:
+        db_result = db.execute(text("SELECT 1"))
+        db_reachable = len(db_result.all()) == 1
+    except SQLAlchemyError:
+        db_reachable = False
+
+    try:
+        sqs.get_queue_url(QueueName="celery")
+        queue_reachable = True
+    except (ClientError, BotoCoreError):
+        queue_reachable = False
+
+    return HealthCheckResponse(
+        name="request-api",
+        version=os.environ.get("GIT_COMMIT", "unknown"),
+        dependencies=[
+            DependencyHealth(
+                name="request-db",
+                status=HealthStatus.HEALTHY if db_reachable else HealthStatus.UNHEALTHY
+            ),
+            DependencyHealth(
+                name="sqs",
+                status=HealthStatus.HEALTHY if queue_reachable else HealthStatus.UNHEALTHY
+            )
+        ]
+    )
 
 
 @app.post("/requests", status_code=202, response_model=schemas.Request)
@@ -69,13 +103,6 @@ def read_request(request_id: str, db: Session = Depends(_get_db)):
         )
     request_schema = _map_to_schema(request_model)
     return request_schema
-
-
-class ReadResponseDetailsParams(BaseModel):
-    offset: int = Field(0, ge=0)
-    limit: int = Field(50, ge=1, le=100)
-    jsonpath: Optional[str] = Field(None)
-
 
 @app.get("/requests/{request_id}/response-details", response_model=List[Dict[Any, Any]])
 def read_response_details(

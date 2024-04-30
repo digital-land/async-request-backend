@@ -23,7 +23,7 @@ else
 fi
 
 # Provide JSON output
-jq ".version=\"$GIT_COMMIT\"" healthcheck-output-template.json | jq ".dependencies[\"request-db\"].status=\"$pg_status\"" | jq ".dependencies.sqs.status=\"$sqs_status\""
+jq ".version=\"$GIT_COMMIT\" | (.dependencies[] | select(.name==\"request-db\")).status=\"$pg_status\" | (.dependencies[] | select(.name==\"sqs\")).status=\"$sqs_status\"" healthcheck-output-template.json
 
 exit $exit_code
 

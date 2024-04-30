@@ -1,5 +1,8 @@
 FROM python:3.12-alpine
 
+ARG GIT_COMMIT
+ENV GIT_COMMIT=$GIT_COMMIT
+
 RUN apk add --no-cache libcurl curl-dev build-base
 
 COPY request-api/requirements/requirements.txt requirements/requirements.txt
