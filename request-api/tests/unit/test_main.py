@@ -1,9 +1,7 @@
 from datetime import datetime
 from unittest.mock import patch, MagicMock, Mock
 
-import moto
 import pytest
-from botocore.client import BaseClient
 from botocore.exceptions import BotoCoreError
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
