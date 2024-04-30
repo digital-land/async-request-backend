@@ -1,8 +1,9 @@
 import logging
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from fastapi import FastAPI, Depends, Request, Response, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 import crud
@@ -70,14 +71,21 @@ def read_request(request_id: str, db: Session = Depends(_get_db)):
     return request_schema
 
 
+class ReadResponseDetailsParams(BaseModel):
+    offset: int = Field(0, ge=0)
+    limit: int = Field(50, ge=1, le=100)
+    jsonpath: Optional[str] = Field(None)
+
+
 @app.get("/requests/{request_id}/response-details", response_model=List[Dict[Any, Any]])
 def read_response_details(
     request_id: str,
     http_response: Response,
-    pagination_params: PaginationParams = Depends(),
+    params: ReadResponseDetailsParams = Depends(),
     db: Session = Depends(_get_db)
 ):
-    paginated_result = crud.get_response_details(db, request_id, pagination_params)
+    pagination_params = PaginationParams(offset=params.offset, limit=params.limit)
+    paginated_result = crud.get_response_details(db, request_id, params.jsonpath, pagination_params)
     http_response.headers["X-Pagination-Total-Results"] = str(paginated_result.total_results_available)
     http_response.headers["X-Pagination-Offset"] = str(paginated_result.params.offset)
     http_response.headers["X-Pagination-Limit"] = str(paginated_result.params.limit)
