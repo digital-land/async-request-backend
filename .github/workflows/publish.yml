@@ -74,7 +74,7 @@ jobs:
 
       - run: docker pull $DOCKER_REPO:${GITHUB_REF_NAME} || echo "no current latest image"
 
-      - run: docker build --build-arg DEPLOY_TIME="$(date +%Y-%m-%dT%H:%M:%S)" -t $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} -f request-api/Dockerfile .
+      - run: docker build --build-arg DEPLOY_TIME="$(date +%Y-%m-%dT%H:%M:%S)" --build-arg GIT_COMMIT="${{ steps.vars.outputs.sha_short }}" -t $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} -f request-api/Dockerfile .
 
       - run: docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:${GITHUB_REF_NAME}
 
@@ -163,7 +163,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.DEPLOY_AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.DEPLOY_AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-west-2 
+          aws-region: eu-west-2
 
       - name: List ECS Tasks
         run: |
