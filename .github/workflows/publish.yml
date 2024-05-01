@@ -82,6 +82,17 @@ jobs:
 
       - run: docker push $DOCKER_REPO:${GITHUB_REF_NAME}
 
+      - uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.DEPLOY_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.DEPLOY_AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2 
+
+      - name: Update ECS Service
+        run: |
+          aws ecs update-service --cluster ${{ matrix.environment }}-cluster --service ${{ matrix.environment }}-pub-async-request-api  --task-definition ${{ matrix.environment }}-pub-async-request-api-task --force-new-deployment
+
+
   test-request-processor:
     runs-on: ubuntu-latest
     steps:
@@ -147,3 +158,27 @@ jobs:
       - run: docker push $DOCKER_REPO:${{ steps.vars.outputs.sha_short }}
 
       - run: docker push $DOCKER_REPO:${GITHUB_REF_NAME}
+
+      - uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.DEPLOY_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.DEPLOY_AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2 
+
+      - name: List ECS Tasks
+        run: |
+          TASK_ARNS=$(aws ecs list-tasks --cluster ${{ matrix.environment }}-cluster --family ${{ matrix.environment }}-pub-async-request-processor-task --output text --query 'taskArns[]')
+          echo "TASK_ARNS=$TASK_ARNS" >> $GITHUB_ENV
+
+      - name: Stop ECS Tasks
+        if: env.TASK_ARNS
+        run: |
+          for TASK_ARN in $TASK_ARNS
+          do
+            aws ecs stop-task --cluster ${{ matrix.environment }}-cluster --task $TASK_ARN
+          done
+
+      - name: Update ECS Task
+        run: |
+          aws ecs run-task --cluster ${{ matrix.environment }}-cluster --task-definition ${{ matrix.environment }}-pub-async-request-processor-task --count 2 --launch-type FARGATE --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.SUBNET_PRIVATE_IDS }}],securityGroups=[${{ secrets.SECURITY_GROUP_PUBLIC_ID }}],assignPublicIp=ENABLED}"
+
