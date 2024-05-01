@@ -170,6 +170,10 @@ jobs:
           TASK_ARNS=$(aws ecs list-tasks --cluster ${{ matrix.environment }}-cluster --family ${{ matrix.environment }}-pub-async-request-processor-task --output text --query 'taskArns[]')
           echo "TASK_ARNS=$TASK_ARNS" >> $GITHUB_ENV
 
+      - name: Update ECS Task
+        run: |
+          aws ecs run-task --cluster ${{ matrix.environment }}-cluster --task-definition ${{ matrix.environment }}-pub-async-request-processor-task --count 2 --launch-type FARGATE --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.SUBNET_PRIVATE_IDS }}],securityGroups=[${{ secrets.SECURITY_GROUP_PUBLIC_ID }}],assignPublicIp=ENABLED}"
+
       - name: Stop ECS Tasks
         if: env.TASK_ARNS
         run: |
@@ -177,8 +181,3 @@ jobs:
           do
             aws ecs stop-task --cluster ${{ matrix.environment }}-cluster --task $TASK_ARN
           done
-
-      - name: Update ECS Task
-        run: |
-          aws ecs run-task --cluster ${{ matrix.environment }}-cluster --task-definition ${{ matrix.environment }}-pub-async-request-processor-task --count 2 --launch-type FARGATE --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.SUBNET_PRIVATE_IDS }}],securityGroups=[${{ secrets.SECURITY_GROUP_PUBLIC_ID }}],assignPublicIp=ENABLED}"
-
