@@ -3,20 +3,27 @@ import csv
 import urllib
 import yaml
 from urllib.error import HTTPError
-from application.core.utils import detect_encoding
+from application.core.utils import detect_encoding, extract_dataset_field_rows
 from application.logging.logger import get_logger
 from application.core.pipeline import fetch_response_data, resource_from_path
 from application.configurations.config import source_url
 from collections import defaultdict
-
+import json
+import warnings
 
 logger = get_logger(__name__)
 
 
 def run_workflow(
-    fileName, request_id, collection, dataset, organisation, geom_type, directories
+    fileName,
+    request_id,
+    collection,
+    dataset,
+    organisation,
+    geom_type,
+    column_mapping,
+    directories,
 ):
-    additional_column_mappings = None
     additional_concats = None
 
     try:
@@ -28,7 +35,15 @@ def run_workflow(
         file_path = os.path.join(input_path, fileName)
         resource = resource_from_path(file_path)
 
-        fetch_pipeline_csvs(collection, dataset, pipeline_dir, geom_type, resource)
+        not_mapped_columns = fetch_pipeline_csvs(
+            collection,
+            dataset,
+            pipeline_dir,
+            geom_type,
+            column_mapping,
+            resource,
+            directories.SPECIFICATION_DIR,
+        )
 
         fetch_response_data(
             dataset,
@@ -43,7 +58,7 @@ def run_workflow(
             pipeline_dir,
             directories.SPECIFICATION_DIR,
             directories.CACHE_DIR,
-            additional_col_mappings=additional_column_mappings,
+            additional_col_mappings=column_mapping,
             additional_concats=additional_concats,
         )
         # Need to get the mandatory fields from specification/central place. Hardcoding for MVP
@@ -76,7 +91,9 @@ def run_workflow(
             )
         )
         updateColumnFieldLog(column_field_json, required_fields)
-        summary_data = error_summary(issue_log_json, column_field_json)
+        summary_data = error_summary(
+            issue_log_json, column_field_json, not_mapped_columns
+        )
 
         response_data = {
             "converted-csv": converted_json,
@@ -107,7 +124,15 @@ def run_workflow(
     return response_data
 
 
-def fetch_pipeline_csvs(collection, dataset, pipeline_dir, geom_type, resource):
+def fetch_pipeline_csvs(
+    collection,
+    dataset,
+    pipeline_dir,
+    geom_type,
+    column_mapping,
+    resource,
+    specification_dir,
+):
     os.makedirs(pipeline_dir, exist_ok=True)
     pipeline_csvs = [
         "column.csv",
@@ -115,12 +140,13 @@ def fetch_pipeline_csvs(collection, dataset, pipeline_dir, geom_type, resource):
     downloaded = False
     for pipeline_csv in pipeline_csvs:
         try:
+            column_csv_path = os.path.join(pipeline_dir, pipeline_csv)
             print(
                 f"{source_url}/{collection + '-collection'}/main/pipeline/{pipeline_csv}"
             )
             urllib.request.urlretrieve(
                 f"{source_url}/{collection + '-collection'}/main/pipeline/{pipeline_csv}",
-                os.path.join(pipeline_dir, pipeline_csv),
+                column_csv_path,
             )
             downloaded = True
         except HTTPError as e:
@@ -133,7 +159,7 @@ def fetch_pipeline_csvs(collection, dataset, pipeline_dir, geom_type, resource):
             try:
                 urllib.request.urlretrieve(
                     f"{source_url}/{'config'}/main/pipeline/{collection}/{pipeline_csv}",
-                    os.path.join(pipeline_dir, pipeline_csv),
+                    column_csv_path,
                 )
                 downloaded = True
             except HTTPError as e:
@@ -141,18 +167,63 @@ def fetch_pipeline_csvs(collection, dataset, pipeline_dir, geom_type, resource):
 
         if downloaded:
             try:
-                if (
-                    dataset == "tree"
-                    and geom_type == "polygon"
-                    and pipeline_csv == "column.csv"
-                ):
-                    new_mapping = f"tree,,{resource},WKT,geometry"
-                    with open(
-                        os.path.join(pipeline_dir, pipeline_csv), "a"
-                    ) as csv_file:
-                        csv_file.write("\n" + new_mapping)
+                if column_mapping and pipeline_csv == "column.csv":
+                    not_mapped_columns = add_extra_column_mappings(
+                        column_csv_path,
+                        column_mapping,
+                        dataset,
+                        resource,
+                        specification_dir,
+                    )
+                    return not_mapped_columns
+                if geom_type:
+                    add_geom_mapping(
+                        dataset, pipeline_dir, geom_type, resource, pipeline_csv
+                    )
             except Exception as e:
                 logger.error(f"Error saving new mapping: {e}")
+    return {}
+
+
+def add_geom_mapping(dataset, pipeline_dir, geom_type, resource, pipeline_csv):
+    warnings.warn(
+        "depreciated, use column_mapping parameter instead",
+        DeprecationWarning,
+        2,
+    )
+    if dataset == "tree" and geom_type == "polygon" and pipeline_csv == "column.csv":
+        new_mapping = f"tree,,{resource},WKT,geometry"
+        with open(os.path.join(pipeline_dir, pipeline_csv), "a") as csv_file:
+            csv_file.write("\n" + new_mapping)
+
+
+def add_extra_column_mappings(
+    column_path, column_mapping, dataset, resource, specification_dir
+):
+    filtered_rows = extract_dataset_field_rows(specification_dir, dataset)
+    fieldnames = []
+    not_mapped_columns = []
+    with open(column_path) as f:
+        dictreader = csv.DictReader(f)
+        fieldnames = dictreader.fieldnames
+
+    mappings = {"dataset": dataset, "resource": resource}
+    column_mapping_dump = json.dumps(column_mapping)
+    column_mapping_json = json.loads(column_mapping_dump)
+    for key, value in column_mapping_json.items():
+        mappings["column"] = key
+        mappings["field"] = value
+        if filtered_rows is not None:
+            if mappings["field"] not in [row["field"] for row in filtered_rows]:
+                logger.error(
+                    f"Error: Field '{mappings['field']}' does not exist in dataset-field.csv"
+                )
+                not_mapped_columns.append(mappings["field"])
+            else:
+                with open(column_path, "a", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writerow(mappings)
+    return not_mapped_columns
 
 
 # def clean_up(*directories):
@@ -231,8 +302,12 @@ def getMandatoryFields(required_fields_path, dataset):
     return required_fields
 
 
-def load_mappings(file_path):
-    with open(file_path, "r") as yaml_file:
+def load_mappings():
+    mappings_file_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        "../application/configs/mapping.yaml",
+    )
+    with open(mappings_file_path, "r") as yaml_file:
         mappings_data = yaml.safe_load(yaml_file)
 
     mappings = mappings_data.get("mappings", [])
@@ -242,7 +317,7 @@ def load_mappings(file_path):
     return mapping_dict
 
 
-def error_summary(issue_log, column_field):
+def error_summary(issue_log, column_field, not_mapped_columns):
     error_issues = [issue for issue in issue_log if issue["severity"] == "error"]
     missing_columns = [field for field in column_field if field["missing"]]
     # Count occurrences for each issue-type and field
@@ -257,18 +332,16 @@ def error_summary(issue_log, column_field):
         field = column["field"]
         error_summary[("missing", field)] = True
 
+    for col in not_mapped_columns:
+        error_summary[("mapping_missing", col)] = True
+
     # Convert error summary to JSON with formatted messages
     json_data = convert_error_summary_to_json(error_summary)
     return json_data
 
 
 def convert_error_summary_to_json(error_summary):
-    # Load mappings
-    mappings_file_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        "../application/configs/mapping.yaml",
-    )
-    mappings = load_mappings(mappings_file_path)
+    mappings = load_mappings()
 
     json_data = []
     for key, count in error_summary.items():
@@ -289,7 +362,10 @@ def convert_error_summary_to_json(error_summary):
             elif "missing" in key:
                 message = f"{field.capitalize()} column missing"
                 json_data.append(message)
+            elif "mapping_missing" in key:
+                message = f"{field.capitalize()} not found in specification"
+                json_data.append(message)
             else:
-                json_data.append(str(count) + " " + str(key))
+                json_data.append(f"{count} {key}")
                 logger.error("Mapping not found")
     return json_data

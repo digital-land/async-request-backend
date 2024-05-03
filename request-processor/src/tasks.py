@@ -68,14 +68,16 @@ def check_datafile(request: Dict, directories=None):
             else:
                 save_response_to_db(request_schema.id, log)
                 raise CustomException(log)
-
         response = workflow.run_workflow(
             fileName,
             request_schema.id,
             request_data.collection,
             request_data.dataset,
             "",
-            request_data.geom_type,
+            request_data.geom_type if hasattr(request_data, "geom_type") else "",
+            request_data.column_mapping
+            if hasattr(request_data, "column_mapping")
+            else {},
             directories,
         )
         save_response_to_db(request_schema.id, response)
@@ -132,7 +134,6 @@ def save_response_to_db(request_id, response_data):
     with db_session() as session:
         try:
             existing = _get_response(request_id)
-            print("existing:: ", existing)
             if not existing:
                 if (
                     "column-field-log" in response_data
@@ -194,7 +195,9 @@ def save_response_to_db(request_id, response_data):
                     session.add(new_response)
                     session.commit()
             else:
-                print("response already exists in DB for request: ", request_id)
+                logger.exception(
+                    "response already exists in DB for request: ", request_id
+                )
         except Exception as e:
             session.rollback()
             raise e

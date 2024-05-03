@@ -3,6 +3,7 @@ import os
 import hashlib
 import requests
 from cchardet import UniversalDetector
+import csv
 
 logger = get_logger(__name__)
 
@@ -70,3 +71,17 @@ def detect_encoding(path):
         detector.close()
 
         return detector.result["encoding"]
+
+
+def extract_dataset_field_rows(folder_path, dataset):
+    csv_file_path = os.path.join(folder_path, "dataset-field.csv")
+    if os.path.exists(csv_file_path):
+        reader = csv.DictReader(open(csv_file_path))
+        if reader is not None:
+            filtered_rows = [
+                row for row in reader if "dataset" in row and row["dataset"] == dataset
+            ]
+        return filtered_rows
+    else:
+        logger.error("Error extracting dataset-field.csv in the specified folder.")
+        return None
