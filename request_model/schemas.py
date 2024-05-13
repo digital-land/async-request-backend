@@ -13,19 +13,19 @@ class Params(BaseModel):
     type: RequestTypeEnum
     dataset: str
     collection: str
+    column_mapping: Optional[Dict[str, str]] = None
+    geom_type: Optional[str] = None
 
 
 class CheckFileParams(Params):
     type: Literal[RequestTypeEnum.check_file] = RequestTypeEnum.check_file
     original_filename: str
     uploaded_filename: str
-    geom_type: Optional[str] = None
 
 
 class CheckUrlParams(Params):
     type: Literal[RequestTypeEnum.check_url] = RequestTypeEnum.check_url
     url: str
-    geom_type: Optional[str] = None
 
 
 class RequestBase(BaseModel):

@@ -122,3 +122,35 @@ def mock_fetch_pipeline_csvs(mock_directories):
             dictwriter.writerow(row)
 
     return _mock_fetch_pipeline_csvs
+
+
+@pytest.fixture
+def mock_extract_dataset_field_rows(mock_directories):
+    def _mock_extract_dataset_field_rows(dataset_name):
+        os.makedirs(mock_directories.SPECIFICATION_DIR, exist_ok=True)
+        mock_field_csv = os.path.join(
+            mock_directories.SPECIFICATION_DIR, "dataset-field.csv"
+        )
+        rows = [
+            {
+                "dataset": dataset_name,
+                "field": "entry-date",
+                "field-dataset": "",
+                "guidance": "",
+                "hint": "",
+            },
+            {
+                "dataset": dataset_name,
+                "field": "geometry",
+                "field-dataset": "",
+                "guidance": "",
+                "hint": "",
+            },
+        ]
+        fieldnames = rows[0].keys()
+        with open(mock_field_csv, "w") as f:
+            dictwriter = csv.DictWriter(f, fieldnames=fieldnames)
+            dictwriter.writeheader()
+            dictwriter.writerows(rows)
+
+    return _mock_extract_dataset_field_rows

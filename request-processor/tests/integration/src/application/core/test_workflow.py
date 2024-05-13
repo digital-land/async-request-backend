@@ -38,6 +38,7 @@ def test_run_workflow(
     dataset = "tree"
     organisation = ""
     geom_type = ""
+    column_mapping = {}
     fileName = uploaded_csv
     source_organisation_csv = f"{test_data_dir}/csvs/organisation.csv"
     destination_organisation_csv = os.path.join(
@@ -58,6 +59,7 @@ def test_run_workflow(
         dataset,
         organisation,
         geom_type,
+        column_mapping,
         mock_directories,
     )
 
