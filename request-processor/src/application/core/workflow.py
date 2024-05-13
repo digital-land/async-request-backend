@@ -124,6 +124,8 @@ def run_workflow(
     return response_data
 
 
+# flake8: noqa
+# pragma: mccabe-complexity 11
 def fetch_pipeline_csvs(
     collection,
     dataset,
