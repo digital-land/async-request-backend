@@ -41,7 +41,9 @@ def _get_sqs_client():
 
 
 @app.get("/health", response_model=HealthCheckResponse)
-def healthcheck(response: Response, db: Session = Depends(_get_db), sqs=Depends(_get_sqs_client)):
+def healthcheck(
+    response: Response, db: Session = Depends(_get_db), sqs=Depends(_get_sqs_client)
+):
     try:
         db_result = db.execute(text("SELECT 1"))
         db_reachable = len(db_result.all()) == 1
