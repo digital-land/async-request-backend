@@ -41,7 +41,7 @@ def _get_sqs_client():
 
 
 @app.get("/health", response_model=HealthCheckResponse)
-def healthcheck(db: Session = Depends(_get_db), sqs=Depends(_get_sqs_client)):
+def healthcheck(response: Response, db: Session = Depends(_get_db), sqs=Depends(_get_sqs_client)):
     try:
         db_result = db.execute(text("SELECT 1"))
         db_reachable = len(db_result.all()) == 1
@@ -53,6 +53,8 @@ def healthcheck(db: Session = Depends(_get_db), sqs=Depends(_get_sqs_client)):
         queue_reachable = True
     except (ClientError, BotoCoreError):
         queue_reachable = False
+
+    response.status_code = 200 if db_reachable & queue_reachable else 500
 
     return HealthCheckResponse(
         name="request-api",
