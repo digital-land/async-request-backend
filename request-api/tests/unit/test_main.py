@@ -60,8 +60,8 @@ def test_read_request_when_not_found(mock_get_request):
         assert 400 == exception.value.detail["errCode"]
 
 
-def test_healthcheck(mock_db, mock_sqs):
-    response = main.healthcheck(db=mock_db, sqs=mock_sqs)
+def test_healthcheck(mock_response, mock_db, mock_sqs):
+    response = main.healthcheck(response=mock_response, db=mock_db, sqs=mock_sqs)
     assert response == HealthCheckResponse(
         name="request-api",
         version="unknown",
@@ -70,11 +70,12 @@ def test_healthcheck(mock_db, mock_sqs):
             DependencyHealth(name="sqs", status=HealthStatus.HEALTHY),
         ],
     )
+    assert mock_response.status_code == 200
 
 
-def test_healthcheck_when_db_down(mock_db, mock_sqs):
+def test_healthcheck_when_db_down(mock_response, mock_db, mock_sqs):
     mock_db.execute = MagicMock(side_effect=SQLAlchemyError())
-    response = main.healthcheck(db=mock_db, sqs=mock_sqs)
+    response = main.healthcheck(response=mock_response, db=mock_db, sqs=mock_sqs)
     assert response == HealthCheckResponse(
         name="request-api",
         version="unknown",
@@ -83,11 +84,12 @@ def test_healthcheck_when_db_down(mock_db, mock_sqs):
             DependencyHealth(name="sqs", status=HealthStatus.HEALTHY),
         ],
     )
+    assert mock_response.status_code == 500
 
 
-def test_healthcheck_when_sqs_down(mock_db, mock_sqs):
+def test_healthcheck_when_sqs_down(mock_response, mock_db, mock_sqs):
     mock_sqs.get_queue_url = MagicMock(side_effect=BotoCoreError())
-    response = main.healthcheck(db=mock_db, sqs=mock_sqs)
+    response = main.healthcheck(response=mock_response, db=mock_db, sqs=mock_sqs)
     assert response == HealthCheckResponse(
         name="request-api",
         version="unknown",
@@ -96,6 +98,28 @@ def test_healthcheck_when_sqs_down(mock_db, mock_sqs):
             DependencyHealth(name="sqs", status=HealthStatus.UNHEALTHY),
         ],
     )
+    assert mock_response.status_code == 500
+
+
+def test_healthcheck_when_db_and_sqs_down(mock_response, mock_db, mock_sqs):
+    mock_db.execute = MagicMock(side_effect=SQLAlchemyError())
+    mock_sqs.get_queue_url = MagicMock(side_effect=BotoCoreError())
+    response = main.healthcheck(response=mock_response, db=mock_db, sqs=mock_sqs)
+    assert response == HealthCheckResponse(
+        name="request-api",
+        version="unknown",
+        dependencies=[
+            DependencyHealth(name="request-db", status=HealthStatus.UNHEALTHY),
+            DependencyHealth(name="sqs", status=HealthStatus.UNHEALTHY),
+        ],
+    )
+    assert mock_response.status_code == 500
+
+
+@pytest.fixture
+def mock_response():
+    mock_response = Mock()
+    return mock_response
 
 
 @pytest.fixture
