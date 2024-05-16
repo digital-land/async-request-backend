@@ -19,26 +19,30 @@ class Request(Base):
     params = Column(JSONB)
     type = Column(String)
 
-    response = relationship("Response", uselist=False, back_populates="request", lazy='joined')
+    response = relationship(
+        "Response", uselist=False, back_populates="request", lazy="joined"
+    )
 
 
 class Response(Base):
     __tablename__ = "response"
 
     id = Column(Integer, primary_key=True)
-    request_id = Column(String, ForeignKey("request.id"))
+    request_id = Column(String, ForeignKey("request.id"), index=True)
     data = Column(JSONB)
     error = Column(JSONB)
 
     request = relationship("Request", back_populates="response")
-    details = relationship("ResponseDetails", back_populates="response", uselist=True, lazy='noload')
+    details = relationship(
+        "ResponseDetails", back_populates="response", uselist=True, lazy="noload"
+    )
 
 
 class ResponseDetails(Base):
     __tablename__ = "response_details"
 
     id = Column(Integer, primary_key=True)
-    response_id = Column(Integer, ForeignKey("response.id"))
+    response_id = Column(Integer, ForeignKey("response.id"), index=True)
     detail = Column(JSONB)
 
     response = relationship("Response", back_populates="details")
