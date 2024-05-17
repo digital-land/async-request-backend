@@ -47,15 +47,15 @@ def healthcheck(
     try:
         db_result = db.execute(text("SELECT 1"))
         db_reachable = len(db_result.all()) == 1
-    except SQLAlchemyError as error:
-        logging.exception("Health check of request-db failed", error)
+    except SQLAlchemyError:
+        logging.exception("Health check of request-db failed",)
         db_reachable = False
 
     try:
         sqs.get_queue_url(QueueName="celery")
         queue_reachable = True
-    except (ClientError, BotoCoreError) as error:
-        logging.exception("Health check of sqs failed", error)
+    except (ClientError, BotoCoreError):
+        logging.exception("Health check of sqs failed")
         queue_reachable = False
 
     response.status_code = 200 if db_reachable & queue_reachable else 500
