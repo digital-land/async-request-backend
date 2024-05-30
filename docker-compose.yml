@@ -31,6 +31,12 @@ services:
       AWS_SECRET_ACCESS_KEY: example
       SQS_QUEUE_NAME: request-queue
       DATABASE_URL: postgresql://postgres:password@request-db/request_database
+      SENTRY_ENABLED: "false"
+      SENTRY_DSN: https://8614f7a4e42e3b7dc63754b3e7340626@o4506540985352192.ingest.us.sentry.io/4507346348474368
+      SENTRY_ENVIRONMENT: docker-compose-local
+      SENTRY_TRACING_ENABLED: "true"
+      SENTRY_TRACING_SAMPLE_RATE: "0.50"
+      SENTRY_DEBUG: "true"
     restart: on-failure
     ports:
       - "8000:8000"
@@ -62,6 +68,12 @@ services:
       CELERY_BROKER_IS_SECURE: "false"
       DATABASE_URL: postgresql://postgres:password@request-db/request_database
       REQUEST_FILES_BUCKET_NAME: dluhc-data-platform-request-files-local
+      SENTRY_ENABLED: "false"
+      SENTRY_DSN: https://8614f7a4e42e3b7dc63754b3e7340626@o4506540985352192.ingest.us.sentry.io/4507346348474368
+      SENTRY_ENVIRONMENT: docker-compose-local
+      SENTRY_TRACING_ENABLED: "true"
+      SENTRY_TRACING_SAMPLE_RATE: "0.50"
+      SENTRY_DEBUG: "true"
     restart: on-failure
     deploy:
       replicas: 1

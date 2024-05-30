@@ -1,9 +1,10 @@
-FROM python:3.12-alpine
+FROM python:3.12-alpine3.19
 
 ARG GIT_COMMIT
 ENV GIT_COMMIT=$GIT_COMMIT
 
 RUN apk add --no-cache libcurl curl-dev build-base
+# RUN apk add --no-cache libcurl curl-dev build-base linux-headers libffi-dev
 
 COPY request-api/requirements/requirements.txt requirements/requirements.txt
 

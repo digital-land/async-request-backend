@@ -1,4 +1,4 @@
-FROM python:3.12-alpine
+FROM python:3.12-alpine3.19
 
 ARG GIT_COMMIT
 ENV GIT_COMMIT=$GIT_COMMIT
