@@ -2,6 +2,7 @@
 volume
 __pycache__
 .venv
+.python-version
 
 request-processor/src/digital-land
 request-processor/tests/converted

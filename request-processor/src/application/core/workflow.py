@@ -152,7 +152,7 @@ def fetch_pipeline_csvs(
             )
             downloaded = True
         except HTTPError as e:
-            logger.error(
+            logger.warning(
                 f"Failed to retrieve pipeline CSV: {e}. Attempting to download from central config repository"
             )
             logger.info(

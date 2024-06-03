@@ -2,10 +2,13 @@ import logging
 import os
 from datetime import datetime
 from typing import List, Dict, Any
+import sentry_sdk
 
 import boto3
 from botocore.exceptions import ClientError, BotoCoreError
 from fastapi import FastAPI, Depends, Request, Response, HTTPException
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -23,6 +26,21 @@ from schema import (
 from task_interface.check_tasks import celery, CheckDataFileTask
 
 CheckDataFileTask = celery.register_task(CheckDataFileTask())
+
+if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
+    sentry_sdk.init(
+        enable_tracing=os.environ.get("SENTRY_TRACING_ENABLED", "false").lower() == "true",
+        traces_sample_rate=float(os.environ.get("SENTRY_TRACING_SAMPLE_RATE", "0.01")),
+        release=os.environ.get("GIT_COMMIT"),
+        integrations=[
+                StarletteIntegration(
+                    transaction_style="url"
+                ),
+                FastApiIntegration(
+                    transaction_style="url"
+                ),
+            ],
+    )
 
 app = FastAPI()
 
