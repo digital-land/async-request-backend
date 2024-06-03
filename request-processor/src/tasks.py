@@ -101,6 +101,7 @@ def after_task_success(sender, result, **kwargs):
 
 # TODO: Look into retry mechanism with Celery
 
+
 @task_failure.connect
 def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
     request_id = args[0]["id"]
@@ -112,9 +113,12 @@ def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
 def init_sentry(**_kwargs):
     if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
         sentry_sdk.init(
-            enable_tracing=os.environ.get("SENTRY_TRACING_ENABLED", "false").lower() == "true",
-            traces_sample_rate=float(os.environ.get("SENTRY_TRACING_SAMPLE_RATE", "0.01")),
-            release=os.environ.get("GIT_COMMIT")
+            enable_tracing=os.environ.get("SENTRY_TRACING_ENABLED", "false").lower()
+            == "true",
+            traces_sample_rate=float(
+                os.environ.get("SENTRY_TRACING_SAMPLE_RATE", "0.01")
+            ),
+            release=os.environ.get("GIT_COMMIT"),
         )
 
 
