@@ -29,17 +29,14 @@ CheckDataFileTask = celery.register_task(CheckDataFileTask())
 
 if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
     sentry_sdk.init(
-        enable_tracing=os.environ.get("SENTRY_TRACING_ENABLED", "false").lower() == "true",
+        enable_tracing=os.environ.get("SENTRY_TRACING_ENABLED", "false").lower()
+        == "true",
         traces_sample_rate=float(os.environ.get("SENTRY_TRACING_SAMPLE_RATE", "0.01")),
         release=os.environ.get("GIT_COMMIT"),
         integrations=[
-                StarletteIntegration(
-                    transaction_style="url"
-                ),
-                FastApiIntegration(
-                    transaction_style="url"
-                ),
-            ],
+            StarletteIntegration(transaction_style="url"),
+            FastApiIntegration(transaction_style="url"),
+        ],
     )
 
 app = FastAPI()
