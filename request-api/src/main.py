@@ -37,6 +37,7 @@ if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
             StarletteIntegration(transaction_style="url"),
             FastApiIntegration(transaction_style="url"),
         ],
+        debug=os.environ.get("SENTRY_DEBUG", "false").lower() == "true",
     )
 
 app = FastAPI()

@@ -119,6 +119,7 @@ def init_sentry(**_kwargs):
                 os.environ.get("SENTRY_TRACING_SAMPLE_RATE", "0.01")
             ),
             release=os.environ.get("GIT_COMMIT"),
+            debug=os.environ.get("SENTRY_DEBUG", "false").lower() == "true",
         )
 
 
