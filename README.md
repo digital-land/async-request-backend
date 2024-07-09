@@ -13,22 +13,23 @@ Ensure you have Docker installed.
 
 ## Local running
 
-    Clone the Repository
-    ```shell
+Clone the Repository
+```shell
     git clone https://github.com/digital-land/async-request-backend.git
     cd async-request-backend
-    ```
-    Create and Activate Virtual Environment
-    ```shell
+```
+Create and Activate Virtual Environment
+```shell
     python -m venv venv
     source venv/bin/activate
-    ```
-    Install Dependencies
-    ```shell
+```
+Install Dependencies
+
+```shell
     pip install -r requirements.txt
-    ```
-    Initialize the project
-    ```shell
+```
+Initialize the project
+```shell
     make init
 ```
 
