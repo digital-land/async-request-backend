@@ -47,53 +47,19 @@ def test_check_datafile(
         uploaded_filename: Uploaded filename.
         expected_status: Expected status after validation.
     """
-    request_model = models.Request(
-        type=schemas.RequestTypeEnum.check_file,
-        created=datetime.datetime.now(),
-        modified=datetime.datetime.now(),
-        status="NEW",
-        params=schemas.CheckFileParams(
-            collection="article-4-direction",
-            dataset="article-4-direction-area",
-            original_filename=filename,
-            uploaded_filename=uploaded_filename,
-        ).model_dump(),
-    )
-    db_session = database.session_maker()
-    with db_session() as session:
-        session.add(request_model)
-        session.commit()
-        session.refresh(request_model)
-    request = schemas.Request(
-        id=request_model.id,
-        type=request_model.type,
-        status=request_model.status,
-        created=request_model.created,
-        modified=request_model.modified,
-        params=request_model.params,
-        response=None,
-    )
-    source_organisation_csv = f"{test_data_dir}/csvs/organisation.csv"
-    destination_organisation_csv = os.path.join(
-        mock_directories.CACHE_DIR, "organisation.csv"
-    )
-    # print("destination_organisation_csv=" + destination_organisation_csv)
-    shutil.copy(source_organisation_csv, destination_organisation_csv)
-    # print("destination_organisation_csv exists? "+ str(os.path.exists(destination_organisation_csv)))
-    mocker.patch(
-        "application.core.workflow.fetch_pipeline_csvs",
-        side_effect=mock_fetch_pipeline_csvs("article-4-direction-area", request.id),
-    )
+    params = {"collection": "article-4-direction",
+            "dataset": "article-4-direction-area",
+            "original_filename": filename,
+            "uploaded_filename": uploaded_filename}
+    request = _create_request(schemas.CheckFileParams(**params), schemas.RequestTypeEnum.check_file)
+    _handle_pipeline_config_csvs(test_data_dir, mock_directories, mocker, mock_fetch_pipeline_csvs, request)
+
     # Convert mock directory paths to strings
     mock_directories_str = {
         key: str(path) for key, path in mock_directories._asdict().items()
     }
 
-    mock_directories_json = json.dumps(mock_directories_str)
-    check_datafile_task = celery_app.register_task(check_datafile)
-    check_datafile_task.delay(request.model_dump(), directories=mock_directories_json)
-    _wait_for_request_status(request.id, expected_status)
-
+    _register_and_check_request(mock_directories_str, celery_app, request, expected_status)
 
 @pytest.mark.parametrize(
     "test_name, url, get_request_return_value, expected_status, mock_response",
@@ -148,48 +114,14 @@ def test_check_datafile_url(
         expected_status: The expected status of the request.
         mock_response: determine if mock fetch_pipeline_csvs should be called.
     """
-    request_model = models.Request(
-        type=schemas.RequestTypeEnum.check_url,
-        created=datetime.datetime.now(),
-        modified=datetime.datetime.now(),
-        status="NEW",
-        params=schemas.CheckUrlParams(
-            collection="article-4-direction",
-            dataset="article-4-direction-area",
-            url=url,
-        ).model_dump(),
-    )
-    db_session = database.session_maker()
-    with db_session() as session:
-        session.add(request_model)
-        session.commit()
-        session.refresh(request_model)
-    request = schemas.Request(
-        id=request_model.id,
-        type=request_model.type,
-        status=request_model.status,
-        created=request_model.created,
-        modified=request_model.modified,
-        params=request_model.params,
-        response=None,
-    )
+    
+    
+    params = {"collection": "article-4-direction",
+                                    "dataset":"article-4-direction-area",
+                                    "url": url}
+    request = _create_request(schemas.CheckUrlParams(**params), schemas.RequestTypeEnum.check_url)
 
-    if mock_response:
-        source_organisation_csv = f"{test_data_dir}/csvs/organisation.csv"
-        destination_organisation_csv = os.path.join(
-            mock_directories.CACHE_DIR, "organisation.csv"
-        )
-        print("destination_organisation_csv=" + destination_organisation_csv)
-        shutil.copy(source_organisation_csv, destination_organisation_csv)
-        print(
-            "destination_organisation_csv exists? "
-            + str(os.path.exists(destination_organisation_csv))
-        )
-
-        mocker.patch(
-            "application.core.workflow.fetch_pipeline_csvs",
-            side_effect=mock_fetch_pipeline_csvs("article-4-direction-area", request.id),
-        )
+    _handle_pipeline_config_csvs(test_data_dir, mock_directories, mocker, mock_fetch_pipeline_csvs, request)
 
     mock_directories_str = {
         key: str(path) for key, path in mock_directories._asdict().items()
@@ -199,10 +131,7 @@ def test_check_datafile_url(
         "application.core.utils.get_request", return_value=get_request_return_value
     )
 
-    mock_directories_json = json.dumps(mock_directories_str)
-    check_datafile_task = celery_app.register_task(check_datafile)
-    check_datafile_task.delay(request.model_dump(), directories=mock_directories_json)
-    _wait_for_request_status(request.id, expected_status)
+    _register_and_check_request(mock_directories_str, celery_app, request, expected_status)
 
 
 def _wait_for_request_status(
@@ -233,3 +162,50 @@ def _wait_for_request_status(
     pytest.fail(
         f"Expected status of {expected_status} for request {request_id} but actual status was {actual_status}"
     )
+
+def _create_request(params, type):
+    request_model = models.Request(
+        type=type,
+        created=datetime.datetime.now(),
+        modified=datetime.datetime.now(),
+        status="NEW",
+        params=params.model_dump(),
+    )
+    db_session = database.session_maker()
+    with db_session() as session:
+        session.add(request_model)
+        session.commit()
+        session.refresh(request_model)
+    request = schemas.Request(
+        id=request_model.id,
+        type=request_model.type,
+        status=request_model.status,
+        created=request_model.created,
+        modified=request_model.modified,
+        params=request_model.params,
+        response=None,
+    )
+    return request
+
+def _handle_pipeline_config_csvs(test_data_dir, mock_directories, mocker, mock_fetch_pipeline_csvs, request):
+    source_organisation_csv = f"{test_data_dir}/csvs/organisation.csv"
+    destination_organisation_csv = os.path.join(
+        mock_directories.CACHE_DIR, "organisation.csv"
+    )
+    print("destination_organisation_csv=" + destination_organisation_csv)
+    shutil.copy(source_organisation_csv, destination_organisation_csv)
+    print(
+        "destination_organisation_csv exists? "
+        + str(os.path.exists(destination_organisation_csv))
+    )
+
+    mocker.patch(
+        "application.core.workflow.fetch_pipeline_csvs",
+        side_effect=mock_fetch_pipeline_csvs("article-4-direction-area", request.id),
+    )
+
+def _register_and_check_request(mock_directories_str, celery_app, request, expected_status):
+    mock_directories_json = json.dumps(mock_directories_str)
+    check_datafile_task = celery_app.register_task(check_datafile)
+    check_datafile_task.delay(request.model_dump(), directories=mock_directories_json)
+    _wait_for_request_status(request.id, expected_status)
