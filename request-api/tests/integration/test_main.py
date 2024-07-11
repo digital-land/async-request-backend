@@ -37,84 +37,34 @@ def test_read_request(db, sqs_queue, helpers):
     assert read_response.json() == creation_response.json()
 
 
-def test_read_response_details(db, helpers, test_request):
-    read_details_response = client.get(f"/requests/{test_request.id}/response-details")
-    assert read_details_response.status_code == 200
-    assert read_details_response.json() == [
-        {"line": 1, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]},
-        {"line": 2, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]},
-        {"line": 3, "issue_logs": [{"severity": "warning"}]},
-    ]
-    assert read_details_response.headers["X-Pagination-Total-Results"] == "3"
-    assert read_details_response.headers["X-Pagination-Offset"] == "0"
-    assert read_details_response.headers["X-Pagination-Limit"] == "50"
+expected_jsondata = [
+    {"line": 1, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]},
+    {"line": 2, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]},
+    {"line": 3, "issue_logs": [{"severity": "warning"}]},
+]
 
 
-def test_read_response_details_limit_1(db, helpers, test_request):
+@pytest.mark.parametrize("limit, offset, expected_json, expected_total, expected_pglimit", [
+    (50, 0, expected_jsondata, "3", "50"),  # test_read_response_details
+    (1, 0, [expected_jsondata[0]], "3", "1"),  # test_read_response_details_limit_1
+    (1, 1, [expected_jsondata[1]], "3", "1"),  # test_read_response_details_limit_offset1_limit1
+    (1, 2, [expected_jsondata[2]], "3", "1"),  # test_read_response_details_limit_offset2_limit1
+])
+def test_read_response_details_limit_offset(db, helpers, test_request, limit, offset, expected_json, expected_total, expected_pglimit):
+    read_details_response = client.get(f"/requests/{test_request.id}/response-details?offset={offset}&limit={limit}")
+    assert_response_content(read_details_response, expected_json, expected_total, offset, expected_pglimit)
+
+
+@pytest.mark.parametrize("jsonpath, offset, limit, expected_json, expected_total, expected_pglimit", [
+    ('$.issue_logs[*].severity=="error"', 0, 1, [expected_jsondata[0]],
+     "2", "1"),  # test_read_response_details_limit1_jsonpath
+    ('$.issue_logs[*].severity=="error"', 1, 1, [expected_jsondata[1]],
+     "2", "1"),  # test_read_response_details_offset1_limit1_jsonpath
+])
+def test_read_response_details_limit1_jsonpath(db, helpers, test_request, jsonpath, offset, limit, expected_json, expected_total, expected_pglimit):
     read_details_response = client.get(
-        f"/requests/{test_request.id}/response-details?limit=1"
-    )
-    assert read_details_response.status_code == 200
-    assert read_details_response.json() == [
-        {"line": 1, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]}
-    ]
-    assert read_details_response.headers["X-Pagination-Total-Results"] == "3"
-    assert read_details_response.headers["X-Pagination-Offset"] == "0"
-    assert read_details_response.headers["X-Pagination-Limit"] == "1"
-
-
-def test_read_response_details_limit_offset1_limit1(db, helpers, test_request):
-    read_details_response = client.get(
-        f"/requests/{test_request.id}/response-details?offset=1&limit=1"
-    )
-    assert read_details_response.status_code == 200
-    assert read_details_response.json() == [
-        {"line": 2, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]}
-    ]
-    assert read_details_response.headers["X-Pagination-Total-Results"] == "3"
-    assert read_details_response.headers["X-Pagination-Offset"] == "1"
-    assert read_details_response.headers["X-Pagination-Limit"] == "1"
-
-
-def test_read_response_details_limit_offset2_limit1(db, helpers, test_request):
-    read_details_response = client.get(
-        f"/requests/{test_request.id}/response-details?offset=2&limit=1"
-    )
-    assert read_details_response.status_code == 200
-    assert read_details_response.json() == [
-        {"line": 3, "issue_logs": [{"severity": "warning"}]}
-    ]
-    assert read_details_response.headers["X-Pagination-Total-Results"] == "3"
-    assert read_details_response.headers["X-Pagination-Offset"] == "2"
-    assert read_details_response.headers["X-Pagination-Limit"] == "1"
-
-
-def test_read_response_details_limit1_jsonpath(db, helpers, test_request):
-    jsonpath = '$.issue_logs[*].severity=="error"'
-    read_details_response = client.get(
-        f"/requests/{test_request.id}/response-details?offset=0&limit=1&jsonpath={jsonpath}"
-    )
-    assert read_details_response.status_code == 200
-    assert read_details_response.json() == [
-        {"line": 1, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]}
-    ]
-    assert read_details_response.headers["X-Pagination-Total-Results"] == "2"
-    assert read_details_response.headers["X-Pagination-Offset"] == "0"
-    assert read_details_response.headers["X-Pagination-Limit"] == "1"
-
-
-def test_read_response_details_offset1_limit1_jsonpath(db, helpers, test_request):
-    jsonpath = '$.issue_logs[*].severity=="error"'
-    read_details_response = client.get(
-        f"/requests/{test_request.id}/response-details?offset=1&limit=1&jsonpath={jsonpath}"
-    )
-    assert read_details_response.status_code == 200
-    assert read_details_response.json() == [
-        {"line": 2, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]}
-    ]
-    assert read_details_response.headers["X-Pagination-Total-Results"] == "2"
-    assert read_details_response.headers["X-Pagination-Offset"] == "1"
-    assert read_details_response.headers["X-Pagination-Limit"] == "1"
+        f"/requests/{test_request.id}/response-details?offset={offset}&limit={limit}&jsonpath={jsonpath}")
+    assert_response_content(read_details_response, expected_json, expected_total, offset, expected_pglimit)
 
 
 def test_read_unknown_request(db):
@@ -162,3 +112,11 @@ def test_request():
         session.commit()
         session.refresh(request_model)
         return request_model
+
+
+def assert_response_content(read_details_response, expected_json, expected_total, offset, expected_pglimit):
+    assert read_details_response.status_code == 200
+    assert read_details_response.json() == expected_json
+    assert read_details_response.headers["X-Pagination-Total-Results"] == expected_total
+    assert read_details_response.headers["X-Pagination-Offset"] == str(offset)
+    assert read_details_response.headers["X-Pagination-Limit"] == str(expected_pglimit)

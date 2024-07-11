@@ -6,11 +6,34 @@ This repository implements open design proposal 001:
 
 https://digital-land.github.io/technical-documentation/architecture/design/proposals/001-publish-async/index.html
 
+# Getting Started
+
+## Prerequisites
+Ensure you have Docker installed.
+
 ## Local running
 
-A docker compose setup has been configured to run the async request backend.  This setup runs a Python/FastAPI for
-receiving requests, a Postgres database to store requests, an SQS queue using the excellent [Localstack](https://www.localstack.cloud/) container
-to trigger processing and a basic Python app to process the requests.
+Clone the Repository
+```shell
+    git clone https://github.com/digital-land/async-request-backend.git
+    cd async-request-backend
+```
+Create and Activate Virtual Environment
+```shell
+    python -m venv venv
+    source venv/bin/activate
+```
+Install Dependencies
+
+```shell
+    pip install -r requirements.txt
+```
+Initialize the project
+```shell
+    make init
+```
+
+A docker compose setup has been configured to run the async request backend.  This setup runs a Python/FastAPI for receiving requests, a Postgres database to store requests, an SQS queue using the excellent [Localstack](https://www.localstack.cloud/) container to trigger processing and a basic Python app to process the requests.
 
 You can run the docker compose stack by executing the following command:
 
@@ -20,6 +43,8 @@ docker compose up -d
 To view service logs, use:
 ```shell
 docker compose logs -f <service_name>
+# Example
+docker compose logs -f request-processor
 ```
 To inspect the database tables and records via CLI, execute:
 ```shell
