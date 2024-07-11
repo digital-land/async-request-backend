@@ -48,9 +48,9 @@ def test_check_datafile(
         expected_status: Expected status after validation.
     """
     params = {"collection": "article-4-direction",
-            "dataset": "article-4-direction-area",
-            "original_filename": filename,
-            "uploaded_filename": uploaded_filename}
+              "dataset": "article-4-direction-area",
+              "original_filename": filename,
+              "uploaded_filename": uploaded_filename}
     request = _create_request(schemas.CheckFileParams(**params), schemas.RequestTypeEnum.check_file)
     _handle_pipeline_config_csvs(test_data_dir, mock_directories, mocker, mock_fetch_pipeline_csvs, request)
 
@@ -60,6 +60,7 @@ def test_check_datafile(
     }
 
     _register_and_check_request(mock_directories_str, celery_app, request, expected_status)
+
 
 @pytest.mark.parametrize(
     "test_name, url, get_request_return_value, expected_status, mock_response",
@@ -114,11 +115,10 @@ def test_check_datafile_url(
         expected_status: The expected status of the request.
         mock_response: determine if mock fetch_pipeline_csvs should be called.
     """
-    
-    
+
     params = {"collection": "article-4-direction",
-                                    "dataset":"article-4-direction-area",
-                                    "url": url}
+              "dataset": "article-4-direction-area",
+              "url": url}
     request = _create_request(schemas.CheckUrlParams(**params), schemas.RequestTypeEnum.check_url)
 
     _handle_pipeline_config_csvs(test_data_dir, mock_directories, mocker, mock_fetch_pipeline_csvs, request)
@@ -137,7 +137,6 @@ def test_check_datafile_url(
 def _wait_for_request_status(
     request_id, expected_status, timeout_seconds=10, interval_seconds=1
 ):
-    # print("ACTUAL STATUS::::::", expected_status)
     seconds_waited = 0
     actual_status = "UNKNOWN"
     while seconds_waited <= timeout_seconds:
@@ -154,14 +153,10 @@ def _wait_for_request_status(
             else:
                 time.sleep(interval_seconds)
                 seconds_waited += interval_seconds
-                print(
-                    f"Waiting {interval_seconds} second(s) for expected status of "
-                    f"{expected_status} on request {request_id}"
-                )
-
     pytest.fail(
         f"Expected status of {expected_status} for request {request_id} but actual status was {actual_status}"
     )
+
 
 def _create_request(params, type):
     request_model = models.Request(
@@ -187,22 +182,18 @@ def _create_request(params, type):
     )
     return request
 
+
 def _handle_pipeline_config_csvs(test_data_dir, mock_directories, mocker, mock_fetch_pipeline_csvs, request):
     source_organisation_csv = f"{test_data_dir}/csvs/organisation.csv"
     destination_organisation_csv = os.path.join(
         mock_directories.CACHE_DIR, "organisation.csv"
     )
-    print("destination_organisation_csv=" + destination_organisation_csv)
     shutil.copy(source_organisation_csv, destination_organisation_csv)
-    print(
-        "destination_organisation_csv exists? "
-        + str(os.path.exists(destination_organisation_csv))
-    )
-
     mocker.patch(
         "application.core.workflow.fetch_pipeline_csvs",
         side_effect=mock_fetch_pipeline_csvs("article-4-direction-area", request.id),
     )
+
 
 def _register_and_check_request(mock_directories_str, celery_app, request, expected_status):
     mock_directories_json = json.dumps(mock_directories_str)

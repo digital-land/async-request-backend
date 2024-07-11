@@ -52,11 +52,7 @@ expected_jsondata = [
 ])
 def test_read_response_details_limit_offset(db, helpers, test_request, limit, offset, expected_json, expected_total, expected_pglimit):
     read_details_response = client.get(f"/requests/{test_request.id}/response-details?offset={offset}&limit={limit}")
-    assert read_details_response.status_code == 200
-    assert read_details_response.json() == expected_json
-    assert read_details_response.headers["X-Pagination-Total-Results"] == expected_total
-    assert read_details_response.headers["X-Pagination-Offset"] == str(offset)
-    assert read_details_response.headers["X-Pagination-Limit"] == str(expected_pglimit)
+    assert_response_content(read_details_response, expected_json, expected_total, offset, expected_pglimit)
 
 
 @pytest.mark.parametrize("jsonpath, offset, limit, expected_json, expected_total, expected_pglimit", [
@@ -68,11 +64,7 @@ def test_read_response_details_limit_offset(db, helpers, test_request, limit, of
 def test_read_response_details_limit1_jsonpath(db, helpers, test_request, jsonpath, offset, limit, expected_json, expected_total, expected_pglimit):
     read_details_response = client.get(
         f"/requests/{test_request.id}/response-details?offset={offset}&limit={limit}&jsonpath={jsonpath}")
-    assert read_details_response.status_code == 200
-    assert read_details_response.json() == expected_json
-    assert read_details_response.headers["X-Pagination-Total-Results"] == expected_total
-    assert read_details_response.headers["X-Pagination-Offset"] == str(offset)
-    assert read_details_response.headers["X-Pagination-Limit"] == str(expected_pglimit)
+    assert_response_content(read_details_response, expected_json, expected_total, offset, expected_pglimit)
 
 
 def test_read_unknown_request(db):
@@ -120,3 +112,11 @@ def test_request():
         session.commit()
         session.refresh(request_model)
         return request_model
+
+
+def assert_response_content(read_details_response, expected_json, expected_total, offset, expected_pglimit):
+    assert read_details_response.status_code == 200
+    assert read_details_response.json() == expected_json
+    assert read_details_response.headers["X-Pagination-Total-Results"] == expected_total
+    assert read_details_response.headers["X-Pagination-Offset"] == str(offset)
+    assert read_details_response.headers["X-Pagination-Limit"] == str(expected_pglimit)
