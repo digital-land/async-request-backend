@@ -63,25 +63,53 @@ def test_read_request_when_not_found(mock_get_request):
 @pytest.mark.parametrize(
     "db_status, sqs_status, expected_status, expected_response",
     [
-        (True, True, 200, [
-            DependencyHealth(name="request-db", status=HealthStatus.HEALTHY),
-            DependencyHealth(name="sqs", status=HealthStatus.HEALTHY),
-        ]),
-        (False, True, 500, [
-            DependencyHealth(name="request-db", status=HealthStatus.UNHEALTHY),
-            DependencyHealth(name="sqs", status=HealthStatus.HEALTHY),
-        ]),
-        (True, False, 500, [
-            DependencyHealth(name="request-db", status=HealthStatus.HEALTHY),
-            DependencyHealth(name="sqs", status=HealthStatus.UNHEALTHY),
-        ]),
-        (False, False, 500, [
-            DependencyHealth(name="request-db", status=HealthStatus.UNHEALTHY),
-            DependencyHealth(name="sqs", status=HealthStatus.UNHEALTHY),
-        ]),
-    ]
+        (
+            True,
+            True,
+            200,
+            [
+                DependencyHealth(name="request-db", status=HealthStatus.HEALTHY),
+                DependencyHealth(name="sqs", status=HealthStatus.HEALTHY),
+            ],
+        ),
+        (
+            False,
+            True,
+            500,
+            [
+                DependencyHealth(name="request-db", status=HealthStatus.UNHEALTHY),
+                DependencyHealth(name="sqs", status=HealthStatus.HEALTHY),
+            ],
+        ),
+        (
+            True,
+            False,
+            500,
+            [
+                DependencyHealth(name="request-db", status=HealthStatus.HEALTHY),
+                DependencyHealth(name="sqs", status=HealthStatus.UNHEALTHY),
+            ],
+        ),
+        (
+            False,
+            False,
+            500,
+            [
+                DependencyHealth(name="request-db", status=HealthStatus.UNHEALTHY),
+                DependencyHealth(name="sqs", status=HealthStatus.UNHEALTHY),
+            ],
+        ),
+    ],
 )
-def test_healthcheck(db_status, sqs_status, expected_status, expected_response, mock_response, mock_db, mock_sqs):
+def test_healthcheck(
+    db_status,
+    sqs_status,
+    expected_status,
+    expected_response,
+    mock_response,
+    mock_db,
+    mock_sqs,
+):
     if not db_status:
         mock_db.execute = MagicMock(side_effect=SQLAlchemyError())
     if not sqs_status:
