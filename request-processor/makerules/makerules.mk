@@ -29,7 +29,6 @@ endif
 init::
 	python -m pip install pip-tools
 	python -m pip install -r requirements/requirements.txt
-	python -m pip install -r requirements/test_requirements.txt
 
 update-dependencies::
 	make dependencies
