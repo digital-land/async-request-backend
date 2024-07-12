@@ -320,7 +320,11 @@ def load_mappings():
 
 
 def error_summary(issue_log, column_field, not_mapped_columns):
-    error_issues = [issue for issue in issue_log if issue["severity"] == "error"]
+    error_issues = [
+        issue
+        for issue in issue_log
+        if issue["severity"] == "error" and issue["responsibility"] == "external"
+    ]
     missing_columns = [field for field in column_field if field["missing"]]
     # Count occurrences for each issue-type and field
     error_summary = defaultdict(int)
