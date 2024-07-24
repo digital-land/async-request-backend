@@ -16,17 +16,25 @@ def uploaded_csv(mock_directories):
     resource_dir = os.path.join(collection_dir, "resource", "xyz123")
     os.makedirs(resource_dir, exist_ok=True)
     mock_csv = os.path.join(resource_dir, "7e9a0e71f3ddfe")
-    row = {
+    rows = [{
         "geometry": "MULTIPOLYGON (((-1.799316 53.717797, "
         "-1.790771 53.717797, -1.790771 53.721066, -1.799316 53.721066, -1.799316 53.717797)))",
         "reference": "4",
         "name": "South Jesmond",
-    }
-    fieldnames = row.keys()
+        "organisation": "local-authority:CTY",
+    },
+    {
+        "geometry": "MULTIPOLYGON (((-1.799316 53.717797, "
+        "-1.790771 53.717797, -1.790771 53.721066, -1.799316 53.721066, -1.799316 53.717797)))",
+        "reference": "4",
+        "name": "South Jesmond duplicate",
+        "organisation": "local-authority:CTY",
+    }]
+    fieldnames = rows[0].keys()
     with open(mock_csv, "w") as f:
         dictwriter = csv.DictWriter(f, fieldnames=fieldnames)
         dictwriter.writeheader()
-        dictwriter.writerow(row)
+        dictwriter.writerows(rows)
 
     return mock_csv
 
@@ -63,7 +71,11 @@ def test_run_workflow(
         mock_directories,
     )
 
+    print("response data", response_data)
     assert "converted-csv" in response_data
     assert "issue-log" in response_data
     assert "column-field-log" in response_data
     assert "error-summary" in response_data
+    
+    assert any(x["issue-type"] == "reference values are not unique" for x in response_data["issue-log"])
+    # assert False
