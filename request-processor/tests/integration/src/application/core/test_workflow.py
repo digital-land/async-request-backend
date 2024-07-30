@@ -104,6 +104,7 @@ def test_run_workflow(
     # Check issue log
     assert any(x["issue-type"] == "invalid WKT" for x in response_data["issue-log"])
     assert any(x["issue-type"] == "invalid date" for x in response_data["issue-log"])
+    assert any(x["issue-type"] == "reference values are not unique" for x in response_data["issue-log"])
 
     # Check column field log contains additional column mappings
     assert any(x["column"] == "ref" and x["field"] == "reference" for x in response_data["column-field-log"])
