@@ -223,6 +223,7 @@ def add_extra_column_mappings(
                 not_mapped_columns.append(mappings["field"])
             else:
                 with open(column_path, "a", newline="") as f:
+                    f.write("\n")
                     writer = csv.DictWriter(f, fieldnames=fieldnames)
                     writer.writerow(mappings)
     return not_mapped_columns
