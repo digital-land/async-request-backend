@@ -22,22 +22,22 @@ def uploaded_csv(mock_directories):
     
     rows = [{
         "geometry": valid_geometry,
-        "reference": "4",
+        "ref": "4",
         "name": "South Jesmond",
     },
     {
         "geometry": valid_geometry,
-        "reference": "4",
+        "ref": "4",
         "name": "South Jesmond duplicate ref",
     },
     {
         "geometry": invalid_geometry,
-        "reference": "invalid wkt",
+        "ref": "invalid wkt",
         "name": "invalid wkt",
     },
     {
         "geometry": valid_geometry,
-        "reference": "invalid date",
+        "ref": "invalid date",
         "name": "invalid date",
         "start_date": "invalid date here"
     },
@@ -46,7 +46,7 @@ def uploaded_csv(mock_directories):
         "geometry": valid_geometry,
         "name": "column_field_test"
     }]
-    fieldnames = ["geometry", "reference", "ref", "name", "organisation", "start_date"]
+    fieldnames = ["geometry", "ref", "name", "organisation", "start_date"]
     with open(mock_csv, "w") as f:
         dictwriter = csv.DictWriter(f, fieldnames=fieldnames)
         dictwriter.writeheader()
@@ -96,8 +96,8 @@ def test_run_workflow(
     assert "error-summary" in response_data
 
     # Check converted csv is in the form we expect
-    assert all("reference" in x for x in response_data["converted-csv"])
-    assert response_data["converted-csv"][0]["reference"] == "4"
+    assert all("ref" in x for x in response_data["converted-csv"])
+    assert response_data["converted-csv"][0]["ref"] == "4"
     assert all("geometry" in x for x in response_data["converted-csv"])
     assert response_data["converted-csv"][0]["geometry"] == valid_geometry
     assert all("name" in x for x in response_data["converted-csv"])
@@ -106,6 +106,7 @@ def test_run_workflow(
     # Check issue log
     assert any(x["issue-type"] == "invalid WKT" for x in response_data["issue-log"])
     assert any(x["issue-type"] == "invalid date" for x in response_data["issue-log"])
+    assert any(x["issue-type"] == "reference values are not unique" for x in response_data["issue-log"])
 
     # Check column field log contains additional column mappings
     assert any(x["column"] == "ref" and x["field"] == "reference" for x in response_data["column-field-log"])
@@ -155,8 +156,8 @@ def test_run_workflow_geom_type_polygon(
     assert "error-summary" in response_data
 
     # Check converted csv is in the form we expect
-    assert all("reference" in x for x in response_data["converted-csv"])
-    assert response_data["converted-csv"][0]["reference"] == "4"
+    assert all("ref" in x for x in response_data["converted-csv"])
+    assert response_data["converted-csv"][0]["ref"] == "4"
     assert all("geometry" in x for x in response_data["converted-csv"])
     assert response_data["converted-csv"][0]["geometry"] == valid_geometry
     assert all("name" in x for x in response_data["converted-csv"])

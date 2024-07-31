@@ -29,6 +29,7 @@ from digital_land.phase.reference import EntityReferencePhase, FactReferencePhas
 from digital_land.phase.save import SavePhase
 from digital_land.pipeline import run_pipeline, Pipeline, Lookups
 from digital_land.commands import get_resource_unidentified_lookups
+from digital_land.check import duplicate_reference_check
 
 from pathlib import Path
 
@@ -215,7 +216,6 @@ def pipeline_run(
             fieldnames=intermediate_fieldnames,
             enabled=save_harmonised,
         ),
-        EntityPrunePhase(dataset_resource_log=dataset_resource_log),
         PivotPhase(),
         FactCombinePhase(issue_log=issue_log, fields=combine_fields),
         FactorPhase(),
@@ -230,6 +230,8 @@ def pipeline_run(
             fieldnames=specification.factor_fieldnames(),
         ),
     )
+
+    issue_log = duplicate_reference_check(issues=issue_log, csv_path=output_path)
 
     # Add the 'severity' and 'description' column based on the mapping
     issue_log.add_severity_column(severity_csv_path)
