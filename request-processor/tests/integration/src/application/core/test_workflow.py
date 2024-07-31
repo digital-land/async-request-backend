@@ -114,6 +114,7 @@ def test_run_workflow(
     # Check invalid WKT error has been generated and passed through in error summary
     assert any("1 geometry" in error for error in response_data["error-summary"])
     assert any("1 start date" in error for error in response_data["error-summary"])
+    assert any("2 references" in error for error in response_data["error-summary"])
 
 def test_run_workflow_geom_type_polygon(
     mocker, mock_directories, mock_fetch_pipeline_csvs, mock_extract_dataset_field_rows, test_data_dir, uploaded_csv
