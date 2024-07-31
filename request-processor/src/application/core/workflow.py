@@ -194,9 +194,17 @@ def add_geom_mapping(dataset, pipeline_dir, geom_type, resource, pipeline_csv):
         2,
     )
     if dataset == "tree" and geom_type == "polygon" and pipeline_csv == "column.csv":
-        new_mapping = f"tree,,{resource},WKT,geometry"
+        with open(os.path.join(pipeline_dir, pipeline_csv), "r") as csv_file:
+            reader = csv.DictReader(csv_file)
+            fieldnames = reader.fieldnames
+        new_mapping = {}
+        for field in fieldnames:
+            new_mapping.update({field: ""})
+        new_mapping.update({"dataset": "tree", "resource": resource, "column": "WKT", "field": "geometry"})
         with open(os.path.join(pipeline_dir, pipeline_csv), "a") as csv_file:
-            csv_file.write("\n" + new_mapping)
+            csv_file.write("\n")
+            writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+            writer.writerow(new_mapping)
 
 
 def add_extra_column_mappings(

@@ -93,7 +93,7 @@ def mock_directories(tmpdir, project_dir):
         TRANSFORMED_DIR=tmpdir.mkdir("transformed"),
         DATASET_RESOURCE_DIR=var_dir.mkdir("dataset-resource"),
         PIPELINE_DIR=tmpdir.mkdir("pipeline"),
-        SPECIFICATION_DIR="specification",
+        SPECIFICATION_DIR="tests/data/specification",
         CACHE_DIR=var_dir.mkdir("cache"),
     )
 
@@ -146,6 +146,13 @@ def mock_extract_dataset_field_rows(mock_directories):
                 "guidance": "",
                 "hint": "",
             },
+            {
+                "dataset": dataset_name,
+                "field": "reference",
+                "field-dataset": "",
+                "guidance": "",
+                "hint": "",
+            }
         ]
         fieldnames = rows[0].keys()
         with open(mock_field_csv, "w") as f:
