@@ -175,7 +175,7 @@ mappings:
   summary-singular: "1 listed building missing"
   summary-plural: "{count} listed buildings missing"
 - field: reference
-  issue-type: reference must be unique
+  issue-type: reference values are not unique
   description: "Reference must be unique"
   summary-singular: "1 reference must be unique"
-  summar-plural: "{count} references must be unique"
+  summary-plural: "{count} references must be unique"
