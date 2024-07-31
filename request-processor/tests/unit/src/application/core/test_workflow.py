@@ -286,7 +286,6 @@ def test_fetch_pipelines(
         with open(os.path.join(pipeline_dir, "column.csv"), newline="") as csv_file:
             reader = csv.DictReader(csv_file)
             csv_rows = list(reader)
-            print("csv_rows", csv_rows)
             assert expected_row in csv_rows
 
     csv_file_path = os.path.join(pipeline_dir, "column.csv")

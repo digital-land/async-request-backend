@@ -216,7 +216,6 @@ def pipeline_run(
             fieldnames=intermediate_fieldnames,
             enabled=save_harmonised,
         ),
-        # EntityPrunePhase(dataset_resource_log=dataset_resource_log),
         PivotPhase(),
         FactCombinePhase(issue_log=issue_log, fields=combine_fields),
         FactorPhase(),
@@ -263,7 +262,6 @@ def assign_entries(
         specification=specification,
         org_csv_path=f"{cache_dir}/organisation.csv",
     )
-    print("resource lookups", resource_lookups)
 
     unassigned_entries = []
     unassigned_entries.append(resource_lookups)
@@ -278,7 +276,6 @@ def assign_entries(
             )
 
     lookups.load_csv()
-    print("unassigned entries: ", unassigned_entries)
     for new_lookup in unassigned_entries:
         for idx, entry in enumerate(new_lookup):
             lookups.add_entry(entry[0])
