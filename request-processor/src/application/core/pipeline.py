@@ -24,7 +24,7 @@ from digital_land.phase.parse import ParsePhase
 from digital_land.phase.patch import PatchPhase
 from digital_land.phase.pivot import PivotPhase
 from digital_land.phase.prefix import EntityPrefixPhase
-from digital_land.phase.prune import FieldPrunePhase, EntityPrunePhase, FactPrunePhase
+from digital_land.phase.prune import FieldPrunePhase, FactPrunePhase
 from digital_land.phase.reference import EntityReferencePhase, FactReferencePhase
 from digital_land.phase.save import SavePhase
 from digital_land.pipeline import run_pipeline, Pipeline, Lookups
