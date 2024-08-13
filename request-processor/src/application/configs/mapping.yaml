@@ -179,3 +179,38 @@ mappings:
   description: "Reference must be unique"
   summary-singular: "1 reference must be unique"
   summary-plural: "{count} references must be unique"
+- field: MinNetDwellings
+  issue-type: numeric value is not positive
+  description: Numeric value is not positive
+  summary-singular: "1 numeric value is not positive"
+  summary-plural: "{count} numeric values are not positive"
+- field: NetDwellingsRangeFrom
+  issue-type: numeric value is not positive
+  description: Numeric value is not positive
+  summary-singular: "1 numeric value is not positive"
+  summary-plural: "{count} numeric values are not positive"
+- field: NetDwellingsRangeTo
+  issue-type: numeric value is not positive
+  description: Numeric value is not positive
+  summary-singular: "1 numeric value is not positive"
+  summary-plural: "{count} numeric values are not positive"
+- field: hectares
+  issue-type: numeric value is not positive
+  description: Numeric value is not positive
+  summary-singular: "1 numeric value is not positive"
+  summary-plural: "{count} numeric values are not positive"
+- field: maximum-net-dwellings
+  issue-type: numeric value is not positive
+  description: Numeric value is not positive
+  summary-singular: "1 numeric value is not positive"
+  summary-plural: "{count} numeric values are not positive"
+- field: minimum-net-dwellings
+  issue-type: numeric value is not positive
+  description: Numeric value is not positive
+  summary-singular: "1 numeric value is not positive"
+  summary-plural: "{count} numeric values are not positive"
+- field: school-capacity
+  issue-type: numeric value is not positive
+  description: Numeric value is not positive
+  summary-singular: "1 numeric value is not positive"
+  summary-plural: "{count} numeric values are not positive"
