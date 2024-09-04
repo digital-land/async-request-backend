@@ -86,7 +86,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.DEPLOY_AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.DEPLOY_AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-west-2 
+          aws-region: eu-west-2
 
       - name: Update ECS Service
         run: |
@@ -98,8 +98,10 @@ jobs:
     steps:
       - name: Install GDAL binary package
         run: |
+          sudo add-apt-repository ppa:ubuntugis/ppa
           sudo apt-get update
           sudo apt-get install gdal-bin
+          gdalinfo --version
 
       - uses: actions/checkout@v4
 
