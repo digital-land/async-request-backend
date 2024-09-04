@@ -125,7 +125,7 @@ def test_error_summary():
     assert any(internal_issue not in message for message in json_data)
 
 
-def test_csv_to_json_with_valid_file(mocker, test_dir):
+def test_csv_to_json_with_valid_file(test_dir):
     # Prepare a CSV file
     row1 = {
         "dataset": "conservation-area",

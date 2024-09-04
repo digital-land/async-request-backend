@@ -14,10 +14,17 @@ def test_data_dir(test_dir):
     return os.path.realpath(f"{test_dir}/../../data")
 
 
-@pytest.mark.parametrize("filename, uploaded_filename, expected_status",
-                         [("article-direction-area.csv", "492f15d8-45e4-427e-bde0-f60d69889f40", "COMPLETE"),
-                          ("invalid.csv", "invalid", "FAILED")]
-                         )
+@pytest.mark.parametrize(
+    "filename, uploaded_filename, expected_status",
+    [
+        (
+            "article-direction-area.csv",
+            "492f15d8-45e4-427e-bde0-f60d69889f40",
+            "COMPLETE",
+        ),
+        ("invalid.csv", "invalid", "FAILED"),
+    ],
+)
 def test_check_datafile(
     mocker,
     celery_app,
@@ -29,7 +36,7 @@ def test_check_datafile(
     test_data_dir,
     filename,
     uploaded_filename,
-    expected_status
+    expected_status,
 ):
     """
     This function tests the check_datafile task for file validation.
@@ -47,19 +54,27 @@ def test_check_datafile(
         uploaded_filename: Uploaded filename.
         expected_status: Expected status after validation.
     """
-    params = {"collection": "article-4-direction",
-              "dataset": "article-4-direction-area",
-              "original_filename": filename,
-              "uploaded_filename": uploaded_filename}
-    request = _create_request(schemas.CheckFileParams(**params), schemas.RequestTypeEnum.check_file)
-    _handle_pipeline_config_csvs(test_data_dir, mock_directories, mocker, mock_fetch_pipeline_csvs, request)
+    params = {
+        "collection": "article-4-direction",
+        "dataset": "article-4-direction-area",
+        "original_filename": filename,
+        "uploaded_filename": uploaded_filename,
+    }
+    request = _create_request(
+        schemas.CheckFileParams(**params), schemas.RequestTypeEnum.check_file
+    )
+    _handle_pipeline_config_csvs(
+        test_data_dir, mock_directories, mocker, mock_fetch_pipeline_csvs, request
+    )
 
     # Convert mock directory paths to strings
     mock_directories_str = {
         key: str(path) for key, path in mock_directories._asdict().items()
     }
 
-    _register_and_check_request(mock_directories_str, celery_app, request, expected_status)
+    _register_and_check_request(
+        mock_directories_str, celery_app, request, expected_status
+    )
 
 
 @pytest.mark.parametrize(
@@ -68,8 +83,12 @@ def test_check_datafile(
         (
             "valid_url",
             "exampleurl.csv",
-            (None,
-             '{"type":"FeatureCollection","properties":{"exceededTransferLimit":true}, "features":[{"type":"Feature","id":1,"geometry":{"type":"Point", "coordinates":[-1.59153574212325,54.9392094142866]}, "properties": {"reference": "CA01","name": "Ashleworth Conservation Area"}}]}'.encode("utf-8")),
+            (
+                None,
+                '{"type":"FeatureCollection","properties":{"exceededTransferLimit":true}, "features":[{"type":"Feature","id":1,"geometry":{"type":"Point", "coordinates":[-1.59153574212325,54.9392094142866]}, "properties": {"reference": "CA01","name": "Ashleworth Conservation Area"}}]}'.encode(  # noqa
+                    "utf-8"
+                ),
+            ),
             "COMPLETE",
             True,
         ),
@@ -116,12 +135,18 @@ def test_check_datafile_url(
         mock_response: determine if mock fetch_pipeline_csvs should be called.
     """
 
-    params = {"collection": "article-4-direction",
-              "dataset": "article-4-direction-area",
-              "url": url}
-    request = _create_request(schemas.CheckUrlParams(**params), schemas.RequestTypeEnum.check_url)
+    params = {
+        "collection": "article-4-direction",
+        "dataset": "article-4-direction-area",
+        "url": url,
+    }
+    request = _create_request(
+        schemas.CheckUrlParams(**params), schemas.RequestTypeEnum.check_url
+    )
 
-    _handle_pipeline_config_csvs(test_data_dir, mock_directories, mocker, mock_fetch_pipeline_csvs, request)
+    _handle_pipeline_config_csvs(
+        test_data_dir, mock_directories, mocker, mock_fetch_pipeline_csvs, request
+    )
 
     mock_directories_str = {
         key: str(path) for key, path in mock_directories._asdict().items()
@@ -131,7 +156,9 @@ def test_check_datafile_url(
         "application.core.utils.get_request", return_value=get_request_return_value
     )
 
-    _register_and_check_request(mock_directories_str, celery_app, request, expected_status)
+    _register_and_check_request(
+        mock_directories_str, celery_app, request, expected_status
+    )
 
 
 def _wait_for_request_status(
@@ -183,7 +210,9 @@ def _create_request(params, type):
     return request
 
 
-def _handle_pipeline_config_csvs(test_data_dir, mock_directories, mocker, mock_fetch_pipeline_csvs, request):
+def _handle_pipeline_config_csvs(
+    test_data_dir, mock_directories, mocker, mock_fetch_pipeline_csvs, request
+):
     source_organisation_csv = f"{test_data_dir}/csvs/organisation.csv"
     destination_organisation_csv = os.path.join(
         mock_directories.CACHE_DIR, "organisation.csv"
@@ -195,7 +224,9 @@ def _handle_pipeline_config_csvs(test_data_dir, mock_directories, mocker, mock_f
     )
 
 
-def _register_and_check_request(mock_directories_str, celery_app, request, expected_status):
+def _register_and_check_request(
+    mock_directories_str, celery_app, request, expected_status
+):
     mock_directories_json = json.dumps(mock_directories_str)
     check_datafile_task = celery_app.register_task(check_datafile)
     check_datafile_task.delay(request.model_dump(), directories=mock_directories_json)

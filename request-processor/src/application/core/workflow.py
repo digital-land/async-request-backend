@@ -90,6 +90,11 @@ def run_workflow(
                 directories.COLUMN_FIELD_DIR, dataset, request_id, f"{resource}.csv"
             )
         )
+        transformed_json = csv_to_json(
+            os.path.join(
+                directories.TRANSFORMED_DIR, dataset, request_id, f"{resource}.csv"
+            )
+        )
         updateColumnFieldLog(column_field_json, required_fields)
         summary_data = error_summary(
             issue_log_json, column_field_json, not_mapped_columns
@@ -100,6 +105,7 @@ def run_workflow(
             "issue-log": issue_log_json,
             "column-field-log": column_field_json,
             "error-summary": summary_data,
+            "transformed-csv": transformed_json,
         }
         # logger.info("Error Summary: %s", summary_data)
     except Exception as e:
@@ -200,7 +206,14 @@ def add_geom_mapping(dataset, pipeline_dir, geom_type, resource, pipeline_csv):
         new_mapping = {}
         for field in fieldnames:
             new_mapping.update({field: ""})
-        new_mapping.update({"dataset": "tree", "resource": resource, "column": "WKT", "field": "geometry"})
+        new_mapping.update(
+            {
+                "dataset": "tree",
+                "resource": resource,
+                "column": "WKT",
+                "field": "geometry",
+            }
+        )
         with open(os.path.join(pipeline_dir, pipeline_csv), "a") as csv_file:
             csv_file.write("\n")
             writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
