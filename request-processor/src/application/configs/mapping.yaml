@@ -134,6 +134,11 @@ mappings:
   description: Point must use WGS84, OSGB or Mercator coordinates
   summary-singular: "1 point must use WGS84, OSGB or Mercator coordinates"
   summary-plural: "{count} points must use WGS84, OSGB or Mercator coordinates"
+- field: GeoX,GeoY
+  issue-type: invalid coordinates
+  description: Geometry must use WGS84, OSGB or Mercator coordinates
+  summary-singular: "1 geometry must use WGS84, OSGB or Mercator coordinates"
+  summary-plural: "{count} geometries must use WGS84, OSGB or Mercator coordinates"
 - field: geometry
   issue-type: invalid geometry - not fixable
   description: Geometry must be correctly formatted

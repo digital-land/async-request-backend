@@ -20,6 +20,10 @@ from request_model import models, schemas
             {
                 "column-field-log": {},
                 "error-summary": {},
+                "transformed-csv": [
+                    {"column1": "value1", "column2": "value2-transformed"},
+                    {"column1": "value3", "column2": "value4"},
+                ],
                 "converted-csv": [
                     {"column1": "value1", "column2": "value2"},
                     {"column1": "value3", "column2": "value4"},
@@ -79,7 +83,11 @@ def test_save_response_to_db(
             .first()
         )
         assert response_query is not None, "Response table should contain data"
-        data = response_query.data if test_name == "success_check_file" else response_query.error
+        data = (
+            response_query.data
+            if test_name == "success_check_file"
+            else response_query.error
+        )
 
         for key in expected_keys:
             assert key in data, f"{key} should be present in data"
@@ -91,8 +99,13 @@ def test_save_response_to_db(
                 .filter_by(response_id=response_query.id)
                 .first()
             )
-            assert (response_details_query is not None), "ResponseDetails table should contain details"
+            assert (
+                response_details_query is not None
+            ), "ResponseDetails table should contain details"
             detail = response_details_query.detail
             assert "converted_row" in detail, "converted_row should be present in data"
             assert "issue_logs" in detail, "issue_logs should be present in data"
             assert "entry_number" in detail, "entry_number should be present in data"
+            assert (
+                "transformed_row" in detail
+            ), "transformed_row should be present in data"

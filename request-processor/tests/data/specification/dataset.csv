@@ -7,3 +7,11 @@ crown-copyright,tree-preservation-order,tree-preservation-orders,tree,An individ
 Each [tree preservation order](/dataset/tree-preservation-order) may apply to a number of [tree preservation order zones](/dataset/tree-preservation-order-zone), and a number of individual trees.
 
 This dataset contains data from [a small group of local planning authorities](/about/) who we are working with to develop a [data specification for tree preservation orders](https://www.digital-land.info/guidance/specifications/tree-preservation-order).",environment,geography,1.0,Q10884,Tree
+crown-copyright,brownfield-land,brownfield-land,brownfield-land,Land that has been previously been developed,,,28,site,1700000,1799999,ogl3,Brownfield land,"{ ""colour"": ""#745729"", ""type"": ""point"" }",Brownfield land,live,,dataset,,,"Local planning authorities designate sites in their area as being [brownfield land](https://www.gov.uk/guidance/brownfield-land-registers), and publish a register of brownfield sites annually following [GOV.UK guidance](https://www.gov.uk/government/publications/brownfield-land-registers-data-standard/publish-your-brownfield-land-data).
+
+Each site references the following categories:
+
+* [ownership-status](/dataset/ownership-status)
+* [planning-permission-status](/dataset/planning-permission-status)
+* [planning-permission-type](/dataset/planning-permission-type)
+* [site-category](/dataset/site-category)",development,geography,1.1,Q896586,Brownfield_land

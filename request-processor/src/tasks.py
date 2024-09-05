@@ -76,9 +76,11 @@ def check_datafile(request: Dict, directories=None):
             request_data.dataset,
             "",
             request_data.geom_type if hasattr(request_data, "geom_type") else "",
-            request_data.column_mapping
-            if hasattr(request_data, "column_mapping")
-            else {},
+            (
+                request_data.column_mapping
+                if hasattr(request_data, "column_mapping")
+                else {}
+            ),
             directories,
         )
         save_response_to_db(request_schema.id, response)
@@ -155,6 +157,7 @@ def save_response_to_db(request_id, response_data):
                     and "error-summary" in response_data
                     and "converted-csv" in response_data
                     and "issue-log" in response_data
+                    and "transformed-csv" in response_data
                 ):
                     data = {
                         "column-field-log": response_data.get("column-field-log", {}),
@@ -171,6 +174,7 @@ def save_response_to_db(request_id, response_data):
                     entry_number = 1
                     converted_row_data = response_data.get("converted-csv")
                     issue_log_data = response_data.get("issue-log")
+                    transformed_data = response_data.get("transformed-csv")
                     # Save converted_row_data and issue_log_data in ResponseDetails
                     for converted_row in converted_row_data:
                         # Collect issue logs corresponding to the current line number
@@ -179,6 +183,11 @@ def save_response_to_db(request_id, response_data):
                             for issue_log in issue_log_data
                             if issue_log.get("entry-number") == str(entry_number)
                         ]
+                        transformed_csv = [
+                            transformed
+                            for transformed in transformed_data
+                            if transformed.get("entry-number") == str(entry_number)
+                        ]
 
                         new_response_detail = models.ResponseDetails(
                             response_id=new_response.id,
@@ -186,6 +195,7 @@ def save_response_to_db(request_id, response_data):
                                 "converted_row": converted_row,
                                 "issue_logs": current_issue_logs,
                                 "entry_number": entry_number,
+                                "transformed_row": transformed_csv,
                             },
                         )
                         session.add(new_response_detail)
