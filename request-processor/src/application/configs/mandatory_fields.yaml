@@ -10,6 +10,7 @@ article-4-direction-area:
 - name
 - permitted-development-rights
 conservation-area:
+- reference
 - geometry
 - name
 conservation-area-document:
