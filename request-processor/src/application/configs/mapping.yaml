@@ -184,3 +184,8 @@ mappings:
   description: "Reference must be unique"
   summary-singular: "1 reference must be unique"
   summary-plural: "{count} references must be unique"
+- field: conservation-area
+  issue-type: missing value
+  description: Conservation area missing
+  summary-singular: "1 conservation area missing"
+  summary-plural: "{count} Conservation areas missing"
