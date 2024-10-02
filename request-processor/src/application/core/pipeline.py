@@ -27,6 +27,7 @@ from digital_land.phase.prefix import EntityPrefixPhase
 from digital_land.phase.prune import FieldPrunePhase, FactPrunePhase
 from digital_land.phase.reference import EntityReferencePhase, FactReferencePhase
 from digital_land.phase.save import SavePhase
+from digital_land.phase.priority import PriorityPhase
 from digital_land.pipeline import run_pipeline, Pipeline, Lookups
 from digital_land.commands import get_resource_unidentified_lookups
 from digital_land.check import duplicate_reference_check
@@ -216,6 +217,7 @@ def pipeline_run(
             fieldnames=intermediate_fieldnames,
             enabled=save_harmonised,
         ),
+        PriorityPhase(config=None),
         PivotPhase(),
         FactCombinePhase(issue_log=issue_log, fields=combine_fields),
         FactorPhase(),
