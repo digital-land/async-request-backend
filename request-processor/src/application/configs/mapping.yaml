@@ -188,17 +188,17 @@ mappings:
   issue-type: missing value
   description: "Conservation area missing"
   summary-singular: "1 conservation area missing"
-  summary-plural: "{count} Conservation areas missing"
+  summary-plural: "{count} conservation areas missing"
 - issue-type: invalid URI
   field: SiteplanURL
   description: "Siteplan URL must be a real URL"
-  summary-singular: "1 Siteplan URL must be a real URL"
-  summary-plural: "{count} Siteplan URLs must be a real URL"
+  summary-singular: "1 siteplan URL must be a real URL"
+  summary-plural: "{count} siteplan URLs must be a real URL"
 - issue-type: invalid URI
   field: PlanningHistory
-  description: "Planning History URL must be a real URL"
-  summary-singular: "1 Planning History URL must be a real URL"
-  summary-plural: "{count} Planning History URLs must be a real URL"
+  description: "Planning history URL must be a real URL"
+  summary-singular: "1 planning history URL must be a real URL"
+  summary-plural: "{count} planning history URLs must be a real URL"
 - issue-type: invalid flag
   field: deliverable
   description: Deliverable must be a valid flag
@@ -207,20 +207,20 @@ mappings:
 - issue-type: invalid date
   field: EndDate
   description: "EndDate must be a real date"
-  summary-singular: "1 EndDate must be a real date"
-  summary-plural: "{count} EndDates must be a real date"
+  summary-singular: "1 end date must be a real date"
+  summary-plural: "{count} end dates must be a real date"
 - issue-type: invalid date
   field: PermissionDate
-  description: "PermissionDate must be a real date"
-  summary-singular: "1 PermissionDate must be a real date"
-  summary-plural: "{count} PermissionDates must be a real date"
+  description: "Permission date must be a real date"
+  summary-singular: "1 permission date must be a real date"
+  summary-plural: "{count} permission dates must be a real date"
 - issue-type: future entry-date
   field: LastUpdatedDate
-  description: "LastUpdatedDate must be today or in the past"
-  summary-singular: "1 LastUpdatedDate must be today or in the past"
-  summary-plural: "{count} LastUpdatedDates must be today or in the past"
+  description: "Last updated date must be today or in the past"
+  summary-singular: "1 last updated date must be today or in the past"
+  summary-plural: "{count} last updated dates must be today or in the past"
 - issue-type: invalid date
   field: LastUpdatedDate
-  description: "LastUpdatedDate must be a real date"
-  summary-singular: "1 LastUpdatedDate must be a real date"
-  summary-plural: "{count} LastUpdatedDates must be a real date"
+  description: "Last updated date must be a real date"
+  summary-singular: "1 last updated date must be a real date"
+  summary-plural: "{count} last updated dates must be a real date"
