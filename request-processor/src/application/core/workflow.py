@@ -395,5 +395,5 @@ def convert_error_summary_to_json(error_summary):
                 json_data.append(message)
             else:
                 json_data.append(f"{count} {key}")
-                logger.error(f"Mapping not found for: {key}")
+                logger.warning(f"Mapping not found for: {key}")
     return json_data
