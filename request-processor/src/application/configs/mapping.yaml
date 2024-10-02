@@ -186,6 +186,41 @@ mappings:
   summary-plural: "{count} references must be unique"
 - field: conservation-area
   issue-type: missing value
-  description: Conservation area missing
+  description: "Conservation area missing"
   summary-singular: "1 conservation area missing"
   summary-plural: "{count} Conservation areas missing"
+- issue-type: invalid URI
+  field: SiteplanURL
+  description: "Siteplan URL must be a real URL"
+  summary-singular: "1 Siteplan URL must be a real URL"
+  summary-plural: "{count} Siteplan URLs must be a real URL"
+- issue-type: invalid URI
+  field: PlanningHistory
+  description: "Planning History URL must be a real URL"
+  summary-singular: "1 Planning History URL must be a real URL"
+  summary-plural: "{count} Planning History URLs must be a real URL"
+- issue-type: invalid flag
+  field: deliverable
+  description: Deliverable must be a valid flag
+  summary-singular: "1 deliverable must be a valid flag"
+  summary-plural: "{count} deliverables must be a valid flag"
+- issue-type: invalid date
+  field: EndDate
+  description: "EndDate must be a real date"
+  summary-singular: "1 EndDate must be a real date"
+  summary-plural: "{count} EndDates must be a real date"
+- issue-type: invalid date
+  field: PermissionDate
+  description: "PermissionDate must be a real date"
+  summary-singular: "1 PermissionDate must be a real date"
+  summary-plural: "{count} PermissionDates must be a real date"
+- issue-type: future entry-date
+  field: LastUpdatedDate
+  description: "LastUpdatedDate must be today or in the past"
+  summary-singular: "1 LastUpdatedDate must be today or in the past"
+  summary-plural: "{count} LastUpdatedDates must be today or in the past"
+- issue-type: invalid date
+  field: LastUpdatedDate
+  description: "LastUpdatedDate must be a real date"
+  summary-singular: "1 LastUpdatedDate must be a real date"
+  summary-plural: "{count} LastUpdatedDates must be a real date"
