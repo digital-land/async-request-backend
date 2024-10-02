@@ -4,7 +4,7 @@
 #
 #    pip-compile requirements/requirements.in
 #
--e git+https://github.com/digital-land/pipeline.git#egg=digital-land
+-e git+https://github.com/digital-land/pipeline.git@add_dask_dataframe#egg=digital-land
     # via -r requirements/requirements.in
 aiofiles==23.2.1
     # via datasette
