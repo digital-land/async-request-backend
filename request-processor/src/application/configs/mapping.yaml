@@ -224,3 +224,28 @@ mappings:
   description: "Last updated date must be a real date"
   summary-singular: "1 last updated date must be a real date"
   summary-plural: "{count} last updated dates must be a real date"
+- field: OrganisationURI
+  issue-type: missing value
+  description: OrganisationURI missing
+  summary-singular: "1 OrganisationURI missing"
+  summary-plural: "{count} OrganisationURIs missing"
+- field: SiteReference
+  issue-type: missing value
+  description: SiteReference missing
+  summary-singular: "1 SiteReference missing"
+  summary-plural: "{count} SiteReferences missing"
+- field: SiteNameAddress
+  issue-type: missing value
+  description: SiteNameAddress missing
+  summary-singular: "1 SiteNameAddress missing"
+  summary-plural: "{count} SiteNameAddresses missing"
+- field: GeoX
+  issue-type: missing value
+  description: GeoX missing
+  summary-singular: "1 GeoX missing"
+  summary-plural: "{count} GeoX co-ordinates missing"
+- field: GeoY
+  issue-type: missing value
+  description: GeoY missing
+  summary-singular: "1 GeoY missing"
+  summary-plural: "{count} GeoY co-ordinates missing"
