@@ -38,3 +38,9 @@ tree:
 -
   - point
   - geometry
+brownfield-land:
+- OrganisationURI
+- SiteReference
+- SiteNameAddress
+- GeoX
+- GeoY
