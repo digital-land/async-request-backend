@@ -1,16 +1,24 @@
-FROM python:3.12-alpine3.19
+FROM python:3.12.7-slim-bookworm
 
 ARG GIT_COMMIT
 ENV GIT_COMMIT=$GIT_COMMIT
 
-RUN apk add --no-cache musl-dev curl
 RUN pip3 install cython
-RUN apk add --no-cache libcurl curl-dev build-base git proj proj-dev proj-util geos-dev
 
-# Install GDAL dependencies
-RUN apk update && \
-    apk add --no-cache gdal-dev gdal gdal-tools aws-cli postgresql-client jq && \
-    rm -rf /var/cache/apk/*
+RUN apt update && \
+    apt install gcc -y && \
+    apt install g++ -y && \
+    apt install make && \
+    apt install git -y && \
+    apt install libc-dev curl proj-bin -y libproj-dev -y \
+    gdal-bin \
+    gdal-data \
+    awscli \
+    postgresql-client \
+    jq
+
+
+RUN apt clean
 
 COPY request-processor/requirements/requirements.txt requirements/requirements.txt
 COPY request-processor/makefile makefile
