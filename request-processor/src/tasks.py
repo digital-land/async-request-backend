@@ -68,8 +68,7 @@ def check_datafile(request: Dict, directories=None):
                 fileName = utils.save_content(content, tmp_dir)
             else:
                 save_response_to_db(request_schema.id, log)
-                logger.warning(f"URL check failed: {log}")
-                return
+                raise CustomException(log)
         response = workflow.run_workflow(
             fileName,
             request_schema.id,
