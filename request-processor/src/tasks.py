@@ -138,13 +138,15 @@ def _update_request_status(request_id, status):
 def _get_request(request_id):
     db_session = database.session_maker()
     with db_session() as session:
-        yield crud.get_request(session, request_id)
+        result = crud.get_request(session, request_id)
+    return result
 
 
 def _get_response(request_id):
     db_session = database.session_maker()
     with db_session() as session:
-        return crud.get_response(session, request_id)
+        result = crud.get_response(session, request_id)
+    return result
 
 
 def save_response_to_db(request_id, response_data):
