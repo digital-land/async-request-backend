@@ -3,22 +3,13 @@ FROM python:3.12.7-slim-bookworm
 ARG GIT_COMMIT
 ENV GIT_COMMIT=$GIT_COMMIT
 
-RUN pip3 install cython
+RUN pip install --no-cache-dir cython
 
-RUN apt update && \
-    apt install gcc -y && \
-    apt install g++ -y && \
-    apt install make && \
-    apt install git -y && \
-    apt install libc-dev curl proj-bin -y libproj-dev -y \
-    gdal-bin \
-    gdal-data \
-    awscli \
-    postgresql-client \
-    jq
+RUN apt update && apt install -y --no-install-recommends \
+    gcc g++ make git libc-dev curl proj-bin libproj-dev \
+    gdal-bin gdal-data awscli postgresql-client jq && \
+    rm -rf /var/lib/apt/lists/*
 
-
-RUN apt clean
 
 COPY request-processor/requirements/requirements.txt requirements/requirements.txt
 COPY request-processor/makefile makefile
