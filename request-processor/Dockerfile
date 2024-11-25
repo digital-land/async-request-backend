@@ -1,4 +1,4 @@
-FROM python:3.12.7-slim-bookworm
+FROM python:3.10-slim-bookworm
 
 ARG GIT_COMMIT
 ENV GIT_COMMIT=$GIT_COMMIT
@@ -6,7 +6,7 @@ ENV GIT_COMMIT=$GIT_COMMIT
 RUN pip install --no-cache-dir cython
 
 RUN apt update && apt install -y --no-install-recommends \
-    gcc g++ make git libc-dev curl proj-bin libproj-dev \
+    gcc g++ make git libc-dev curl proj-bin libproj-dev procps\
     gdal-bin gdal-data awscli postgresql-client jq && \
     rm -rf /var/lib/apt/lists/*
 

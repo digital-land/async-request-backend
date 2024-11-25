@@ -1,9 +1,10 @@
-FROM python:3.12-alpine3.19
+FROM python:3.10-slim-bookworm
 
 ARG GIT_COMMIT
 ENV GIT_COMMIT=$GIT_COMMIT
 
-RUN apk add --no-cache libcurl curl-dev build-base
+RUN apt update && apt install -y --no-install-recommends \
+libc-dev curl binutils
 # RUN apk add --no-cache libcurl curl-dev build-base linux-headers libffi-dev
 
 COPY request-api/requirements/requirements.txt requirements/requirements.txt
