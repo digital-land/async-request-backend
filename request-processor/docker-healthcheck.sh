@@ -4,11 +4,20 @@
 pgrep celery > /dev/null 2> /dev/null
 exit_code=$?
 
+if [ $exit_code -eq 0 ]; then
+  echo "Celery process is running"
+else
+  echo "Celery process is NOT running"
+  exit_code=1
+fi
+
 # Check SQS queue exists
-if aws sqs get-queue-url --queue-name celery > /dev/null 2> /dev/null
+if aws sqs get-queue-url --queue-name celery;
 then
+  echo "SQS Queue 'celery' is healthy and exists."
   sqs_status="HEALTHY"
 else
+  echo "SQS Queue 'celery' is unhealthy or does not exists."
   sqs_status="UNHEALTHY";
   exit_code=1;
 fi
