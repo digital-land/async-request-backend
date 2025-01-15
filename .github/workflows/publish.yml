@@ -41,7 +41,7 @@ jobs:
         run: make test
 
   publish-request-api:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: [detect-environments, test-request-api]
     strategy:
       matrix:
@@ -120,7 +120,7 @@ jobs:
 
 
   publish-request-processor:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: [detect-environments, test-request-processor]
     strategy:
       matrix:
