@@ -18,7 +18,7 @@ annotated-types==0.7.0
     # via
     #   -r requirements/requirements.txt
     #   pydantic
-anyio==4.8.0
+anyio==4.6.2.post1
     # via
     #   -r requirements/requirements.txt
     #   httpx
@@ -36,13 +36,13 @@ billiard==4.2.1
     #   celery
 black==23.3.0
     # via -r requirements/test_requirements.in
-boto3==1.36.0
+boto3==1.35.64
     # via
     #   -r requirements/requirements.txt
     #   celery
     #   kombu
     #   moto
-botocore==1.36.0
+botocore==1.35.64
     # via
     #   -r requirements/requirements.txt
     #   boto3
@@ -62,7 +62,7 @@ celery[pytest,sqs]==5.3.6
     #   -r requirements/test_requirements.in
     #   pytest-celery
     #   sentry-sdk
-certifi==2024.12.14
+certifi==2024.8.30
     # via
     #   -r requirements/requirements.txt
     #   httpcore
@@ -79,11 +79,11 @@ cfgv==3.4.0
     # via
     #   -r requirements/requirements.txt
     #   pre-commit
-charset-normalizer==3.4.1
+charset-normalizer==3.4.0
     # via
     #   -r requirements/requirements.txt
     #   requests
-click==8.1.8
+click==8.1.7
     # via
     #   -r requirements/requirements.txt
     #   black
@@ -112,7 +112,7 @@ click-repl==0.3.0
     # via
     #   -r requirements/requirements.txt
     #   celery
-cloudpickle==3.1.1
+cloudpickle==3.1.0
     # via
     #   -r requirements/requirements.txt
     #   dask
@@ -122,7 +122,7 @@ cryptography==3.4.8
     # via
     #   -r requirements/test_requirements.in
     #   moto
-dask==2024.8.0
+dask==2024.11.2
     # via
     #   -r requirements/requirements.txt
     #   digital-land
@@ -130,7 +130,7 @@ dataclasses-json==0.6.7
     # via
     #   -r requirements/requirements.txt
     #   digital-land
-datasette==0.65.1
+datasette==0.65
     # via
     #   -r requirements/requirements.txt
     #   digital-land
@@ -177,11 +177,11 @@ flexparser==0.4
     # via
     #   -r requirements/requirements.txt
     #   datasette
-fsspec==2024.12.0
+fsspec==2024.10.0
     # via
     #   -r requirements/requirements.txt
     #   dask
-geojson==3.2.0
+geojson==3.1.0
     # via
     #   -r requirements/requirements.txt
     #   digital-land
@@ -199,7 +199,7 @@ httpcore==1.0.7
     # via
     #   -r requirements/requirements.txt
     #   httpx
-httpx==0.28.1
+httpx==0.27.2
     # via
     #   -r requirements/requirements.txt
     #   datasette
@@ -207,7 +207,7 @@ hupper==1.12.1
     # via
     #   -r requirements/requirements.txt
     #   datasette
-identify==2.6.5
+identify==2.6.2
     # via
     #   -r requirements/requirements.txt
     #   pre-commit
@@ -232,11 +232,11 @@ itsdangerous==2.2.0
     #   -r requirements/requirements.txt
     #   asgi-csrf
     #   datasette
-janus==2.0.0
+janus==1.1.0
     # via
     #   -r requirements/requirements.txt
     #   datasette
-jinja2==3.1.5
+jinja2==3.1.4
     # via
     #   -r requirements/requirements.txt
     #   datasette
@@ -246,11 +246,11 @@ jmespath==1.0.1
     #   -r requirements/requirements.txt
     #   boto3
     #   botocore
-json-stream==2.3.3
+json-stream==2.3.2
     # via
     #   -r requirements/requirements.txt
     #   digital-land
-json-stream-rs-tokenizer==0.4.27
+json-stream-rs-tokenizer==0.4.26
     # via
     #   -r requirements/requirements.txt
     #   json-stream
@@ -267,7 +267,7 @@ markupsafe==3.0.2
     #   -r requirements/requirements.txt
     #   jinja2
     #   werkzeug
-marshmallow==3.25.1
+marshmallow==3.23.1
     # via
     #   -r requirements/requirements.txt
     #   dataclasses-json
@@ -336,7 +336,7 @@ psycopg2-binary==2.9.10
     # via
     #   -r requirements/requirements.txt
     #   testcontainers-postgres
-pyarrow==19.0.0
+pyarrow==18.0.0
     # via
     #   -r requirements/requirements.txt
     #   digital-land
@@ -346,7 +346,7 @@ pycparser==2.22
     # via
     #   -r requirements/requirements.txt
     #   cffi
-pycurl==7.45.4
+pycurl==7.45.3
     # via
     #   -r requirements/requirements.txt
     #   celery
@@ -361,11 +361,11 @@ pydantic-core==2.18.1
     #   pydantic
 pyflakes==3.0.1
     # via flake8
-pygit2==1.17.0
+pygit2==1.16.0
     # via
     #   -r requirements/requirements.txt
     #   digital-land
-pyparsing==3.2.1
+pyparsing==3.2.0
     # via
     #   -r requirements/requirements.txt
     #   rdflib
@@ -394,7 +394,7 @@ python-dateutil==2.9.0.post0
     #   celery
     #   moto
     #   pandas
-python-multipart==0.0.20
+python-multipart==0.0.17
     # via
     #   -r requirements/requirements.txt
     #   asgi-csrf
@@ -410,7 +410,7 @@ pyyaml==6.0.2
     #   digital-land
     #   pre-commit
     #   responses
-rdflib==7.1.2
+rdflib==7.1.1
     # via
     #   -r requirements/requirements.txt
     #   sparqlwrapper
@@ -427,7 +427,7 @@ requests-mock==1.12.1
     # via -r requirements/test_requirements.in
 responses==0.25.6
     # via moto
-s3transfer==0.11.0
+s3transfer==0.10.3
     # via
     #   -r requirements/requirements.txt
     #   boto3
@@ -439,7 +439,7 @@ shapely==2.0.2
     #   digital-land
 shortuuid==1.0.13
     # via -r requirements/requirements.txt
-six==1.17.0
+six==1.16.0
     # via
     #   -r requirements/requirements.txt
     #   esridump
@@ -448,6 +448,7 @@ sniffio==1.3.1
     # via
     #   -r requirements/requirements.txt
     #   anyio
+    #   httpx
 sparqlwrapper==2.0.0
     # via
     #   -r requirements/requirements.txt
@@ -456,7 +457,7 @@ spatialite==0.0.3
     # via
     #   -r requirements/requirements.txt
     #   digital-land
-sqlalchemy==2.0.37
+sqlalchemy==2.0.36
     # via
     #   -r requirements/requirements.txt
     #   testcontainers-postgres
@@ -497,7 +498,7 @@ tzdata==2024.2
     #   celery
     #   kombu
     #   pandas
-urllib3==2.3.0
+urllib3==2.2.3
     # via
     #   -r requirements/requirements.txt
     #   botocore
@@ -507,7 +508,7 @@ urllib3==2.3.0
     #   requests
     #   responses
     #   sentry-sdk
-uvicorn==0.34.0
+uvicorn==0.32.0
     # via
     #   -r requirements/requirements.txt
     #   datasette
@@ -521,7 +522,7 @@ vine==5.1.0
     #   amqp
     #   celery
     #   kombu
-virtualenv==20.29.0
+virtualenv==20.27.1
     # via
     #   -r requirements/requirements.txt
     #   pre-commit

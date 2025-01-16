@@ -6,7 +6,6 @@ pydantic==2.7.0
 cchardet==2.1.7
 httpx
 pre-commit
-dask==2024.8.0
 -e git+https://github.com/digital-land/pipeline.git#egg=digital-land
 shortuuid==1.0.13
 sentry-sdk[celery]==2.2.1
