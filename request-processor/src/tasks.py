@@ -45,47 +45,68 @@ def check_datafile(request: Dict, directories=None):
         # Ensure tmp_dir exists, create it if it doesn't
         Path(tmp_dir).mkdir(parents=True, exist_ok=True)
         if request_data.type == "check_file":
-            fileName = request_data.uploaded_filename
-            try:
-                s3_transfer_manager.download_with_default_configuration(
-                    os.environ["REQUEST_FILES_BUCKET_NAME"],
-                    request_data.uploaded_filename,
-                    f"{tmp_dir}/{request_data.uploaded_filename}",
-                    max_file_size_mb,
-                )
-            except Exception as e:
-                logger.error(str(e))
-                log = {}
-                log["message"] = "The uploaded file not found in S3 bucket"
-                log["status"] = ""
-                log["exception_type"] = type(e).__name__
-                save_response_to_db(request_schema.id, log)
-                raise CustomException(log)
+            fileName = handle_check_file(request_schema, request_data, tmp_dir)
 
         elif request_data.type == "check_url":
             log, content = utils.get_request(request_data.url)
             if content:
-                fileName = utils.save_content(content, tmp_dir)
+                check = utils.check_content(content)
+                if check:
+                    fileName = utils.save_content(content, tmp_dir)
+                else:
+                    log = {}
+                    log[
+                        "message"
+                    ] = "The response has multiple Feature layers. Please provide a URL with a single Feature layer."
+                    log["status"] = ""
+                    log["exception_type"] = "URL check failed"
+                    save_response_to_db(request_schema.id, log)
+                    return
             else:
                 save_response_to_db(request_schema.id, log)
                 logger.warning(f"URL check failed: {log}")
                 return
-        response = workflow.run_workflow(
-            fileName,
-            request_schema.id,
-            request_data.collection,
-            request_data.dataset,
-            "",
-            request_data.geom_type if hasattr(request_data, "geom_type") else "",
-            (
-                request_data.column_mapping
-                if hasattr(request_data, "column_mapping")
-                else {}
-            ),
-            directories,
-        )
-        save_response_to_db(request_schema.id, response)
+
+        if fileName:
+            response = workflow.run_workflow(
+                fileName,
+                request_schema.id,
+                request_data.collection,
+                request_data.dataset,
+                "",
+                request_data.geom_type if hasattr(request_data, "geom_type") else "",
+                (
+                    request_data.column_mapping
+                    if hasattr(request_data, "column_mapping")
+                    else {}
+                ),
+                directories,
+            )
+            save_response_to_db(request_schema.id, response)
+        else:
+            save_response_to_db(request_schema.id, log)
+            raise CustomException(log)
     return _get_request(request_schema.id)
+
+
+def handle_check_file(request_schema, request_data, tmp_dir):
+    fileName = request_data.uploaded_filename
+    try:
+        s3_transfer_manager.download_with_default_configuration(
+            os.environ["REQUEST_FILES_BUCKET_NAME"],
+            request_data.uploaded_filename,
+            f"{tmp_dir}/{request_data.uploaded_filename}",
+            max_file_size_mb,
+        )
+    except Exception as e:
+        logger.error(str(e))
+        log = {}
+        log["message"] = "The uploaded file not found in S3 bucket"
+        log["status"] = ""
+        log["exception_type"] = type(e).__name__
+        save_response_to_db(request_schema.id, log)
+        raise CustomException(log)
+    return fileName
 
 
 @task_prerun.connect

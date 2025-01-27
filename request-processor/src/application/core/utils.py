@@ -4,6 +4,7 @@ import hashlib
 import requests
 from cchardet import UniversalDetector
 import csv
+import json
 
 logger = get_logger(__name__)
 
@@ -42,6 +43,34 @@ def get_request(url, verify_ssl=True):
                 "The requested URL could not be downloaded: " + log["status"] + " error"
             )
     return log, content
+
+
+def check_content(content):
+    """
+    Determines if the response content from a URL contains multiple layers.
+
+    Parameters:
+        content (bytes/str/dict): The content to check.
+
+    Returns:
+        bool: True if valid, False if the URL contains multiple layers.
+    """
+    try:
+        if isinstance(content, bytes):
+            content = content.decode("utf-8")
+        if isinstance(content, str):
+            content = json.loads(content)
+
+        if (
+            "layers" in content
+            and isinstance(content["layers"], list)
+            and len(content["layers"]) > 1
+        ):
+            return False
+    except Exception as e:
+        logger.warning(f"Error checking/parsing content. Proceeding as normal: {e}")
+        return True  # Assume valid if we can't parse it
+    return True
 
 
 def save_content(content, tmp_dir):

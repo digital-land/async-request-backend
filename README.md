@@ -38,7 +38,7 @@ A docker compose setup has been configured to run the async request backend.  Th
 You can run the docker compose stack by executing the following command:
 
 ```shell
-docker compose up -d
+docker-compose up -d --no-deps --build
 ```
 To view service logs, use:
 ```shell
