@@ -57,7 +57,7 @@ def check_datafile(request: Dict, directories=None):
                     log = {}
                     log[
                         "message"
-                    ] = "Data URL includes multiple dataset layers. Data URL must include a single dataset layer only."
+                    ] = "Endpoint URL includes multiple dataset layers. Endpoint URL must include a single dataset layer only."  # noqa
                     log["status"] = ""
                     log["exception_type"] = "URL check failed"
                     save_response_to_db(request_schema.id, log)
