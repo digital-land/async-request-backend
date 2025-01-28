@@ -57,7 +57,7 @@ def check_datafile(request: Dict, directories=None):
                     log = {}
                     log[
                         "message"
-                    ] = "The response has multiple Feature layers. Please provide a URL with a single Feature layer."
+                    ] = "Data URL includes multiple dataset layers. Data URL must include a single dataset layer only."
                     log["status"] = ""
                     log["exception_type"] = "URL check failed"
                     save_response_to_db(request_schema.id, log)
