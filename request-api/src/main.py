@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 from typing import List, Dict, Any
 import sentry_sdk
+from slack_sdk import WebClient
 
 import boto3
 from botocore.exceptions import ClientError, BotoCoreError
@@ -42,18 +43,36 @@ if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
 
 app = FastAPI()
 
-
+def send_slack_alert(message):
+    slack_token = os.environ.get("SLACK_BOT_TOKEN", "")
+    slack_channel = os.environ.get("SLACK_CHANNEL", "#planning-data-platform")
+    client = WebClient(token=slack_token)
+    bot_name = "SQS and DB"
+    client.chat_postMessage(channel=slack_channel, text=message,username=bot_name)
+    
 # Dependency
 def _get_db():
-    db = session_maker()()
-    try:
-        yield db
-    finally:
-        db.close()
-
+    retries = 5
+    for attempt in range(retries):
+        db = session_maker()()
+        try:
+            yield db
+        except SQLAlchemyError as e:
+            send_slack_alert("DB connection issue detected in async-request-backend..")
+            logging.exception(f"DB connection failed on attempt {attempt}. Retrying...")
+        finally:
+            db.close()
+            
 
 def _get_sqs_client():
-    return boto3.client("sqs")
+    retries = 5
+    for attempt in range(retries):
+        try:
+            logging.info(f"SQS client successfully connected on attempt {attempt}.")
+            return boto3.client("sqs")
+        except (ClientError, BotoCoreError) as e:
+            send_slack_alert("SQS connection issue detected in async-request-backend..")
+            logging.exception(f"SQS connection failed on attempt {attempt}. Retrying...")
 
 
 @app.get("/health", response_model=HealthCheckResponse)
@@ -64,9 +83,7 @@ def healthcheck(
         db_result = db.execute(text("SELECT 1"))
         db_reachable = len(db_result.all()) == 1
     except SQLAlchemyError:
-        logging.exception(
-            "Health check of request-db failed",
-        )
+        logging.exception("Health check of request-db failed")
         db_reachable = False
 
     try:
