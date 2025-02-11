@@ -44,11 +44,11 @@ if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
 app = FastAPI()
 
 def send_slack_alert(message):
-    if not slack_token or not slack_channel:
-        logging.warning("Slack token or channel is missing.")
-        return 
     slack_token = os.environ.get("SLACK_BOT_TOKEN", "")
     slack_channel = os.environ.get("SLACK_CHANNEL", "")
+    if not slack_token or not slack_channel:
+        logging.warning("Slack token or channel is missing.")
+        return
     client = WebClient(token=slack_token)
     bot_name = "SQS and DB"
     client.chat_postMessage(channel=slack_channel, text=message,username=bot_name)
@@ -73,7 +73,7 @@ def _get_db():
             logging.exception(f"Database connection failed (Attempt {attempt+1}): {e}")
             if is_connection_restored(datetime.now()):
                 break
-    send_slack_alert("SQS connection issue detected in async-request-backend..")
+    send_slack_alert("DB connection issue detected in async-request-backend..")
 
 
 def _get_sqs_client():
