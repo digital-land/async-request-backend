@@ -145,7 +145,7 @@ def read_response_details(
 ):
     pagination_params = PaginationParams(offset=params.offset, limit=params.limit)
     paginated_result = crud.get_response_details(
-        db, request_id, params.jsonpath, pagination_params
+        db, request_id, params.jsonpath,params.issue_type, params.field, pagination_params
     )
     http_response.headers["X-Pagination-Total-Results"] = str(
         paginated_result.total_results_available

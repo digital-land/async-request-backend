@@ -1,3 +1,4 @@
+from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -14,6 +15,8 @@ def get_response_details(
     db: Session,
     request_id: int,
     jsonpath: str = None,
+    issue_type: Optional[str] = None,
+    field: Optional[str] = None,
     pagination_params=PaginationParams(),
 ):
     base_query = (
@@ -24,6 +27,16 @@ def get_response_details(
     if jsonpath is not None:
         base_query = base_query.filter(
             func.jsonb_path_match(models.ResponseDetails.detail, jsonpath)
+        )
+
+    if issue_type is not None:
+       base_query = base_query.filter(
+            models.ResponseDetails.detail["issue_logs"].contains([{"issue-type": issue_type}])
+        )
+        
+    if field is not None:
+        base_query = base_query.filter(
+            models.ResponseDetails.detail.contains({"issue_logs": [{"field": field}]})
         )
 
     response_details = (
