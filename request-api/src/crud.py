@@ -30,10 +30,12 @@ def get_response_details(
         )
 
     if issue_type is not None:
-       base_query = base_query.filter(
-            models.ResponseDetails.detail["issue_logs"].contains([{"issue-type": issue_type}])
+        base_query = base_query.filter(
+            models.ResponseDetails.detail["issue_logs"].contains(
+                [{"issue-type": issue_type}]
+            )
         )
-        
+
     if field is not None:
         base_query = base_query.filter(
             models.ResponseDetails.detail.contains({"issue_logs": [{"field": field}]})
