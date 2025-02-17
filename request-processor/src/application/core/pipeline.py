@@ -114,7 +114,6 @@ def fetch_response_data(
                 organisation_path=os.path.join(cache_dir, "organisation.csv"),
                 save_harmonised=False,
                 organisations=[organisation],
-                custom_temp_dir=os.path.join(cache_dir),
                 converted_dir=converted_dir,
             )
         except Exception as err:
@@ -136,7 +135,6 @@ def pipeline_run(
     save_harmonised=False,
     column_field_dir=None,
     dataset_resource_dir=None,
-    custom_temp_dir=None,  # TBD: rename to "tmpdir"
     endpoints=[],
     entry_date="",
 ):
@@ -171,7 +169,6 @@ def pipeline_run(
         ConvertPhase(
             path=input_path,
             dataset_resource_log=dataset_resource_log,
-            custom_temp_dir=custom_temp_dir,
             output_path=os.path.join(converted_dir, request_id, f"{resource}.csv"),
         ),
         NormalisePhase(skip_patterns=skip_patterns, null_path=null_path),
