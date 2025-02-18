@@ -88,9 +88,9 @@ def healthcheck(
             ),
             DependencyHealth(
                 name="sqs",
-                status=HealthStatus.HEALTHY
-                if queue_reachable
-                else HealthStatus.UNHEALTHY,
+                status=(
+                    HealthStatus.HEALTHY if queue_reachable else HealthStatus.UNHEALTHY
+                ),
             ),
         ],
     )
