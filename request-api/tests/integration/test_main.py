@@ -38,8 +38,20 @@ def test_read_request(db, sqs_queue, helpers):
 
 
 expected_jsondata = [
-    {"line": 1, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]},
-    {"line": 2, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]},
+    {
+        "line": 1,
+        "issue_logs": [
+            {"severity": "warning", "issue-type": "invalid geometry - fixed"},
+            {"severity": "error"},
+        ],
+    },
+    {
+        "line": 2,
+        "issue_logs": [
+            {"severity": "warning", "field": "geometry"},
+            {"severity": "error"},
+        ],
+    },
     {"line": 3, "issue_logs": [{"severity": "warning"}]},
 ]
 
@@ -123,6 +135,50 @@ def test_read_response_details_limit1_jsonpath(
     )
 
 
+@pytest.mark.parametrize(
+    "filter_key, filter_value, offset, limit, expected_json, expected_total, expected_pglimit",
+    [
+        (
+            "issue_type",
+            "invalid geometry - fixed",
+            0,
+            1,
+            [expected_jsondata[0]],
+            "1",
+            "1",
+        ),
+        ("issue_type", None, 0, 3, expected_jsondata, "3", "3"),
+        ("field", "geometry", 0, 1, [expected_jsondata[1]], "1", "1"),
+        ("field", None, 0, 3, expected_jsondata, "3", "3"),
+        (None, None, 0, 3, expected_jsondata, "3", "3"),
+    ],
+)
+def test_filtering_on_issue_type_and_field(
+    db,
+    helpers,
+    test_request,
+    filter_key,
+    filter_value,
+    offset,
+    limit,
+    expected_json,
+    expected_total,
+    expected_pglimit,
+):
+    params = {"offset": offset, "limit": limit}
+
+    if filter_value is not None:
+        params[filter_key] = filter_value
+
+    read_details_response = client.get(
+        f"/requests/{test_request.id}/response-details", params=params
+    )
+
+    assert_response_content(
+        read_details_response, expected_json, expected_total, offset, expected_pglimit
+    )
+
+
 def test_read_unknown_request(db):
     response = client.get("/requests/0")
     assert response.status_code == 404
@@ -147,13 +203,22 @@ def test_request():
                 models.ResponseDetails(
                     detail={
                         "line": 1,
-                        "issue_logs": [{"severity": "warning"}, {"severity": "error"}],
+                        "issue_logs": [
+                            {
+                                "severity": "warning",
+                                "issue-type": "invalid geometry - fixed",
+                            },
+                            {"severity": "error"},
+                        ],
                     }
                 ),
                 models.ResponseDetails(
                     detail={
                         "line": 2,
-                        "issue_logs": [{"severity": "warning"}, {"severity": "error"}],
+                        "issue_logs": [
+                            {"severity": "warning", "field": "geometry"},
+                            {"severity": "error"},
+                        ],
                     }
                 ),
                 models.ResponseDetails(
