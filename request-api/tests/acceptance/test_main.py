@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from urllib.parse import quote
 
 from main import app
-from tests.integration.test_crud import test_request
+from tests.integration.test_crud import test_request # noqa: F401
 
 client = TestClient(app)
 
@@ -50,7 +50,7 @@ expected_json = [
     ],
 )
 def test_read_response_details_jsonpath_filters(
-    db, helpers, test_request, jsonpath, expected_json, expected_total, expected_pglimit
+    db, helpers, test_request, jsonpath, expected_json, expected_total, expected_pglimit # noqa: F811
 ):
     jsonpath = quote(jsonpath)
     response = client.get(
