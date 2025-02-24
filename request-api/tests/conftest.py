@@ -53,8 +53,8 @@ def db(postgres, test_dir):
     Session = sessionmaker(bind=engine)
     session = Session()
 
-    yield session 
-    
+    yield session
+
     session.close()
     drop_database(os.environ["DATABASE_URL"])
 
