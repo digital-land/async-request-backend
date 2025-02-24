@@ -1,11 +1,8 @@
-import datetime
 import pytest
 from fastapi.testclient import TestClient
 from urllib.parse import quote
 
 from main import app
-import database
-from request_model import schemas, models
 from tests.integration.test_crud import test_request
 
 client = TestClient(app)
@@ -61,3 +58,4 @@ def test_read_response_details_jsonpath_filters(
     )
     assert response.status_code == 200
     assert response.json() == expected_json
+    assert response.headers["X-Pagination-Total-Results"] == expected_total
