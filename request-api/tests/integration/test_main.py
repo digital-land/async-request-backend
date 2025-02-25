@@ -164,9 +164,15 @@ def db_session(db):
 @pytest.mark.parametrize(
     "jsonpath, expected_lines",
     [
-        ('$.issue_logs[*]."severity"=="error"', [1, 2]),
+        (
+            '$.issue_logs[*]."severity"=="error" && $.issue_logs[*]."field"=="geometry"',
+            [2],
+        ),
+        (
+            '$.issue_logs[*]."severity"=="warning" && $.issue_logs[*]."issue-type"=="invalid geometry - fixed"',
+            [1],
+        ),
         ('$.issue_logs[*]."severity"=="warning"', [1, 3]),
-        ('$.issue_logs[*]."field"=="geometry"', [2]),
     ],
 )
 def test_get_response_details(db_session, test_request, jsonpath, expected_lines):

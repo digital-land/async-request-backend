@@ -1,4 +1,5 @@
 import datetime
+from urllib.parse import quote
 from fastapi.testclient import TestClient
 import pytest
 
@@ -29,7 +30,7 @@ expected_json = [
         "issue_logs": [
             {
                 "field": "organisation",
-                "issue-type": "invalid geometry - fixed",
+                "issue-type": "invalid organisation",
                 "severity": "warning",
             }
         ],
@@ -39,12 +40,21 @@ expected_json = [
         "issue_logs": [
             {
                 "field": "geometry",
-                "issue-type": "invalid organisation",
+                "issue-type": "invalid geometry",
                 "severity": "error",
             }
         ],
     },
-    {"line": 3, "issue_logs": [{"severity": "warning"}]},
+    {
+        "line": 3,
+        "issue_logs": [
+            {
+                "field": "organisation",
+                "issue-type": "invalid organisation",
+                "severity": "warning",
+            }
+        ],
+    },
 ]
 
 
@@ -63,6 +73,12 @@ expected_json = [
             "1",
             "50",
         ),
+        (
+            '$.issue_logs[*]."issue-type"=="invalid organisation" && $.issue_logs[*]."field"=="organisation"',
+            [expected_json[0], expected_json[2]],
+            "2",
+            "50",
+        ),
     ],
 )
 def test_read_response_details_jsonpath_filters(
@@ -74,6 +90,7 @@ def test_read_response_details_jsonpath_filters(
     expected_total,
     expected_pglimit,
 ):
+    jsonpath = quote(jsonpath)
     response = client.get(
         f"/requests/{create_test_request.id}/response-details?jsonpath={jsonpath}"
     )
@@ -105,7 +122,7 @@ def create_test_request():
                         "issue_logs": [
                             {
                                 "field": "organisation",
-                                "issue-type": "invalid geometry - fixed",
+                                "issue-type": "invalid organisation",
                                 "severity": "warning",
                             }
                         ],
@@ -117,14 +134,23 @@ def create_test_request():
                         "issue_logs": [
                             {
                                 "field": "geometry",
-                                "issue-type": "invalid organisation",
+                                "issue-type": "invalid geometry",
                                 "severity": "error",
                             }
                         ],
                     }
                 ),
                 models.ResponseDetails(
-                    detail={"line": 3, "issue_logs": [{"severity": "warning"}]}
+                    detail={
+                        "line": 3,
+                        "issue_logs": [
+                            {
+                                "field": "organisation",
+                                "issue-type": "invalid organisation",
+                                "severity": "warning",
+                            }
+                        ],
+                    }
                 ),
             ],
         ),
