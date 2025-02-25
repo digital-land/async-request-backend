@@ -39,11 +39,13 @@ expected_jsondata = [
         ('$.issue_logs[*]."field"=="geometry"', [2]),
     ],
 )
-def test_get_response_details(db, test_request, jsonpath, expected_lines):
+def test_get_response_details(db, create_test_request, jsonpath, expected_lines):
     pagination_params = {"offset": 0, "limit": 10}
     pagination_params = PaginationParams(**pagination_params)
 
-    result = get_response_details(db, test_request.id, jsonpath, pagination_params)
+    result = get_response_details(
+        db, create_test_request.id, jsonpath, pagination_params
+    )
 
     # Extract line numbers from returned details
     result_lines = [detail.detail["line"] for detail in result.data]
@@ -54,16 +56,16 @@ def test_get_response_details(db, test_request, jsonpath, expected_lines):
 
 
 @pytest.fixture(scope="module")
-def test_request():
+def create_test_request():
     request_model = models.Request(
         type=schemas.RequestTypeEnum.check_file,
         created=datetime.datetime.now(),
         modified=datetime.datetime.now(),
         status="COMPLETE",
         params=schemas.CheckFileParams(
-            collection="article-4-direction",
-            dataset="article-4-direction-area",
-            original_filename="article-direction-area.csv",
+            collection="conservation-area",
+            dataset="conservation-area",
+            original_filename="conservation-area.csv",
             uploaded_filename="492f15d8-45e4-427e-bde0-f60d69889f40",
         ).model_dump(),
         response=models.Response(

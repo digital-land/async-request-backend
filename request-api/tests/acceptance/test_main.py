@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from urllib.parse import quote
 
 from main import app
-from tests.integration.test_crud import test_request  # noqa: F401
+from tests.integration.test_crud import create_test_request
 
 client = TestClient(app)
 
@@ -52,7 +52,7 @@ expected_json = [
 def test_read_response_details_jsonpath_filters(
     db,
     helpers,
-    test_request,  # noqa: F811
+    create_test_request,
     jsonpath,
     expected_json,
     expected_total,
@@ -60,7 +60,7 @@ def test_read_response_details_jsonpath_filters(
 ):
     jsonpath = quote(jsonpath)
     response = client.get(
-        f"/requests/{test_request.id}/response-details?jsonpath={jsonpath}"
+        f"/requests/{create_test_request.id}/response-details?jsonpath={jsonpath}"
     )
     assert response.status_code == 200
     assert response.json() == expected_json
