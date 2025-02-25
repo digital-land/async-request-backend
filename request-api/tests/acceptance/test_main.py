@@ -1,5 +1,4 @@
 import datetime
-from shlex import quote
 from fastapi.testclient import TestClient
 import pytest
 
@@ -75,7 +74,6 @@ def test_read_response_details_jsonpath_filters(
     expected_total,
     expected_pglimit,
 ):
-    jsonpath = quote(jsonpath)
     response = client.get(
         f"/requests/{create_test_request.id}/response-details?jsonpath={jsonpath}"
     )
