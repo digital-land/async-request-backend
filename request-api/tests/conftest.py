@@ -8,8 +8,6 @@ from moto import mock_aws
 from sqlalchemy_utils import database_exists, create_database, drop_database
 from testcontainers.core.waiting_utils import wait_container_is_ready
 from testcontainers.postgres import PostgresContainer
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 from request_model import schemas
 
@@ -49,13 +47,7 @@ def db(postgres, test_dir):
     )
     alembic.command.upgrade(config, "head")
 
-    engine = create_engine(os.environ["DATABASE_URL"])
-    Session = sessionmaker(bind=engine)
-    session = Session()
-
-    yield session
-
-    session.close()
+    yield
     drop_database(os.environ["DATABASE_URL"])
 
 
