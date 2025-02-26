@@ -30,7 +30,7 @@ def get_response_details(
         base_query.offset(pagination_params.offset).limit(pagination_params.limit).all()
     )
     return PaginatedResult(
-        params=pagination_params.model_dump(),
+        params=pagination_params,
         total_results_available=base_query.count(),
         data=response_details,
     )

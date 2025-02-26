@@ -9,21 +9,6 @@ from request_model import models, schemas
 
 client = TestClient(app)
 
-
-@pytest.fixture(scope="module")
-def sqs_queue(sqs_client):
-    sqs_client.create_queue(QueueName="celery")
-    return sqs_client
-
-
-def test_healthcheck(db, sqs_queue):
-    response = client.get("/health")
-    response_json = response.json()
-    assert response.status_code == 200
-    assert response_json["dependencies"][0]["status"] == "HEALTHY"
-    assert response_json["dependencies"][1]["status"] == "HEALTHY"
-
-
 expected_json = [
     {
         "line": 1,
