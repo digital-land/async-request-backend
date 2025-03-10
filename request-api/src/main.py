@@ -87,7 +87,7 @@ def _get_sqs_client():
             return boto3.client("sqs")
         except (ClientError, BotoCoreError) as e:
             logging.exception(
-                f"SQS connection failed on attempt {attempt}. Retrying..."
+                f"SQS connection failed on attempt {attempt}. Retrying...Error: {e}"
             )
             if is_connection_restored(datetime.now()):
                 break
