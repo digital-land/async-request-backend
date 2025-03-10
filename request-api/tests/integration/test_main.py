@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic_core import ValidationError
 
+from crud import get_response_details
 import database
 from main import app
 from request_model import schemas, models
@@ -38,8 +39,28 @@ def test_read_request(db, sqs_queue, helpers):
 
 
 expected_jsondata = [
-    {"line": 1, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]},
-    {"line": 2, "issue_logs": [{"severity": "warning"}, {"severity": "error"}]},
+    {
+        "line": 1,
+        "issue_logs": [
+            {
+                "severity": "warning",
+                "field": "organisation",
+                "issue-type": "invalid geometry - fixed",
+            },
+            {"severity": "error"},
+        ],
+    },
+    {
+        "line": 2,
+        "issue_logs": [
+            {
+                "severity": "error",
+                "field": "geometry",
+                "issue-type": "invalid organisation",
+            },
+            {"severity": "error"},
+        ],
+    },
     {"line": 3, "issue_logs": [{"severity": "warning"}]},
 ]
 
@@ -129,6 +150,43 @@ def test_read_unknown_request(db):
 
 
 @pytest.fixture(scope="module")
+def db_session(db):
+    session = database.session_maker()
+    session = session()
+
+    try:
+        yield session
+    finally:
+        session.rollback()
+        session.close()
+
+
+@pytest.mark.parametrize(
+    "jsonpath, expected_lines",
+    [
+        (
+            '$.issue_logs[*]."severity"=="error" && $.issue_logs[*]."field"=="geometry"',
+            [2],
+        ),
+        (
+            '$.issue_logs[*]."severity"=="warning" && $.issue_logs[*]."issue-type"=="invalid geometry - fixed"',
+            [1],
+        ),
+        ('$.issue_logs[*]."severity"=="warning"', [1, 3]),
+    ],
+)
+def test_get_response_details(db_session, test_request, jsonpath, expected_lines):
+    # Direct query test
+    result = get_response_details(db_session, test_request.id, jsonpath)
+
+    # Extract line numbers from the result
+    result_lines = [detail.detail["line"] for detail in result.data]
+
+    assert sorted(result_lines) == sorted(expected_lines)
+    assert result.total_results_available >= len(expected_lines)
+
+
+@pytest.fixture(scope="module")
 def test_request():
     request_model = models.Request(
         type=schemas.RequestTypeEnum.check_file,
@@ -147,13 +205,27 @@ def test_request():
                 models.ResponseDetails(
                     detail={
                         "line": 1,
-                        "issue_logs": [{"severity": "warning"}, {"severity": "error"}],
+                        "issue_logs": [
+                            {
+                                "field": "organisation",
+                                "issue-type": "invalid geometry - fixed",
+                                "severity": "warning",
+                            },
+                            {"severity": "error"},
+                        ],
                     }
                 ),
                 models.ResponseDetails(
                     detail={
                         "line": 2,
-                        "issue_logs": [{"severity": "warning"}, {"severity": "error"}],
+                        "issue_logs": [
+                            {
+                                "field": "geometry",
+                                "issue-type": "invalid organisation",
+                                "severity": "error",
+                            },
+                            {"severity": "error"},
+                        ],
                     }
                 ),
                 models.ResponseDetails(
