@@ -1,6 +1,6 @@
 import logging
 import os
-import datetime
+from datetime import datetime
 from typing import List, Dict, Any
 import sentry_sdk
 from slack_sdk import WebClient
