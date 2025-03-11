@@ -3,13 +3,13 @@ import os
 from datetime import datetime
 from typing import List, Dict, Any
 import sentry_sdk
-from slack_sdk import WebClient
 
 import boto3
 from botocore.exceptions import ClientError, BotoCoreError
 from fastapi import FastAPI, Depends, Request, Response, HTTPException
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
+from slack_sdk import WebClient
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -102,7 +102,9 @@ def healthcheck(
         db_result = db.execute(text("SELECT 1"))
         db_reachable = len(db_result.all()) == 1
     except SQLAlchemyError:
-        logging.exception("Health check of request-db failed")
+        logging.exception(
+            "Health check of request-db failed",
+        )
         db_reachable = False
 
     try:
