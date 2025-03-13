@@ -222,7 +222,10 @@ def pipeline_run(
             field_typology_map=specification.get_field_typology_map(),
             field_prefix_map=specification.get_field_prefix_map(),
         ),
-        FactLookupPhase(lookups),
+        FactLookupPhase(
+            lookups=lookups,
+            odp_collections=specification.get_odp_collections(),
+        ),
         FactPrunePhase(),
         SavePhase(
             output_path,
