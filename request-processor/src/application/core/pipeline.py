@@ -31,6 +31,7 @@ from digital_land.phase.priority import PriorityPhase
 from digital_land.pipeline import run_pipeline, Pipeline, Lookups
 from digital_land.commands import get_resource_unidentified_lookups
 from digital_land.check import duplicate_reference_check
+from digital_land.api import API
 
 from pathlib import Path
 
@@ -147,6 +148,7 @@ def pipeline_run(
     column_field_log = ColumnFieldLog(dataset=dataset, resource=resource)
     dataset_resource_log = DatasetResourceLog(dataset=dataset, resource=resource)
 
+    api = API(specification=specification)
     # load pipeline configuration
     skip_patterns = pipeline.skip_patterns(resource)
     columns = pipeline.columns(resource, endpoints=endpoints)
@@ -161,6 +163,9 @@ def pipeline_run(
     organisation = Organisation(organisation_path, Path(pipeline.path))
 
     severity_csv_path = os.path.join(specification_dir, "issue-type.csv")
+
+    # Load valid category values
+    valid_category_values = api.get_valid_category_values(dataset, pipeline)
     # resource specific default values
     if len(organisations) == 1:
         default_values["organisation"] = organisations[0]
@@ -188,6 +193,7 @@ def pipeline_run(
             field_datatype_map=specification.get_field_datatype_map(),
             issues=issue_log,
             dataset=dataset,
+            valid_category_values=valid_category_values,
         ),
         DefaultPhase(
             default_fields=default_fields,
