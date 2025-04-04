@@ -143,9 +143,7 @@ def fetch_pipeline_csvs(
     specification_dir,
 ):
     os.makedirs(pipeline_dir, exist_ok=True)
-    pipeline_csvs = [
-        "column.csv",
-    ]
+    pipeline_csvs = ["column.csv", "transform.csv"]
     downloaded = False
     for pipeline_csv in pipeline_csvs:
         try:
