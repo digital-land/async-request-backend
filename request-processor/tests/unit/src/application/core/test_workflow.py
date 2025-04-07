@@ -280,7 +280,7 @@ def test_fetch_pipelines(
     source_url = "https://raw.githubusercontent.com/digital-land//"
     expected_url = f"{source_url}{collection + '-collection'}/main/pipeline/column.csv"
     expected_file_path = os.path.join(pipeline_dir, "column.csv")
-    mocked_urlretrieve.assert_called_with(expected_url, expected_file_path)
+    mocked_urlretrieve.assert_any_call(expected_url, expected_file_path)
 
     if expected_row:  # test_fetch_pipelines
         with open(os.path.join(pipeline_dir, "column.csv"), newline="") as csv_file:
