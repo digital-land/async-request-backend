@@ -121,6 +121,18 @@ def mock_fetch_pipeline_csvs(mock_directories):
             dictwriter.writeheader()
             dictwriter.writerow(row)
 
+        mock_transform_csv = os.path.join(pipeline_dir, "transform.csv")
+        row = {
+            "dataset": dataset_name,
+            "replacement-field": "name",
+            "field": "SiteReference",
+        }
+        fieldnames = row.keys()
+        with open(mock_transform_csv, "w") as f:
+            dictwriter = csv.DictWriter(f, fieldnames=fieldnames)
+            dictwriter.writeheader()
+            dictwriter.writerow(row)
+
     return _mock_fetch_pipeline_csvs
 
 

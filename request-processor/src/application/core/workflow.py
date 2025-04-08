@@ -147,13 +147,13 @@ def fetch_pipeline_csvs(
     downloaded = False
     for pipeline_csv in pipeline_csvs:
         try:
-            column_csv_path = os.path.join(pipeline_dir, pipeline_csv)
+            csv_path = os.path.join(pipeline_dir, pipeline_csv)
             print(
                 f"{source_url}/{collection + '-collection'}/main/pipeline/{pipeline_csv}"
             )
             urllib.request.urlretrieve(
                 f"{source_url}/{collection + '-collection'}/main/pipeline/{pipeline_csv}",
-                column_csv_path,
+                csv_path,
             )
             downloaded = True
         except HTTPError as e:
@@ -166,7 +166,7 @@ def fetch_pipeline_csvs(
             try:
                 urllib.request.urlretrieve(
                     f"{source_url}/{'config'}/main/pipeline/{collection}/{pipeline_csv}",
-                    column_csv_path,
+                    csv_path,
                 )
                 downloaded = True
             except HTTPError as e:
@@ -174,19 +174,20 @@ def fetch_pipeline_csvs(
 
         if downloaded:
             try:
-                if column_mapping and pipeline_csv == "column.csv":
-                    not_mapped_columns = add_extra_column_mappings(
-                        column_csv_path,
-                        column_mapping,
-                        dataset,
-                        resource,
-                        specification_dir,
-                    )
-                    return not_mapped_columns
-                if geom_type:
-                    add_geom_mapping(
-                        dataset, pipeline_dir, geom_type, resource, pipeline_csv
-                    )
+                if pipeline_csv == "column.csv":
+                    if column_mapping:
+                        not_mapped_columns = add_extra_column_mappings(
+                            csv_path,
+                            column_mapping,
+                            dataset,
+                            resource,
+                            specification_dir,
+                        )
+                        return not_mapped_columns
+                    if geom_type:
+                        add_geom_mapping(
+                            dataset, pipeline_dir, geom_type, resource, pipeline_csv
+                        )
             except Exception as e:
                 logger.error(f"Error saving new mapping: {e}")
     return {}
