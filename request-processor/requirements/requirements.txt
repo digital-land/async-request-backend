@@ -77,8 +77,10 @@ click-repl==0.3.0
     # via celery
 cloudpickle==3.1.1
     # via dask
-cryptography==44.0.2
-    # via moto
+cryptography==3.4.8
+    # via
+    #   -r requirements/requirements.in
+    #   moto
 dask[array,dataframe]==2025.3.0
     # via digital-land
 dataclasses-json==0.6.7
@@ -166,7 +168,7 @@ marshmallow==3.26.1
     # via dataclasses-json
 mergedeep==1.3.4
     # via datasette
-moto==5.1.3
+moto==5.0.22
     # via digital-land
 mypy-extensions==1.0.0
     # via typing-inspect
