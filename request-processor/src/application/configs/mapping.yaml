@@ -1,3 +1,4 @@
+# THIS IS NOT USED ANYMORE FOR GENERATING MESSAGES/ERROR-SUMMARY
 mappings:
 - field: documentation-url
   issue-type: missing value
