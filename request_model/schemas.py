@@ -80,4 +80,3 @@ class Request(RequestBase):
     response: Optional[ResponseModel]
 
     model_config = ConfigDict(from_attributes=True)
- 
