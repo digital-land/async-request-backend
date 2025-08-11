@@ -3,7 +3,6 @@ import os
 from datetime import datetime
 from typing import List, Dict, Any
 from datetime import date
-from fastapi.encoders import jsonable_encoder
 import sentry_sdk
 
 import boto3
@@ -161,9 +160,9 @@ def create_request(
         logging.error("Async call to celery check data file task failed: %s", error)
         raise error
 
-    http_response.headers["Location"] = (
-        f"{http_request.url.scheme}://{http_request.headers.get('host')}/requests/{request_schema.id}"
-    )
+    http_response.headers[
+        "Location"
+    ] = f"{http_request.url.scheme}: //{http_request.headers.get('host')}/requests/{request_schema.id}"
 
     return request_schema
 

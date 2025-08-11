@@ -4,7 +4,6 @@ from locust import HttpUser, task
 
 
 class PlatformServiceUser(HttpUser):
-
     @task
     def create_request_and_poll_for_result(self):
         create_request = {
