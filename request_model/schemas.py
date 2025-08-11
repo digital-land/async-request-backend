@@ -1,7 +1,8 @@
 import datetime
 from enum import Enum
+from datetime import date
 from typing import Union, Literal, Optional, List, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, AnyHttpUrl
 
 
 class RequestTypeEnum(str, Enum):
@@ -15,6 +16,9 @@ class Params(BaseModel):
     collection: str
     column_mapping: Optional[Dict[str, str]] = None
     geom_type: Optional[str] = None
+    documentation_url: Optional[AnyHttpUrl] = None
+    licence: Optional[str] = None
+    start_date: Optional[date] = None
 
 
 class CheckFileParams(Params):
@@ -76,3 +80,4 @@ class Request(RequestBase):
     response: Optional[ResponseModel]
 
     model_config = ConfigDict(from_attributes=True)
+ 

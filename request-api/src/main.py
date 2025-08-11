@@ -3,7 +3,10 @@ import os
 from datetime import datetime
 from typing import List, Dict, Any
 import sentry_sdk
-
+from datetime import date
+from fastapi.encoders import jsonable_encoder
+ 
+ 
 import boto3
 from botocore.exceptions import ClientError, BotoCoreError
 from fastapi import FastAPI, Depends, Request, Response, HTTPException
@@ -13,7 +16,7 @@ from slack_sdk import WebClient
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-
+ 
 import crud
 from database import session_maker
 from pagination_model import PaginationParams
@@ -25,9 +28,9 @@ from schema import (
     DependencyHealth,
 )
 from task_interface.check_tasks import celery, CheckDataFileTask
-
+ 
 CheckDataFileTask = celery.register_task(CheckDataFileTask())
-
+ 
 if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
     sentry_sdk.init(
         enable_tracing=os.environ.get("SENTRY_TRACING_ENABLED", "false").lower()
@@ -40,10 +43,10 @@ if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
         ],
         debug=os.environ.get("SENTRY_DEBUG", "false").lower() == "true",
     )
-
+ 
 app = FastAPI()
-
-
+ 
+ 
 def send_slack_alert(message):
     slack_token = os.environ.get("SLACK_BOT_TOKEN", "")
     slack_channel = os.environ.get("SLACK_CHANNEL", "")
@@ -53,14 +56,14 @@ def send_slack_alert(message):
     client = WebClient(token=slack_token)
     bot_name = "SQS and DB"
     client.chat_postMessage(channel=slack_channel, text=message, username=bot_name)
-
-
+ 
+ 
 def is_connection_restored(last_attempt_time, max_retry_duration=60):
     current_time = datetime.now().timestamp()
     last_attempt_timestamp = last_attempt_time.timestamp()
     return (current_time - last_attempt_timestamp) > max_retry_duration
-
-
+ 
+ 
 # Dependency
 def _get_db():
     retries = 5
@@ -77,8 +80,8 @@ def _get_db():
             if is_connection_restored(datetime.now()):
                 break
     send_slack_alert("DB connection issue detected in async-request-backend..")
-
-
+ 
+ 
 def _get_sqs_client():
     retries = 5
     for attempt in range(retries):
@@ -92,8 +95,8 @@ def _get_sqs_client():
             if is_connection_restored(datetime.now()):
                 break
     send_slack_alert("SQS connection issue detected in async-request-backend..")
-
-
+ 
+ 
 @app.get("/health", response_model=HealthCheckResponse)
 def healthcheck(
     response: Response, db: Session = Depends(_get_db), sqs=Depends(_get_sqs_client)
@@ -106,16 +109,16 @@ def healthcheck(
             "Health check of request-db failed",
         )
         db_reachable = False
-
+ 
     try:
         sqs.get_queue_url(QueueName="celery")
         queue_reachable = True
     except (ClientError, BotoCoreError):
         logging.exception("Health check of sqs failed")
         queue_reachable = False
-
+ 
     response.status_code = 200 if db_reachable & queue_reachable else 500
-
+ 
     return HealthCheckResponse(
         name="request-api",
         version=os.environ.get("GIT_COMMIT", "unknown"),
@@ -132,8 +135,8 @@ def healthcheck(
             ),
         ],
     )
-
-
+ 
+ 
 @app.post("/requests", status_code=202, response_model=schemas.Request)
 def create_request(
     request: schemas.RequestCreate,
@@ -141,22 +144,31 @@ def create_request(
     http_response: Response,
     db: Session = Depends(_get_db),
 ):
-    request_schema = _map_to_schema(request_model=crud.create_request(db, request))
-
+    # --- make a deep copy for DB, keep original untouched ---
+    req_for_db = request.model_copy(deep=True)
+ 
+    # Coerce tricky fields on the copy so initial insert is JSON-safe
+    p = req_for_db.params
+    if getattr(p, "documentation_url", None) is not None:
+        p.documentation_url = str(p.documentation_url)          # AnyHttpUrl -> str
+    if getattr(p, "start_date", None) is not None and isinstance(p.start_date, date):
+        p.start_date = p.start_date.isoformat()                  # date -> 'YYYY-MM-DD'
+ 
+    request_model = crud.create_request(db, req_for_db)
+ 
+    request_schema = _map_to_schema(request_model)
+ 
     try:
-        CheckDataFileTask.delay(request_schema.model_dump())
-
+      CheckDataFileTask.delay(request_schema.model_dump(mode="json"))
     except Exception as error:
         logging.error("Async call to celery check data file task failed: %s", error)
-        raise error
-
-    http_response.headers[
-        "Location"
-    ] = f"${http_request.headers['Host']}/requests/{request_schema.id}"
-
+ 
+    http_response.headers["Location"] = (
+        f"{http_request.url.scheme}://{http_request.headers.get('host')}/requests/{request_schema.id}"
+    )
     return request_schema
-
-
+ 
+ 
 @app.get("/requests/{request_id}", response_model=schemas.Request)
 def read_request(request_id: str, db: Session = Depends(_get_db)):
     request_model = crud.get_request(db, request_id)
@@ -172,8 +184,8 @@ def read_request(request_id: str, db: Session = Depends(_get_db)):
         )
     request_schema = _map_to_schema(request_model)
     return request_schema
-
-
+ 
+ 
 @app.get("/requests/{request_id}/response-details", response_model=List[Dict[Any, Any]])
 def read_response_details(
     request_id: str,
@@ -191,8 +203,8 @@ def read_response_details(
     http_response.headers["X-Pagination-Offset"] = str(paginated_result.params.offset)
     http_response.headers["X-Pagination-Limit"] = str(paginated_result.params.limit)
     return list(map(lambda detail: detail.detail, paginated_result.data))
-
-
+ 
+ 
 def _map_to_schema(request_model: models.Request) -> schemas.Request:
     response = None
     if request_model.response:
@@ -205,7 +217,7 @@ def _map_to_schema(request_model: models.Request) -> schemas.Request:
             data=request_model.response.data,
             error=request_model.response.error,
         )
-
+ 
     return schemas.Request(
         type=request_model.type,
         id=request_model.id,
@@ -215,3 +227,5 @@ def _map_to_schema(request_model: models.Request) -> schemas.Request:
         params=request_model.params,
         response=response,
     )
+ 
+ 
