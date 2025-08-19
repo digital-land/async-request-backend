@@ -142,9 +142,9 @@ def test_get_db_fails_after_retries(mock_restored, mock_slack, mock_session_make
 @patch("main.WebClient")
 @patch(
     "main.os.environ.get",
-    side_effect=lambda k, d=None: (
-        "fake_token" if k == "SLACK_BOT_TOKEN" else "fake_channel"
-    ),
+    side_effect=lambda k, d=None: "fake_token"
+    if k == "SLACK_BOT_TOKEN"
+    else "fake_channel",
 )
 def test_send_slack_alert(mock_env, mock_webclient):
     mock_client_instance = mock_webclient.return_value
@@ -154,8 +154,21 @@ def test_send_slack_alert(mock_env, mock_webclient):
     )
 
 
+# ---------------------------
+# Request creation tests
+# ---------------------------
+
+
+def test_create_request(db, sqs_queue, helpers):
+    """Basic request creation — compatible with both legacy and modern Location headers."""
+    response = client.post("/requests", json=helpers.request_create_dict())
+    request_id = response.json()["id"]
+    assert response.status_code == 202
+    _assert_location_header(response.headers["Location"], request_id)
+
+
 def test_create_request_with_optional_fields(db, sqs_queue, helpers):
-    """POST /requests should store and return documentation_url, licence, start_date."""
+    """Ensure optional fields are stored & returned: documentation_url, licence, start_date."""
     request_obj = schemas.RequestCreate(
         params=schemas.CheckUrlParams(
             type="check_url",
@@ -321,9 +334,7 @@ def test_read_unknown_request(db):
 
 @pytest.fixture(scope="module")
 def db_session(db):
-    session = database.session_maker()
-    session = session()
-
+    session = database.session_maker()()
     try:
         yield session
     finally:
