@@ -1,19 +1,19 @@
+from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from pagination_model import PaginatedResult, PaginationParams
-from request_model import models
-from request_model import schemas
+from request_model import models, schemas
 
 
-def get_request(db: Session, request_id: int):
+def get_request(db: Session, request_id: str):
     return db.query(models.Request).filter(models.Request.id == request_id).first()
 
 
 def get_response_details(
     db: Session,
-    request_id: int,
-    jsonpath: str = None,
+    request_id: str,
+    jsonpath: Optional[str] = None,
     pagination_params=PaginationParams(),
 ):
     base_query = (
@@ -38,7 +38,9 @@ def get_response_details(
 
 def create_request(db: Session, request: schemas.RequestCreate):
     db_request = models.Request(
-        status="NEW", type=request.params.type, params=request.params.model_dump()
+        status="NEW",
+        type=request.params.type,
+        params=request.params.model_dump(mode="json"),
     )
     db.add(db_request)
     db.commit()

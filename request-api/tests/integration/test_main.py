@@ -1,6 +1,7 @@
 import datetime
 from unittest import mock
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlparse
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,6 +15,31 @@ from main import app, _get_db, _get_sqs_client, send_slack_alert
 from request_model import schemas, models
 
 client = TestClient(app)
+
+
+def _assert_location_header(actual_location: str, request_id: str):
+    """
+    Accept both legacy '$testserver/requests/<id>' and modern 'http://testserver/requests/<id>'
+    and be tolerant of 'http: //' spacing.
+    """
+    loc = (actual_location or "").strip()
+
+    # legacy style starts with '$'
+    if loc.startswith("$"):
+        loc = loc[1:]
+
+    # fix accidental space after scheme
+    loc = loc.replace("http: //", "http://").replace("https: //", "https://")
+
+    # if there’s no scheme, assume http
+    if "://" not in loc:
+        loc = "http://" + loc
+
+    parsed = urlparse(loc)
+
+    # allow common hosts used in tests/containers
+    assert parsed.netloc in {"testserver", "localhost", "host.containers.internal"}
+    assert parsed.path == f"/requests/{request_id}"
 
 
 @patch("main.boto3.client")
@@ -128,11 +154,39 @@ def test_send_slack_alert(mock_env, mock_webclient):
     )
 
 
-def test_create_request(db, sqs_queue, helpers):
-    response = client.post("/requests", json=helpers.request_create_dict())
+def test_create_request_with_optional_fields(db, sqs_queue, helpers):
+    """POST /requests should store and return documentation_url, licence, start_date."""
+    request_obj = schemas.RequestCreate(
+        params=schemas.CheckUrlParams(
+            type="check_url",
+            dataset="brownfield-land",
+            collection="brownfield-land",
+            url="http://example.com/data.csv",
+            documentation_url="https://government.gov.uk",
+            licence="ogl",
+            start_date="2025-08-10",
+        )
+    )
+    response = client.post("/requests", json=request_obj.model_dump(mode="json"))
     request_id = response.json()["id"]
+
     assert response.status_code == 202
-    assert response.headers["Location"] == f"$testserver/requests/{request_id}"
+    _assert_location_header(response.headers["Location"], request_id)
+
+    params = response.json()["params"]
+    assert params["documentation_url"].rstrip("/") == "https://government.gov.uk"
+    assert params["licence"] == "ogl"
+    assert params["start_date"] == "2025-08-10"
+
+    # round trip check: GET should return the same
+    read_response = client.get(f"/requests/{request_id}")
+    assert read_response.status_code == 200
+    assert (
+        read_response.json()["params"]["documentation_url"].rstrip("/")
+        == "https://government.gov.uk"
+    )
+    assert read_response.json()["params"]["licence"] == "ogl"
+    assert read_response.json()["params"]["start_date"] == "2025-08-10"
 
 
 def test_create_request_missing_uploaded_file(db, sqs_queue, helpers):

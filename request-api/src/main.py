@@ -2,7 +2,6 @@ import logging
 import os
 from datetime import datetime
 from typing import List, Dict, Any
-from datetime import date
 import sentry_sdk
 
 import boto3
@@ -62,7 +61,6 @@ def is_connection_restored(last_attempt_time, max_retry_duration=60):
     return (current_time - last_attempt_timestamp) > max_retry_duration
 
 
-# Dependency
 def _get_db():
     retries = 5
     for attempt in range(retries):
@@ -103,9 +101,7 @@ def healthcheck(
         db_result = db.execute(text("SELECT 1"))
         db_reachable = len(db_result.all()) == 1
     except SQLAlchemyError:
-        logging.exception(
-            "Health check of request-db failed",
-        )
+        logging.exception("Health check of request-db failed")
         db_reachable = False
 
     try:
@@ -142,28 +138,18 @@ def create_request(
     http_response: Response,
     db: Session = Depends(_get_db),
 ):
-    req_for_db = request.model_copy(deep=True)
-
-    p = req_for_db.params
-    if getattr(p, "documentation_url", None) is not None:
-        p.documentation_url = str(p.documentation_url)
-    if getattr(p, "start_date", None) is not None and isinstance(p.start_date, date):
-        p.start_date = p.start_date.isoformat()
-
-    request_model = crud.create_request(db, req_for_db)
+    request_model = crud.create_request(db, request)
     request_schema = _map_to_schema(request_model)
 
     try:
         CheckDataFileTask.delay(request_schema.model_dump(mode="json"))
-
     except Exception as error:
         logging.error("Async call to celery check data file task failed: %s", error)
         raise error
 
     http_response.headers[
         "Location"
-    ] = f"{http_request.url.scheme}: //{http_request.headers.get('host')}/requests/{request_schema.id}"
-
+    ] = f"{http_request.url.scheme}://{http_request.headers.get('host')}/requests/{request_schema.id}"
     return request_schema
 
 
@@ -176,7 +162,7 @@ def read_request(request_id: str, db: Session = Depends(_get_db)):
             detail={
                 "errCode": 400,
                 "errType": "User Error",
-                "errMsg": f"Response with ${request_id} was not found",
+                "errMsg": f"Response with {request_id} was not found",
                 "errTime": str(datetime.now()),
             },
         )

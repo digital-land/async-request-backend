@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from unittest.mock import patch, MagicMock, Mock
 
 import pytest
@@ -50,7 +50,7 @@ def test_create_request_when_celery_throws_exception(
         main.create_request(
             helpers.build_request_create(), http_request=None, http_response=None
         )
-        assert exception_msg == error.value
+    assert exception_msg == str(error.value)
 
 
 @patch("crud.get_request", return_value=None)
@@ -122,6 +122,54 @@ def test_healthcheck(
         dependencies=expected_response,
     )
     assert mock_response.status_code == expected_status
+
+
+def test_request_model_dump_includes_optional_fields():
+    """Ensure documentation_url, licence, start_date are serialized correctly."""
+    params = schemas.CheckUrlParams(
+        type=schemas.RequestTypeEnum.check_url,
+        dataset="brownfield-land",
+        collection="brownfield-land",
+        url="http://example.com/data.csv",
+        documentation_url="https://government.gov.uk",
+        licence="ogl",
+        start_date=date(2025, 8, 10),
+    )
+
+    dumped = params.model_dump(mode="json")
+    assert dumped["documentation_url"].rstrip("/") == "https://government.gov.uk"
+    assert dumped["licence"] == "ogl"
+    assert dumped["start_date"] == "2025-08-10"  # date serialized to string
+
+
+@patch("crud.create_request")
+def test_create_request_stores_optional_fields(mock_create_request, helpers):
+    """Ensure create_request passes optional fields into DB layer."""
+    params = schemas.CheckUrlParams(
+        type=schemas.RequestTypeEnum.check_url,
+        dataset="brownfield-land",
+        collection="brownfield-land",
+        url="http://example.com/data.csv",
+        documentation_url="https://government.gov.uk",
+        licence="ogl",
+        start_date=date(2025, 8, 10),
+    )
+    request_create = schemas.RequestCreate(params=params)
+
+    fake_model = _create_request_model()
+    fake_model.params = params.model_dump(mode="json")
+    mock_create_request.return_value = fake_model
+
+    response = client.post("/requests", json=request_create.model_dump(mode="json"))
+    assert response.status_code == 202
+    data = response.json()["params"]
+
+    # Assert that the optional fields survived round-trip
+    assert data["documentation_url"].rstrip("/") == "https://government.gov.uk"
+    assert data["licence"] == "ogl"
+    assert data["start_date"] == "2025-08-10"
+
+    mock_create_request.assert_called_once()
 
 
 @pytest.fixture
