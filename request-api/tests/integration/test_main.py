@@ -1,7 +1,6 @@
 import datetime
 from unittest import mock
 from unittest.mock import MagicMock, patch
-from urllib.parse import urlparse
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,31 +14,6 @@ from main import app, _get_db, _get_sqs_client, send_slack_alert
 from request_model import schemas, models
 
 client = TestClient(app)
-
-
-def _assert_location_header(actual_location: str, request_id: str):
-    """
-    Accept both legacy '$testserver/requests/<id>' and modern 'http://testserver/requests/<id>'
-    and be tolerant of 'http: //' spacing.
-    """
-    loc = (actual_location or "").strip()
-
-    # legacy style starts with '$'
-    if loc.startswith("$"):
-        loc = loc[1:]
-
-    # fix accidental space after scheme
-    loc = loc.replace("http: //", "http://").replace("https: //", "https://")
-
-    # if there’s no scheme, assume http
-    if "://" not in loc:
-        loc = "http://" + loc
-
-    parsed = urlparse(loc)
-
-    # allow common hosts used in tests/containers
-    assert parsed.netloc in {"testserver", "localhost", "host.containers.internal"}
-    assert parsed.path == f"/requests/{request_id}"
 
 
 @patch("main.boto3.client")
@@ -154,17 +128,12 @@ def test_send_slack_alert(mock_env, mock_webclient):
     )
 
 
-# ---------------------------
-# Request creation tests
-# ---------------------------
-
-
 def test_create_request(db, sqs_queue, helpers):
     """Basic request creation — compatible with both legacy and modern Location headers."""
     response = client.post("/requests", json=helpers.request_create_dict())
     request_id = response.json()["id"]
     assert response.status_code == 202
-    _assert_location_header(response.headers["Location"], request_id)
+    assert response.headers["Location"] == f"$testserver/requests/{request_id}"
 
 
 def test_create_request_with_optional_fields(db, sqs_queue, helpers):
@@ -184,7 +153,7 @@ def test_create_request_with_optional_fields(db, sqs_queue, helpers):
     request_id = response.json()["id"]
 
     assert response.status_code == 202
-    _assert_location_header(response.headers["Location"], request_id)
+    assert response.headers["Location"] == f"$testserver/requests/{request_id}"
 
     params = response.json()["params"]
     assert params["documentation_url"].rstrip("/") == "https://government.gov.uk"

@@ -149,7 +149,7 @@ def create_request(
 
     http_response.headers[
         "Location"
-    ] = f"{http_request.url.scheme}://{http_request.headers.get('host')}/requests/{request_schema.id}"
+    ] = f"${http_request.headers.get('host')}/requests/{request_schema.id}"
     return request_schema
 
 
