@@ -1,40 +1,51 @@
+
 import os
+import json
 from typing import Dict
+from pathlib import Path
+from datetime import datetime
 
 import sentry_sdk
 from celery.utils.log import get_task_logger
-from celery.signals import task_prerun, task_success, task_failure, celeryd_init
+from celery.signals import (
+    task_prerun,
+    task_success,
+    task_failure,
+    celeryd_init,
+)
 import request_model.schemas as schemas
 import request_model.models as models
 import s3_transfer_manager
 import crud
 import database
 from task_interface.check_tasks import celery, CheckDataFileTask
-import json
 from application.core import workflow
 from application.configurations.config import Directories
 import application.core.utils as utils
 from application.exceptions.customExceptions import CustomException
-from pathlib import Path
+from digital_land.commands import add_data
 
 logger = get_task_logger(__name__)
 # Threshold for s3_transfer_manager to automatically use multipart download
 max_file_size_mb = 30
 
 
+
 @celery.task(base=CheckDataFileTask, name=CheckDataFileTask.name)
 def check_datafile(request: Dict, directories=None):
     logger.info("check datafile")
+    print("Received payload:")
+    print(json.dumps(request, indent=2))  # ✅ DUMP payload
     request_schema = schemas.Request.model_validate(request)
     request_data = request_schema.params
+    logger.info(f"Request type: {request_data.type}")
+
     if not request_schema.status == "COMPLETE":
         if not directories:
             directories = Directories
         elif directories:
             data_dict = json.loads(directories)
-            # Create an instance of the Directories class
             directories = Directories()
-            # Update attribute values based on the dictionary
             for key, value in data_dict.items():
                 setattr(directories, key, value)
 
@@ -42,24 +53,59 @@ def check_datafile(request: Dict, directories=None):
         tmp_dir = os.path.join(
             directories.COLLECTION_DIR + "/resource" + f"/{request_schema.id}"
         )
-        # Ensure tmp_dir exists, create it if it doesn't
         Path(tmp_dir).mkdir(parents=True, exist_ok=True)
+
         if request_data.type == "check_file":
             fileName = handle_check_file(request_schema, request_data, tmp_dir)
 
-        elif request_data.type == "check_url":
+        elif request_data.type in ("check_url", "add_data"):
             log, content = utils.get_request(request_data.url)
             if content:
                 check = utils.check_content(content)
                 if check:
-                    fileName = utils.save_content(content, tmp_dir)
+                    if request_data.type == "add_data":
+                        logger.info("Add data request detected")
+                        tmp_dir = os.path.join(
+                            directories.COLLECTION_DIR + "/resource" + f"/{request_schema.id}"
+                        )
+                        Path(tmp_dir).mkdir(parents=True, exist_ok=True)
+                        log, content = utils.get_request(request_data.url)
+                        if not content:
+                            logger.error("❌ No content fetched from URL")
+                            save_response_to_db(request_schema.id, log)
+                            return
+                        file_path = utils.save_content(content, tmp_dir)
+                        logger.info(f"📁 Saved content to: {file_path}")
+                        try:
+                            logger.info("🚀 Running add_data workflow")
+                            result = add_data(
+                                collection=request_data.collection,
+                                dataset=request_data.dataset,
+                                organisation="TBC",  # add real value if available
+                                file_path=file_path,
+                                column_mapping=request_data.column_mapping or {},
+                                geom_type=request_data.geom_type or "",
+                                start_date=request_data.start_date or "",
+                                documentation_url=request_data.documentation_url or "",
+                                licence=request_data.licence or "",
+                                directories=directories,
+                            )
+                            logger.info("✅ add_data completed")
+                            save_response_to_db(request_schema.id, result)
+                        except Exception as e:
+                            logger.exception("❌ Error during add_data:")
+                            save_response_to_db(
+                                request_schema.id,
+                                {"message": str(e), "exception_type": type(e).__name__},
+                            )
+                    else:
+                        fileName = utils.save_content(content, tmp_dir)
                 else:
-                    log = {}
-                    log[
-                        "message"
-                    ] = "Endpoint URL includes multiple dataset layers. Endpoint URL must include a single dataset layer only."  # noqa
-                    log["status"] = ""
-                    log["exception_type"] = "URL check failed"
+                    log = {
+                        "message": "Endpoint URL includes multiple dataset layers. Endpoint URL must include a single dataset layer only.",
+                        "status": "",
+                        "exception_type": "URL check failed",
+                    }
                     save_response_to_db(request_schema.id, log)
                     return
             else:
@@ -67,7 +113,7 @@ def check_datafile(request: Dict, directories=None):
                 logger.warning(f"URL check failed: {log}")
                 return
 
-        if fileName:
+        if fileName and request_data.type == "check_url":
             response = workflow.run_workflow(
                 fileName,
                 request_schema.id,
@@ -75,13 +121,11 @@ def check_datafile(request: Dict, directories=None):
                 request_data.dataset,
                 "",
                 request_data.geom_type if hasattr(request_data, "geom_type") else "",
-                (
-                    request_data.column_mapping
-                    if hasattr(request_data, "column_mapping")
-                    else {}
-                ),
+                request_data.column_mapping if hasattr(request_data, "column_mapping") else {},
                 directories,
             )
+            save_response_to_db(request_schema.id, response)
+        elif fileName and request_data.type == "add_data":
             save_response_to_db(request_schema.id, response)
         else:
             save_response_to_db(request_schema.id, log)
