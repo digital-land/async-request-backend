@@ -45,3 +45,14 @@ jobs:
       - name: Lint, Test, Coverage
         working-directory: ./request-processor
         run: make all
+
+  test-request-model:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install test dependencies
+        working-directory: ./request_model
+        run: pip3 install -r requirements.txt
+      - name: Run tests
+        working-directory: ./request_model
+        run: make test
