@@ -156,7 +156,7 @@ def test_create_request_with_optional_fields(db, sqs_queue, helpers):
     assert response.headers["Location"] == f"$testserver/requests/{request_id}"
 
     params = response.json()["params"]
-    assert params["documentation_url"].rstrip("/") == "https://government.gov.uk"
+    assert params["documentation_url"] == "https://government.gov.uk"
     assert params["licence"] == "ogl"
     assert params["start_date"] == "2025-08-10"
 
@@ -164,7 +164,7 @@ def test_create_request_with_optional_fields(db, sqs_queue, helpers):
     read_response = client.get(f"/requests/{request_id}")
     assert read_response.status_code == 200
     assert (
-        read_response.json()["params"]["documentation_url"].rstrip("/")
+        read_response.json()["params"]["documentation_url"]
         == "https://government.gov.uk"
     )
     assert read_response.json()["params"]["licence"] == "ogl"

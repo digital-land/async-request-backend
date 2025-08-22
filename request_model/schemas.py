@@ -2,7 +2,8 @@ import datetime
 from enum import Enum
 from datetime import date
 from typing import Union, Literal, Optional, List, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict, AnyHttpUrl
+from pydantic import BaseModel, Field, ConfigDict, AnyHttpUrl, field_serializer
+from urllib.parse import urlsplit, urlunsplit
 
 
 class RequestTypeEnum(str, Enum):
@@ -19,6 +20,16 @@ class Params(BaseModel):
     documentation_url: Optional[AnyHttpUrl] = None
     licence: Optional[str] = None
     start_date: Optional[date] = None
+
+    @field_serializer("documentation_url", when_used="json-unless-none")
+    def _serialize_doc_url(self, v: AnyHttpUrl):
+        s = str(v)
+        parts = urlsplit(s)
+        # Only drop the trailing slash if the path is exactly "/"
+        if parts.path == "/":
+            parts = parts._replace(path="")
+            return urlunsplit(parts)
+        return s
 
 
 class CheckFileParams(Params):
