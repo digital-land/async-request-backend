@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install test dependencies
         working-directory: ./request_model
-        run: pip3 install -r requirements.txt
+        run: pip3 install -r ./requirements/test_requirements.txt
       - name: Run tests
         working-directory: ./request_model
         run: make test
