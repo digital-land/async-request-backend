@@ -1,7 +1,6 @@
 article-4-direction:
 - reference
 - name
-- description
 - document-url
 - documentation-url
 article-4-direction-area:
@@ -22,7 +21,6 @@ conservation-area-document:
 - document-type
 tree-preservation-order:
 - reference
-- name
 - document-url
 - documentation-url
 tree-preservation-zone:
