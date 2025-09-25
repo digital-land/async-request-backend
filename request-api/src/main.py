@@ -149,7 +149,7 @@ def create_request(
 
     http_response.headers[
         "Location"
-    ] = f"${http_request.headers.get('host')}/requests/{request_schema.id}"
+    ] = f"${http_request.headers['Host']}/requests/{request_schema.id}"
     return request_schema
 
 
@@ -162,7 +162,7 @@ def read_request(request_id: str, db: Session = Depends(_get_db)):
             detail={
                 "errCode": 400,
                 "errType": "User Error",
-                "errMsg": f"Response with {request_id} was not found",
+                "errMsg": f"Response with ${request_id} was not found",
                 "errTime": str(datetime.now()),
             },
         )

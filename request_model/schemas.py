@@ -9,6 +9,7 @@ from urllib.parse import urlsplit, urlunsplit
 class RequestTypeEnum(str, Enum):
     check_url = "check_url"
     check_file = "check_file"
+    add_data = "add_data"
 
 
 class Params(BaseModel):
@@ -20,6 +21,7 @@ class Params(BaseModel):
     documentation_url: Optional[AnyHttpUrl] = None
     licence: Optional[str] = None
     start_date: Optional[date] = None
+    organisation: Optional[str] = None
 
     @field_serializer("documentation_url", when_used="json-unless-none")
     def _serialize_doc_url(self, v: AnyHttpUrl):
@@ -42,9 +44,13 @@ class CheckUrlParams(Params):
     type: Literal[RequestTypeEnum.check_url] = RequestTypeEnum.check_url
     url: str
 
+class AddDataParams(Params):
+    type: Literal[RequestTypeEnum.add_data] = RequestTypeEnum.add_data
+    source_request_id: str 
+
 
 class RequestBase(BaseModel):
-    params: Union[CheckUrlParams, CheckFileParams] = Field(discriminator="type")
+    params: Union[CheckUrlParams, CheckFileParams, AddDataParams] = Field(discriminator="type")
 
 
 class RequestCreate(RequestBase):

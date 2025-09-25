@@ -3,6 +3,7 @@ import csv
 import urllib
 import yaml
 from urllib.error import HTTPError
+from pathlib import Path
 from application.core.utils import detect_encoding, extract_dataset_field_rows
 from application.logging.logger import get_logger
 from application.core.pipeline import fetch_response_data, resource_from_path
@@ -10,10 +11,30 @@ from application.configurations.config import source_url
 from collections import defaultdict
 import json
 import warnings
-
+ 
 logger = get_logger(__name__)
-
-
+ 
+def log_lookup_csv_stats(lookup_csv_path, message_prefix=""):
+    try:
+        logger.info(f"Checking stats for {lookup_csv_path}")
+        size_mb = os.path.getsize(lookup_csv_path) / (1024 * 1024)
+        with open(lookup_csv_path, newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            row_count = sum(1 for _ in reader)
+        logger.info(f"{message_prefix}lookup.csv size: {size_mb:.2f} MB, rows: {row_count}")
+        return size_mb, row_count
+    except Exception as e:
+        logger.error(f"Failed to log stats for {lookup_csv_path}: {e}")
+        return 0, 0
+ 
+def append_to_lookup_csv(lookup_csv_path, new_rows):
+    if not new_rows:
+        return
+    with open(lookup_csv_path, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=new_rows[0].keys())
+        for row in new_rows:
+            writer.writerow(row)
+ 
 def run_workflow(
     fileName,
     request_id,
@@ -23,19 +44,17 @@ def run_workflow(
     geom_type,
     column_mapping,
     directories,
+    cleanup: bool = False,
 ):
     additional_concats = None
-
+ 
     try:
         response_data = {}
-        # pipeline directory structure & download
         pipeline_dir = os.path.join(directories.PIPELINE_DIR, dataset, request_id)
-
         input_path = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
-
         file_path = os.path.join(input_path, fileName)
         resource = resource_from_path(file_path)
-
+ 
         not_mapped_columns = fetch_pipeline_csvs(
             collection,
             dataset,
@@ -45,8 +64,10 @@ def run_workflow(
             resource,
             directories.SPECIFICATION_DIR,
         )
-
-        fetch_response_data(
+ 
+       
+        lookup_csv_path = os.path.join(pipeline_dir, "lookup.csv")
+        new_lookup_rows = fetch_response_data(
             dataset,
             organisation,
             request_id,
@@ -61,13 +82,19 @@ def run_workflow(
             directories.CACHE_DIR,
             additional_col_mappings=column_mapping,
             additional_concats=additional_concats,
+            lookup_csv_path=lookup_csv_path,  # pass this to pipeline.py
         )
-        # Need to get the mandatory fields from specification/central place. Hardcoding for MVP
+        # Append and log after assignment
+        if new_lookup_rows:
+            append_to_lookup_csv(lookup_csv_path, new_lookup_rows)
+            logger.info(f"Appended {len(new_lookup_rows)} new rows to lookup.csv")
+        log_lookup_csv_stats(lookup_csv_path, message_prefix="After assignment: ")
+       
         required_fields_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
             "../application/configs/mandatory_fields.yaml",
         )
-
+ 
         required_fields = getMandatoryFields(required_fields_path, dataset)
         converted_json = []
         if os.path.exists(
@@ -82,7 +109,7 @@ def run_workflow(
                     directories.COLLECTION_DIR, "resource", request_id, f"{resource}"
                 )
             )
-
+ 
         issue_log_json = csv_to_json(
             os.path.join(directories.ISSUE_DIR, dataset, request_id, f"{resource}.csv")
         )
@@ -100,7 +127,7 @@ def run_workflow(
         summary_data = error_summary(
             issue_log_json, column_field_json, not_mapped_columns
         )
-
+ 
         response_data = {
             "converted-csv": converted_json,
             "issue-log": issue_log_json,
@@ -108,31 +135,31 @@ def run_workflow(
             "error-summary": summary_data,
             "transformed-csv": transformed_json,
         }
-        # logger.info("Error Summary: %s", summary_data)
     except Exception as e:
         logger.exception(f"An error occurred: {e}")
-
+ 
     finally:
-        clean_up(
-            request_id,
-            directories.COLLECTION_DIR + "resource",
-            directories.COLLECTION_DIR,
-            directories.CONVERTED_DIR,
-            directories.ISSUE_DIR + dataset,
-            directories.ISSUE_DIR,
-            directories.COLUMN_FIELD_DIR,
-            directories.TRANSFORMED_DIR + dataset,
-            directories.TRANSFORMED_DIR,
-            directories.DATASET_RESOURCE_DIR,
-            directories.PIPELINE_DIR + dataset,
-            directories.PIPELINE_DIR,
-        )
-
+        if cleanup:
+            logger.info("Cleanup flag is True. Cleaning up directories.")
+            clean_up(
+                request_id,
+                directories.COLLECTION_DIR + "resource",
+                directories.COLLECTION_DIR,
+                directories.CONVERTED_DIR,
+                directories.ISSUE_DIR + dataset,
+                directories.ISSUE_DIR,
+                directories.COLUMN_FIELD_DIR,
+                directories.TRANSFORMED_DIR + dataset,
+                directories.TRANSFORMED_DIR,
+                directories.DATASET_RESOURCE_DIR,
+                directories.PIPELINE_DIR + dataset,
+                directories.PIPELINE_DIR,
+            )
+        else:
+            logger.info("Cleanup flag is False. Skipping cleanup.")
+ 
     return response_data
-
-
-# flake8: noqa
-# pragma: mccabe-complexity 11
+ 
 def fetch_pipeline_csvs(
     collection,
     dataset,
@@ -143,35 +170,44 @@ def fetch_pipeline_csvs(
     specification_dir,
 ):
     os.makedirs(pipeline_dir, exist_ok=True)
+    # --- Download lookup.csv from CDN for the collection and log stats ---
+    try:
+        lookup_url = f"https://files.planning.data.gov.uk/config/pipeline/{collection}/lookup.csv"
+        lookup_csv_local = os.path.join(pipeline_dir, "lookup.csv")
+        urllib.request.urlretrieve(lookup_url, lookup_csv_local)
+        logger.info(f"Downloaded lookup.csv from {lookup_url} to {lookup_csv_local}")
+        log_lookup_csv_stats(lookup_csv_local, message_prefix="Before assignment: ")
+    except Exception as e:
+        logger.error(f"Failed to download lookup.csv from CDN: {e}")
+ 
+    # --- Optionally overwrite lookup.csv with S3 version if env var is set ---
+    try:
+        from s3_transfer_manager import download_with_default_configuration
+        bucket_name = os.environ.get("LOOKUP_BUCKET_NAME")
+        object_key = "lookup.csv"
+        lookup_csv_local = os.path.join(pipeline_dir, "lookup.csv")
+        file_size_mb = 1  # Adjust if you know the size
+        if bucket_name:
+            download_with_default_configuration(
+                bucket_name, object_key, lookup_csv_local, file_size_mb
+            )
+            logger.info(f"Downloaded lookup.csv from S3 to {lookup_csv_local}")
+        else:
+            logger.warning("LOOKUP_BUCKET_NAME environment variable not set. Skipping lookup.csv download from S3.")
+    except Exception as e:
+        logger.error(f"Failed to download lookup.csv from S3: {e}")
+ 
+    # ...existing logic for other pipeline files and column mapping...
     pipeline_csvs = ["column.csv", "transform.csv"]
     downloaded = False
     for pipeline_csv in pipeline_csvs:
         try:
             csv_path = os.path.join(pipeline_dir, pipeline_csv)
-            print(
-                f"{source_url}/{collection + '-collection'}/main/pipeline/{pipeline_csv}"
-            )
-            urllib.request.urlretrieve(
-                f"{source_url}/{collection + '-collection'}/main/pipeline/{pipeline_csv}",
-                csv_path,
-            )
+            logger.info(f"Ensuring {pipeline_csv} is present at {csv_path}")
             downloaded = True
-        except HTTPError as e:
-            logger.warning(
-                f"Failed to retrieve pipeline CSV: {e}. Attempting to download from central config repository"
-            )
-            logger.info(
-                f"{source_url}/{'config'}/main/pipeline/{collection}/{pipeline_csv}"
-            )
-            try:
-                urllib.request.urlretrieve(
-                    f"{source_url}/{'config'}/main/pipeline/{collection}/{pipeline_csv}",
-                    csv_path,
-                )
-                downloaded = True
-            except HTTPError as e:
-                logger.error(f"Failed to retrieve from config repository: {e}")
-
+        except Exception as e:
+            logger.error(f"Failed to ensure {pipeline_csv}: {e}")
+ 
         if downloaded:
             try:
                 if pipeline_csv == "column.csv":
@@ -191,8 +227,8 @@ def fetch_pipeline_csvs(
             except Exception as e:
                 logger.error(f"Error saving new mapping: {e}")
     return {}
-
-
+ 
+ 
 def add_geom_mapping(dataset, pipeline_dir, geom_type, resource, pipeline_csv):
     warnings.warn(
         "depreciated, use column_mapping parameter instead",
@@ -218,8 +254,8 @@ def add_geom_mapping(dataset, pipeline_dir, geom_type, resource, pipeline_csv):
             csv_file.write("\n")
             writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
             writer.writerow(new_mapping)
-
-
+ 
+ 
 def add_extra_column_mappings(
     column_path, column_mapping, dataset, resource, specification_dir
 ):
@@ -229,7 +265,7 @@ def add_extra_column_mappings(
     with open(column_path) as f:
         dictreader = csv.DictReader(f)
         fieldnames = dictreader.fieldnames
-
+ 
     mappings = {"dataset": dataset, "resource": resource}
     column_mapping_dump = json.dumps(column_mapping)
     column_mapping_json = json.loads(column_mapping_dump)
@@ -248,8 +284,8 @@ def add_extra_column_mappings(
                     writer = csv.DictWriter(f, fieldnames=fieldnames)
                     writer.writerow(mappings)
     return not_mapped_columns
-
-
+ 
+ 
 # def clean_up(*directories):
 #     try:
 #         for directory in directories:
@@ -257,8 +293,8 @@ def add_extra_column_mappings(
 #                 shutil.rmtree(directory)
 #     except Exception as e:
 #         logger.error(f"An error occurred during cleanup: {e}")
-
-
+ 
+ 
 def clean_up(request_id, *directories):
     try:
         for directory in directories:
@@ -278,11 +314,11 @@ def clean_up(request_id, *directories):
                 os.rmdir(directory)
     except Exception as e:
         logger.error(f"An error occurred during cleanup: {e}")
-
-
+ 
+ 
 def csv_to_json(csv_file):
     json_data = []
-
+ 
     if os.path.isfile(csv_file):
         # Detect .csv encoding
         encoding = detect_encoding(csv_file)
@@ -291,23 +327,23 @@ def csv_to_json(csv_file):
             with open(csv_file, "r", encoding=encoding) as csv_input:
                 # Read the CSV data
                 csv_data = csv.DictReader(csv_input)
-
+ 
                 # Convert CSV to a list of dictionaries
                 data_list = list(csv_data)
-
+ 
                 for row in data_list:
                     json_data.append(row)
         except Exception:
             logger.error("Cannot process file as CSV ")
-
+ 
     return json_data
-
-
+ 
+ 
 def updateColumnFieldLog(column_field_log, required_fields):
     # # Updating all the column field entries to missing:False
     for entry in column_field_log:
         entry.setdefault("missing", False)
-
+ 
     for field in required_fields:
         found = any(entry["field"] in field for entry in column_field_log)
         if not found:
@@ -317,15 +353,15 @@ def updateColumnFieldLog(column_field_log, required_fields):
                     column_field_log.append({"field": f, "missing": True})
             else:
                 column_field_log.append({"field": field, "missing": True})
-
-
+ 
+ 
 def getMandatoryFields(required_fields_path, dataset):
     with open(required_fields_path, "r") as f:
         data = yaml.safe_load(f)
     required_fields = data.get(dataset, [])
     return required_fields
-
-
+ 
+ 
 def load_mappings():
     mappings_file_path = os.path.join(
         os.path.dirname(os.path.dirname(__file__)),
@@ -333,14 +369,14 @@ def load_mappings():
     )
     with open(mappings_file_path, "r") as yaml_file:
         mappings_data = yaml.safe_load(yaml_file)
-
+ 
     mappings = mappings_data.get("mappings", [])
     mapping_dict = {
         (mapping["field"], mapping["issue-type"]): mapping for mapping in mappings
     }
     return mapping_dict
-
-
+ 
+ 
 def error_summary(issue_log, column_field, not_mapped_columns):
     error_issues = [
         issue
@@ -354,23 +390,23 @@ def error_summary(issue_log, column_field, not_mapped_columns):
         field = issue["field"]
         issue_type = issue["issue-type"]
         error_summary[(issue_type, field)] += 1
-
+ 
     # fetch missing columns
     for column in missing_columns:
         field = column["field"]
         error_summary[("missing", field)] = True
-
+ 
     for col in not_mapped_columns:
         error_summary[("mapping_missing", col)] = True
-
+ 
     # Convert error summary to JSON with formatted messages
     json_data = convert_error_summary_to_json(error_summary)
     return json_data
-
-
+ 
+ 
 def convert_error_summary_to_json(error_summary):
     mappings = load_mappings()
-
+ 
     json_data = []
     for key, count in error_summary.items():
         if isinstance(key, tuple):
@@ -397,3 +433,4 @@ def convert_error_summary_to_json(error_summary):
                 json_data.append(f"{count} {key}")
                 logger.warning(f"Mapping not found for: {key}")
     return json_data
+ 

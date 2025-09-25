@@ -53,6 +53,7 @@ def fetch_response_data(
     cache_dir,
     additional_col_mappings,
     additional_concats,
+    lookup_csv_path=None,  # <-- new param
 ):
     # define variables for Pipeline and specification
     pipeline = Pipeline(pipeline_dir, dataset)
@@ -62,10 +63,13 @@ def fetch_response_data(
     # List all files in the "resource" directory
     files_in_resource = os.listdir(input_path)
     os.makedirs(os.path.join(issue_dir, dataset, request_id), exist_ok=True)
+    
+    new_lookup_rows = []
+    
     try:
         for file_name in files_in_resource:
             file_path = os.path.join(input_path, file_name)
-            # retrieve unnassigned entities and assign
+            '''# retrieve unnassigned entities and assign
             assign_entries(
                 resource_path=file_path,
                 dataset=dataset,
@@ -75,7 +79,20 @@ def fetch_response_data(
                 cache_dir=cache_dir,
             )
     except Exception as err:
-        logger.error("An exception occured during assign_entries process: ", str(err))
+        logger.error("An exception occured during assign_entries process: ", str(err))'''
+            new_rows = assign_entries(
+                resource_path=file_path,
+                dataset=dataset,
+                organisation=organisation,
+                pipeline_dir=pipeline_dir,
+                specification=specification,
+                cache_dir=cache_dir,
+                lookup_csv_path=lookup_csv_path,
+            )
+            if new_rows:
+                new_lookup_rows.extend(new_rows)
+    except Exception as err:
+        logger.error("An exception occured during assign_entries process: %s", str(err))
 
     # Create directories if they don't exist
     for directory in [
@@ -120,6 +137,7 @@ def fetch_response_data(
         except Exception as err:
             logger.error("An exception occured during pipeline_run: ", str(err))
 
+    return new_lookup_rows
 
 def pipeline_run(
     dataset,
@@ -257,9 +275,8 @@ def default_output_path(command, input_path):
     directory = "" if command in ["harmonised", "transformed"] else "var/"
     return f"{directory}{command}/{resource_from_path(input_path)}.csv"
 
-
 def assign_entries(
-    resource_path, dataset, organisation, pipeline_dir, specification, cache_dir
+    resource_path, dataset, organisation, pipeline_dir, specification, cache_dir, lookup_csv_path=None
 ):
     pipeline = Pipeline(pipeline_dir, dataset)
     resource_lookups = get_resource_unidentified_lookups(
@@ -284,9 +301,13 @@ def assign_entries(
             )
 
     lookups.load_csv()
+    new_rows = []
     for new_lookup in unassigned_entries:
         for idx, entry in enumerate(new_lookup):
             lookups.add_entry(entry[0])
+            # Collect the new row as a dict for appending later
+            if lookup_csv_path:
+                new_rows.append(entry[0])
 
     # save edited csvs
     max_entity_num = lookups.get_max_entity(pipeline.name, specification)
@@ -299,3 +320,4 @@ def assign_entries(
     )
 
     lookups.save_csv()
+    return new_rows
