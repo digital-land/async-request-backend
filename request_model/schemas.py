@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, ConfigDict
 class RequestTypeEnum(str, Enum):
     check_url = "check_url"
     check_file = "check_file"
+    check_url_arcgis = "check_url_arcgis"
 
 
 class Params(BaseModel):
@@ -15,6 +16,11 @@ class Params(BaseModel):
     collection: str
     column_mapping: Optional[Dict[str, str]] = None
     geom_type: Optional[str] = None
+
+
+class CheckUrlArcgisParams(Params): 
+    type: Literal[RequestTypeEnum.check_url_arcgis] = RequestTypeEnum.check_url_arcgis
+    url: str
 
 
 class CheckFileParams(Params):
@@ -29,7 +35,7 @@ class CheckUrlParams(Params):
 
 
 class RequestBase(BaseModel):
-    params: Union[CheckUrlParams, CheckFileParams] = Field(discriminator="type")
+    params: Union[CheckUrlParams, CheckFileParams, CheckUrlArcgisParams] = Field(discriminator="type")
 
 
 class RequestCreate(RequestBase):

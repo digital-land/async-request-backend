@@ -16,6 +16,7 @@ from application.configurations.config import Directories
 import application.core.utils as utils
 from application.exceptions.customExceptions import CustomException
 from pathlib import Path
+from digital_land.plugins.arcgis import get as arcgis_get
 
 logger = get_task_logger(__name__)
 # Threshold for s3_transfer_manager to automatically use multipart download
@@ -47,8 +48,15 @@ def check_datafile(request: Dict, directories=None):
         if request_data.type == "check_file":
             fileName = handle_check_file(request_schema, request_data, tmp_dir)
 
-        elif request_data.type == "check_url":
-            log, content = utils.get_request(request_data.url)
+        #Handle plugins, currently with the theory that plugin will be a selected type option?
+        elif request_data.type.startswith("check_url"):
+            if "_arcgis" in request_data.type:
+                log, content = arcgis_get(None, request_data.url, {})
+                # Ensure content is bytes for hashing
+                if isinstance(content, str):
+                    content = content.encode('utf-8')
+            else:
+                log, content = utils.get_request(request_data.url)
             if content:
                 check = utils.check_content(content)
                 if check:
