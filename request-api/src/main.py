@@ -214,4 +214,5 @@ def _map_to_schema(request_model: models.Request) -> schemas.Request:
         modified=request_model.modified,
         params=request_model.params,
         response=response,
+        plugin=request_model.plugin,
     )
