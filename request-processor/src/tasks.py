@@ -50,15 +50,19 @@ def check_datafile(request: Dict, directories=None):
 
         elif request_data.type == "check_url":
             # With Collector from digital-land/collect, edit to use correct directory path without changing Collector class
-            collector = Collector(request_data.dataset, Path(directories.COLLECTION_DIR))
+            collector = Collector(
+                request_data.dataset, Path(directories.COLLECTION_DIR)
+            )
             # Override the resource_dir to match our tmp_dir structure
             collector.resource_dir = Path(tmp_dir)  # Use the same directory as tmp_dir
-            collector.log_dir = Path(directories.COLLECTION_DIR) / "log" / request_schema.id
-            
+            collector.log_dir = (
+                Path(directories.COLLECTION_DIR) / "log" / request_schema.id
+            )
+
             # TBD: Can test infering plugin from URL, then if fails retry normal method without plugin?
-            #if 'FeatureServer' in request_data.url or 'MapServer' in request_data.url:
+            # if 'FeatureServer' in request_data.url or 'MapServer' in request_data.url:
             #     request_data.plugin = "arcgis"
-            
+
             status = collector.fetch(request_data.url, plugin=request_data.plugin)
             logger.info(f"Collector Fetch status: {status}")
 
@@ -72,20 +76,22 @@ def check_datafile(request: Dict, directories=None):
                     logger.info(f"Resource Files Path from collector: {resource_files}")
                     fileName = resource_files[-1].name  # Get the hash filename
                     logger.info(f"File Hash From Collector: {fileName}")
-                    
+
                 else:
                     log["message"] = "No endpoint files found after successful fetch."
                     log["status"] = status
                     log["exception_type"] = "URL check failed"
                     save_response_to_db(request_schema.id, log)
-                    return
+                    raise CustomException(
+                        f"URL fetch failed with no content files found"
+                    )
             else:
                 log["status"] = status
                 log["exception_type"] = "URL check failed"
                 save_response_to_db(request_schema.id, log)
                 logger.warning(f"URL check failed with fetch status: {status}")
-                return
-        
+                raise CustomException(f"URL fetch failed with status: {status}")
+
         if fileName:
             response = workflow.run_workflow(
                 fileName,
