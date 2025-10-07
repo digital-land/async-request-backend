@@ -32,7 +32,7 @@ jobs:
 
   publish-request-api:
     runs-on: ubuntu-22.04
-    needs: [detect-environments, test-request-api]
+    needs: [detect-environments, test]
     strategy:
       matrix:
         environment: ${{ fromJSON(needs.detect-environments.outputs.environments) }}
@@ -85,7 +85,7 @@ jobs:
 
   publish-request-processor:
     runs-on: ubuntu-22.04
-    needs: [detect-environments, test-request-processor]
+    needs: [detect-environments, test]
     strategy:
       matrix:
         environment: ${{ fromJSON(needs.detect-environments.outputs.environments) }}
