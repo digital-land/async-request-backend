@@ -41,7 +41,7 @@ def create_request(db: Session, request: schemas.RequestCreate):
         status="NEW",
         type=request.params.type,
         params=request.params.model_dump(),
-        plugin=getattr(request.params, 'plugin', None),
+        plugin=getattr(request.params, "plugin", None),
     )
     db.add(db_request)
     db.commit()
