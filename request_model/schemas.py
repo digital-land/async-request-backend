@@ -46,7 +46,8 @@ class CheckUrlParams(Params):
 
 class AddDataParams(Params):
     type: Literal[RequestTypeEnum.add_data] = RequestTypeEnum.add_data
-    source_request_id: str 
+    url: Optional[str] = None
+    source_request_id: Optional[str] = None
 
 
 class RequestBase(BaseModel):
