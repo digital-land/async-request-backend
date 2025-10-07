@@ -46,18 +46,18 @@ def _create_request_model():
 def test_create_request_when_celery_throws_exception(
     mock_task_delay, mock_create_request, helpers
 ):
-    with pytest.raises(OperationalError) as error:
+    with pytest.raises(OperationalError, match=exception_msg):
         main.create_request(
             helpers.build_request_create(), http_request=None, http_response=None
         )
-    assert exception_msg == str(error.value)
 
 
 @patch("crud.get_request", return_value=None)
 def test_read_request_when_not_found(mock_get_request):
     with pytest.raises(HTTPException) as exception:
         main.read_request("unknown")
-        assert 400 == exception.value.detail["errCode"]
+    assert exception.value.status_code == 404
+    assert exception.value.detail == "Request with id unknown not found"
 
 
 @pytest.mark.parametrize(

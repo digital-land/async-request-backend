@@ -129,7 +129,7 @@ def test_send_slack_alert(mock_env, mock_webclient):
 
 
 def test_create_request(db, sqs_queue, helpers):
-    """Basic request creation — compatible with both legacy and modern Location headers."""
+    """Tests basic request creation, ensuring a 202 Accepted response and a correct Location header."""
     response = client.post("/requests", json=helpers.request_create_dict())
     request_id = response.json()["id"]
     assert response.status_code == 202
