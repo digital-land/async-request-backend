@@ -309,11 +309,13 @@ def test_request():
         created=datetime.datetime.now(),
         modified=datetime.datetime.now(),
         status="COMPLETE",
+        plugin=None,
         params=schemas.CheckFileParams(
             collection="article-4-direction",
             dataset="article-4-direction-area",
             original_filename="article-direction-area.csv",
             uploaded_filename="492f15d8-45e4-427e-bde0-f60d69889f40",
+            plugin=None
         ).model_dump(),
         response=models.Response(
             data='{ "some_key": "some_value" }',

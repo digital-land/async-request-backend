@@ -38,7 +38,10 @@ def get_response_details(
 
 def create_request(db: Session, request: schemas.RequestCreate):
     db_request = models.Request(
-        status="NEW", type=request.params.type, params=request.params.model_dump(), plugin=request.params.plugin
+        status="NEW",
+        type=request.params.type,
+        params=request.params.model_dump(),
+        plugin=getattr(request.params, 'plugin', None),
     )
     db.add(db_request)
     db.commit()
