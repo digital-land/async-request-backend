@@ -82,9 +82,7 @@ def check_datafile(request: Dict, directories=None):
                     log["status"] = str(status)
                     log["exception_type"] = "URL check failed"
                     save_response_to_db(request_schema.id, log)
-                    raise CustomException(
-                        log
-                    )
+                    raise CustomException(log)
             else:
                 log["status"] = str(status)
                 log["message"] = "Fetch operation failed"
