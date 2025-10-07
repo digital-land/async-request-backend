@@ -116,6 +116,7 @@ def run_workflow(
         clean_up(
             request_id,
             directories.COLLECTION_DIR + "resource",
+            directories.COLLECTION_DIR + "log/*",
             directories.COLLECTION_DIR,
             directories.CONVERTED_DIR,
             directories.ISSUE_DIR + dataset,

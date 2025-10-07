@@ -79,18 +79,19 @@ def check_datafile(request: Dict, directories=None):
 
                 else:
                     log["message"] = "No endpoint files found after successful fetch."
-                    log["status"] = status
+                    log["status"] = str(status)
                     log["exception_type"] = "URL check failed"
                     save_response_to_db(request_schema.id, log)
                     raise CustomException(
-                        f"URL fetch failed with no content files found"
+                        log
                     )
             else:
-                log["status"] = status
+                log["status"] = str(status)
+                log["message"] = "Fetch operation failed"
                 log["exception_type"] = "URL check failed"
                 save_response_to_db(request_schema.id, log)
                 logger.warning(f"URL check failed with fetch status: {status}")
-                raise CustomException(f"URL fetch failed with status: {status}")
+                raise CustomException(log)
 
         if fileName:
             response = workflow.run_workflow(
