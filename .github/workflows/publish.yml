@@ -1,4 +1,5 @@
-name: Test & Publish
+name: Publish 
+run-name: Publish - ${{ github.head_ref || github.ref_name }} to ${{ inputs.environment }} by @${{ github.actor }}
 
 on:
   push:
@@ -26,23 +27,12 @@ jobs:
               await github.request(`GET /repos/${process.env.GITHUB_REPOSITORY}/environments`);
             return environments.map(e => e.name)
 
-  test-request-api:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install test dependencies with pip
-        working-directory: ./request-api
-        run: |
-          pip3 install -r requirements/test_requirements.txt
-
-      - name: Run Lint and Tests
-        working-directory: ./request-api
-        run: make test
+  test:
+    uses: ./.github/workflows/test.yml
 
   publish-request-api:
     runs-on: ubuntu-22.04
-    needs: [detect-environments, test-request-api]
+    needs: [detect-environments, test]
     strategy:
       matrix:
         environment: ${{ fromJSON(needs.detect-environments.outputs.environments) }}
@@ -93,35 +83,9 @@ jobs:
           aws ecs update-service --cluster ${{ matrix.environment }}-cluster --service ${{ matrix.environment }}-pub-async-request-api  --task-definition ${{ matrix.environment }}-pub-async-request-api-task --force-new-deployment
 
 
-  test-request-processor:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Install GDAL binary package
-        run: |
-          sudo add-apt-repository ppa:ubuntugis/ppa
-          sudo apt-get update
-          sudo apt-get install gdal-bin
-          gdalinfo --version
-
-      - uses: actions/checkout@v4
-
-      - name: Install test dependencies with pip
-        working-directory: ./request-processor
-        run: |
-          pip3 install -r requirements/test_requirements.txt
-
-      - name: Download specification files
-        working-directory: ./request-processor
-        run: make specification
-
-      - name: Lint, Test, Coverage
-        working-directory: ./request-processor
-        run: make all
-
-
   publish-request-processor:
     runs-on: ubuntu-22.04
-    needs: [detect-environments, test-request-processor]
+    needs: [detect-environments, test]
     strategy:
       matrix:
         environment: ${{ fromJSON(needs.detect-environments.outputs.environments) }}
