@@ -24,6 +24,7 @@ logger = get_task_logger(__name__)
 
 max_file_size_mb = 30
 
+
 def _update_request_status(request_id, status):
     db_session = database.session_maker()
     with db_session() as session:
@@ -32,17 +33,20 @@ def _update_request_status(request_id, status):
         session.commit()
         session.flush()
 
+
 def _get_request(request_id):
     db_session = database.session_maker()
     with db_session() as session:
         result = crud.get_request(session, request_id)
     return result
 
+
 def _get_response(request_id):
     db_session = database.session_maker()
     with db_session() as session:
         result = crud.get_response(session, request_id)
     return result
+
 
 def _get_content_from_url(url: str, request_id: str, tmp_dir: str) -> Optional[str]:
     """Fetch content from a URL, save it, and return the filename."""
@@ -59,6 +63,7 @@ def _get_content_from_url(url: str, request_id: str, tmp_dir: str) -> Optional[s
     save_response_to_db(request_id, log)
     logger.warning(f"URL fetch for request {request_id} failed: {log}")
     return None
+
 
 def _log_incoming_config(request_data):
     """Helper to log the incoming request parameters."""
@@ -83,11 +88,14 @@ def _log_incoming_config(request_data):
                         else None
                     ),
                     "organisation": getattr(request_data, "organisation", None),
-                }, indent=2, default=str
+                },
+                indent=2,
+                default=str,
             )
         )
     except Exception as e:
         logger.warning(f"Failed to log incoming config: {e}")
+
 
 @celery.task(base=CheckDataFileTask, name=CheckDataFileTask.name)
 def check_datafile(request: Dict, directories=None):
@@ -110,7 +118,9 @@ def check_datafile(request: Dict, directories=None):
             setattr(directories, key, value)
 
     fileName = ""
-    tmp_dir = os.path.join(directories.COLLECTION_DIR, "resource", f"{request_schema.id}")
+    tmp_dir = os.path.join(
+        directories.COLLECTION_DIR, "resource", f"{request_schema.id}"
+    )
     Path(tmp_dir).mkdir(parents=True, exist_ok=True)
 
     if request_data.type == "check_file":
@@ -128,7 +138,10 @@ def check_datafile(request: Dict, directories=None):
         preview_url = getattr(request_data, "url", None)
         if preview_url:
             fileName = _get_content_from_url(preview_url, request_schema.id, tmp_dir)
-        elif hasattr(request_data, "source_request_id") and request_data.source_request_id:
+        elif (
+            hasattr(request_data, "source_request_id")
+            and request_data.source_request_id
+        ):
             logger.info(
                 f"Processing add_data preview for source request {request_data.source_request_id}"
             )
@@ -142,7 +155,7 @@ def check_datafile(request: Dict, directories=None):
         elif hasattr(request_data, "content") and request_data.content:
             content = request_data.content.encode("utf-8")
             fileName = utils.save_content(content, tmp_dir)
-    
+
     # If no file could be processed (e.g. URL check failed, or it was a preview), return early
     if not fileName:
         logger.info("No file to process, returning.")
@@ -175,6 +188,7 @@ def check_datafile(request: Dict, directories=None):
 
     return _get_request(request_schema.id)
 
+
 def handle_check_file(request_schema, request_data, tmp_dir):
     fileName = request_data.uploaded_filename
     try:
@@ -186,12 +200,16 @@ def handle_check_file(request_schema, request_data, tmp_dir):
         )
     except Exception as e:
         logger.error(str(e))
-        log = {"message": "The uploaded file not found in S3 bucket", "status": "", "exception_type": type(e).__name__}
+        log = {
+            "message": "The uploaded file not found in S3 bucket",
+            "status": "",
+            "exception_type": type(e).__name__,
+        }
         save_response_to_db(request_schema.id, log)
         raise CustomException(log)
     return fileName
- 
- 
+
+
 # -----------------------------
 # Celery hooks
 # -----------------------------
@@ -200,33 +218,36 @@ def before_task(task_id, task, args, **kwargs):
     request_id = args[0]["id"]
     logger.debug(f"Set status to PROCESSING for request {request_id}")
     _update_request_status(request_id, "PROCESSING")
- 
- 
+
+
 @task_success.connect
 def after_task_success(sender, result, **kwargs):
     request_id = sender.request.args[0]["id"]
     logger.debug(f"Set status to COMPLETE for request {request_id}")
     _update_request_status(request_id, "COMPLETE")
- 
- 
+
+
 @task_failure.connect
 def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
     request_id = args[0]["id"]
     logger.debug(f"Set status to FAILED for request {request_id}")
     _update_request_status(request_id, "FAILED")
- 
- 
+
+
 @celeryd_init.connect
 def init_sentry(**_kwargs):
     if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
         sentry_sdk.init(
-            enable_tracing=os.environ.get("SENTRY_TRACING_ENABLED", "false").lower() == "true",
-            traces_sample_rate=float(os.environ.get("SENTRY_TRACING_SAMPLE_RATE", "0.01")),
+            enable_tracing=os.environ.get("SENTRY_TRACING_ENABLED", "false").lower()
+            == "true",
+            traces_sample_rate=float(
+                os.environ.get("SENTRY_TRACING_SAMPLE_RATE", "0.01")
+            ),
             release=os.environ.get("GIT_COMMIT"),
             debug=os.environ.get("SENTRY_DEBUG", "false").lower() == "true",
         )
- 
- 
+
+
 # -----------------------------
 # Response persistence
 # -----------------------------
@@ -246,7 +267,9 @@ def save_response_to_db(request_id, response_data):
         try:
             existing = _get_response(request_id)
             if existing:
-                logger.exception("response already exists in DB for request: %s", request_id)
+                logger.exception(
+                    "response already exists in DB for request: %s", request_id
+                )
                 return
 
             # Error payload?
@@ -257,7 +280,13 @@ def save_response_to_db(request_id, response_data):
                 return
 
             # Validate presence of all sections we expect from workflow
-            required = ("column-field-log", "error-summary", "converted-csv", "issue-log", "transformed-csv")
+            required = (
+                "column-field-log",
+                "error-summary",
+                "converted-csv",
+                "issue-log",
+                "transformed-csv",
+            )
             if not all(k in response_data for k in required):
                 # Store whatever we have to aid debugging
                 session.add(models.Response(request_id=request_id, data=response_data))
@@ -280,7 +309,9 @@ def save_response_to_db(request_id, response_data):
                 if ref and ent:
                     resource_entities.append({"reference": ref, "entity": ent})
 
-            by_entry_conv = {str(i): row or {} for i, row in enumerate(converted, start=1)}
+            by_entry_conv = {
+                str(i): row or {} for i, row in enumerate(converted, start=1)
+            }
             by_entry_facts: dict[str, List[dict]] = {}
             for f in facts:
                 en = str(f.get("entry-number", "")).strip()
@@ -292,7 +323,9 @@ def save_response_to_db(request_id, response_data):
             req = _get_request(request_id)
             params = getattr(req, "params", None)
             try:
-                params_dict = params.dict() if hasattr(params, "dict") else dict(params or {})
+                params_dict = (
+                    params.dict() if hasattr(params, "dict") else dict(params or {})
+                )
             except Exception:
                 params_dict = {}
             org_for_entities = params_dict.get("organisation", "") or ""
@@ -303,7 +336,11 @@ def save_response_to_db(request_id, response_data):
 
             def _fact_rows_for_field(entry_no: str, field_name: str) -> List[dict]:
                 """Helper to get fact rows for a specific field within an entry."""
-                return [f for f in _facts_for_entry(entry_no) if (f.get("field") or "").lower() == field_name.lower()]
+                return [
+                    f
+                    for f in _facts_for_entry(entry_no)
+                    if (f.get("field") or "").lower() == field_name.lower()
+                ]
 
             # Helpers to read values from transformed facts for an entry
             def _fact_value(entry_no: str, field_name: str) -> str:
@@ -318,8 +355,13 @@ def save_response_to_db(request_id, response_data):
                 if not row:
                     return ""
                 for key in (
-                    "Reference", "reference", "Entity reference", "entity_reference",
-                    "entity-reference", "ListEntry", "ref"
+                    "Reference",
+                    "reference",
+                    "Entity reference",
+                    "entity_reference",
+                    "entity-reference",
+                    "ListEntry",
+                    "ref",
                 ):
                     v = row.get(key)
                     if v not in (None, ""):
@@ -453,7 +495,9 @@ def save_response_to_db(request_id, response_data):
                         resource_refs.add(str(ref_facts[0].get("value", "")).strip())
 
             # --- Existing-in-resource = existing refs that actually appear in this upload ---
-            existing_entity_breakdown = [existing_by_ref[r] for r in resource_refs if r in existing_by_ref]
+            existing_entity_breakdown = [
+                existing_by_ref[r] for r in resource_refs if r in existing_by_ref
+            ]
 
             # We are not deriving "new" right now (you commented that logic out)
             new_entity_breakdown = []
@@ -476,15 +520,15 @@ def save_response_to_db(request_id, response_data):
             data = {
                 "column-field-log": response_data.get("column-field-log", {}),
                 "error-summary": response_data.get("error-summary", {}),
-                "new-entities": new_entity_breakdown,     # empty for now
+                "new-entities": new_entity_breakdown,  # empty for now
                 "new-entity-count": len(new_entity_breakdown),
                 "entity-summary": entity_summary,
-                "existing-entities": existing_entities,   # full list from lookup.csv
+                "existing-entities": existing_entities,  # full list from lookup.csv
             }
             if response_data.get("endpoint_url_validation"):
-                data["endpoint_url_validation"] = response_data.get("endpoint_url_validation")
-
-
+                data["endpoint_url_validation"] = response_data.get(
+                    "endpoint_url_validation"
+                )
 
             if "column-mapping" in response_data:
                 data["column-mapping"] = response_data.get("column-mapping")
@@ -505,17 +549,19 @@ def save_response_to_db(request_id, response_data):
                 is_new = any(
                     ent["reference"] == ref_val and ent["entity"] == conv.get("entity")
                     for ent in new_entity_breakdown
+                )
+                session.add(
+                    models.ResponseDetails(
+                        response_id=resp_row.id,
+                        detail={
+                            "converted_row": conv,
+                            "issue_logs": row_issues,
+                            "entry_number": entry_number,
+                            "transformed_row": row_facts,
+                            "is_new_entity": is_new,
+                        },
                     )
-                session.add(models.ResponseDetails(
-                    response_id=resp_row.id,
-                    detail={
-                        "converted_row": conv,
-                        "issue_logs": row_issues,
-                        "entry_number": entry_number,
-                        "transformed_row": row_facts,
-                        "is_new_entity": is_new,
-                    },
-                ))
+                )
                 entry_number += 1
 
             session.commit()

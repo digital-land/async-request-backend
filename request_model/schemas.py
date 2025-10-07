@@ -44,6 +44,7 @@ class CheckUrlParams(Params):
     type: Literal[RequestTypeEnum.check_url] = RequestTypeEnum.check_url
     url: str
 
+
 class AddDataParams(Params):
     type: Literal[RequestTypeEnum.add_data] = RequestTypeEnum.add_data
     url: Optional[str] = None
@@ -51,7 +52,9 @@ class AddDataParams(Params):
 
 
 class RequestBase(BaseModel):
-    params: Union[CheckUrlParams, CheckFileParams, AddDataParams] = Field(discriminator="type")
+    params: Union[CheckUrlParams, CheckFileParams, AddDataParams] = Field(
+        discriminator="type"
+    )
 
 
 class RequestCreate(RequestBase):

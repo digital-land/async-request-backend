@@ -36,9 +36,9 @@ def get_request(url, verify_ssl=True):
             if not response.headers.get("Content-Type", "").startswith("text/html"):
                 content = response.content
             else:
-                log[
-                    "message"
-                ] = "The requested URL leads to a html webpage which we cannot process"
+                log["message"] = (
+                    "The requested URL leads to a html webpage which we cannot process"
+                )
         else:
             log["message"] = (
                 "The requested URL could not be downloaded: " + log["status"] + " error"
@@ -116,26 +116,39 @@ def extract_dataset_field_rows(folder_path, dataset):
         logger.error("Error extracting dataset-field.csv in the specified folder.")
         return None
 
+
 def hash_sha256(value):
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
 
 def hash_md5(value):
     return hashlib.md5(value.encode("utf-8")).hexdigest()
 
-def append_endpoint(endpoint_csv_path, endpoint_url, entry_date=None, start_date=None, end_date=None):
+
+def append_endpoint(
+    endpoint_csv_path, endpoint_url, entry_date=None, start_date=None, end_date=None
+):
     endpoint_key = hash_sha256(endpoint_url)
     exists = False
     new_row = None
     if os.path.exists(endpoint_csv_path):
-        with open(endpoint_csv_path, newline='', encoding='utf-8') as f:
+        with open(endpoint_csv_path, newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 if row.get("endpoint-url") == endpoint_url:
                     exists = True
                     break
     if not exists:
-        with open(endpoint_csv_path, "a", newline='', encoding='utf-8') as f:
-            fieldnames = ["endpoint", "endpoint-url", "parameters", "plugin", "entry-date", "start-date", "end-date"]
+        with open(endpoint_csv_path, "a", newline="", encoding="utf-8") as f:
+            fieldnames = [
+                "endpoint",
+                "endpoint-url",
+                "parameters",
+                "plugin",
+                "entry-date",
+                "start-date",
+                "end-date",
+            ]
             new_row = {
                 "endpoint": endpoint_key,
                 "endpoint-url": endpoint_url,
@@ -143,26 +156,51 @@ def append_endpoint(endpoint_csv_path, endpoint_url, entry_date=None, start_date
                 "plugin": "",
                 "entry-date": entry_date or datetime.now().isoformat(),
                 "start-date": start_date or "",
-                "end-date": end_date or ""
+                "end-date": end_date or "",
             }
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writerow(new_row)
     return endpoint_key, new_row
 
-def append_source(source_csv_path, collection, organisation, endpoint_key, attribution="", documentation_url="", licence="", pipelines="", entry_date=None, start_date=None, end_date=None):
+
+def append_source(
+    source_csv_path,
+    collection,
+    organisation,
+    endpoint_key,
+    attribution="",
+    documentation_url="",
+    licence="",
+    pipelines="",
+    entry_date=None,
+    start_date=None,
+    end_date=None,
+):
     source_key = hash_md5(f"{collection}|{organisation}|{endpoint_key}")
     exists = False
     new_row = None
     if os.path.exists(source_csv_path):
-        with open(source_csv_path, newline='', encoding='utf-8') as f:
+        with open(source_csv_path, newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 if row.get("source") == source_key:
                     exists = True
                     break
     if not exists:
-        with open(source_csv_path, "a", newline='', encoding='utf-8') as f:
-            fieldnames = ["source", "attribution", "collection", "documentation-url", "endpoint", "licence", "organisation", "pipelines", "entry-date", "start-date", "end-date"]
+        with open(source_csv_path, "a", newline="", encoding="utf-8") as f:
+            fieldnames = [
+                "source",
+                "attribution",
+                "collection",
+                "documentation-url",
+                "endpoint",
+                "licence",
+                "organisation",
+                "pipelines",
+                "entry-date",
+                "start-date",
+                "end-date",
+            ]
             new_row = {
                 "source": source_key,
                 "attribution": attribution,
@@ -174,7 +212,7 @@ def append_source(source_csv_path, collection, organisation, endpoint_key, attri
                 "pipelines": pipelines,
                 "entry-date": entry_date or datetime.now().isoformat(),
                 "start-date": start_date or "",
-                "end-date": end_date or ""
+                "end-date": end_date or "",
             }
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writerow(new_row)

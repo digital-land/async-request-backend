@@ -1,6 +1,5 @@
 import os
 import csv
-import pandas as pd
 from application.logging.logger import get_logger
 from digital_land.specification import Specification
 from digital_land.log import DatasetResourceLog, IssueLog, ColumnFieldLog
@@ -56,7 +55,6 @@ def fetch_response_data(
     additional_concats,
     lookup_csv_path=None, 
 ):
-
     pipeline = Pipeline(pipeline_dir, dataset)
     specification = Specification(specification_dir)
 
