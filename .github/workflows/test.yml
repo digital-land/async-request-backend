@@ -1,9 +1,11 @@
 name: Test
+run-name: Test - ${{ github.head_ref || github.ref_name }} by @${{ github.actor }}
 
 on:
   push:
     branches-ignore: [main]
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   test-request-api:
@@ -19,7 +21,6 @@ jobs:
       - name: Run Lint and Tests
         working-directory: ./request-api
         run: make test
-
 
   test-request-processor:
     runs-on: ubuntu-22.04
