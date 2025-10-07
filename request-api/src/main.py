@@ -3,6 +3,9 @@ import os
 from datetime import datetime
 from typing import List, Dict, Any
 import sentry_sdk
+from datetime import date
+from fastapi.encoders import jsonable_encoder
+
 
 import boto3
 from botocore.exceptions import ClientError, BotoCoreError
@@ -126,9 +129,9 @@ def healthcheck(
             ),
             DependencyHealth(
                 name="sqs",
-                status=HealthStatus.HEALTHY
-                if queue_reachable
-                else HealthStatus.UNHEALTHY,
+                status=(
+                    HealthStatus.HEALTHY if queue_reachable else HealthStatus.UNHEALTHY
+                ),
             ),
         ],
     )
@@ -141,19 +144,28 @@ def create_request(
     http_response: Response,
     db: Session = Depends(_get_db),
 ):
-    request_schema = _map_to_schema(request_model=crud.create_request(db, request))
+    # --- make a deep copy for DB, keep original untouched ---
+    req_for_db = request.model_copy(deep=True)
+
+    # Coerce tricky fields on the copy so initial insert is JSON-safe
+    p = req_for_db.params
+    if getattr(p, "documentation_url", None) is not None:
+        p.documentation_url = str(p.documentation_url)  # AnyHttpUrl -> str
+    if getattr(p, "start_date", None) is not None and isinstance(p.start_date, date):
+        p.start_date = p.start_date.isoformat()  # date -> 'YYYY-MM-DD'
+
+    request_model = crud.create_request(db, req_for_db)
+
+    request_schema = _map_to_schema(request_model)
 
     try:
-        CheckDataFileTask.delay(request_schema.model_dump())
-
+        CheckDataFileTask.delay(request_schema.model_dump(mode="json"))
     except Exception as error:
         logging.error("Async call to celery check data file task failed: %s", error)
-        raise error
 
-    http_response.headers[
-        "Location"
-    ] = f"${http_request.headers['Host']}/requests/{request_schema.id}"
-
+    http_response.headers["Location"] = (
+        f"{http_request.url.scheme}://{http_request.headers.get('host')}/requests/{request_schema.id}"
+    )
     return request_schema
 
 

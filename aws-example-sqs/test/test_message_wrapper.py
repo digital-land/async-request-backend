@@ -98,9 +98,11 @@ def test_send_messages_wrong_size(make_stubber, make_queue, count):
     sqs_stubber.stub_send_message_batch(
         queue.url,
         messages,
-        "AWS.SimpleQueueService.EmptyBatchRequest"
-        if count == 0
-        else "AWS.SimpleQueueService.TooManyEntriesInBatchRequest",
+        (
+            "AWS.SimpleQueueService.EmptyBatchRequest"
+            if count == 0
+            else "AWS.SimpleQueueService.TooManyEntriesInBatchRequest"
+        ),
     )
 
     with pytest.raises(ClientError) as exc_info:

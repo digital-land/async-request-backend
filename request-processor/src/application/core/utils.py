@@ -35,9 +35,9 @@ def get_request(url, verify_ssl=True):
             if not response.headers.get("Content-Type", "").startswith("text/html"):
                 content = response.content
             else:
-                log[
-                    "message"
-                ] = "The requested URL leads to a html webpage which we cannot process"
+                log["message"] = (
+                    "The requested URL leads to a html webpage which we cannot process"
+                )
         else:
             log["message"] = (
                 "The requested URL could not be downloaded: " + log["status"] + " error"
