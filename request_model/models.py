@@ -18,7 +18,6 @@ class Request(Base):
     status = Column(String)
     params = Column(JSONB)
     type = Column(String)
-    plugin = Column(String, nullable=True)
 
     response = relationship(
         "Response", uselist=False, back_populates="request", lazy="joined"
