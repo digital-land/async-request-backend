@@ -1,3 +1,4 @@
+import datetime
 import os
 import csv
 import urllib
@@ -113,10 +114,11 @@ def run_workflow(
         logger.exception(f"An error occurred: {e}")
 
     finally:
+        # Seperate clean up for logs as Collector addds date folder
+        clean_up_logs(request_id, directories.COLLECTION_DIR + "log")
         clean_up(
             request_id,
             directories.COLLECTION_DIR + "resource",
-            directories.COLLECTION_DIR + "log/*",
             directories.COLLECTION_DIR,
             directories.CONVERTED_DIR,
             directories.ISSUE_DIR + dataset,
@@ -258,6 +260,31 @@ def add_extra_column_mappings(
 #                 shutil.rmtree(directory)
 #     except Exception as e:
 #         logger.error(f"An error occurred during cleanup: {e}")
+
+
+def clean_up_logs(request_id, log_base_dir):
+    """
+    Clean up log folders with structure: log/{request-id}/date/endpoint-hash
+    """
+    try:
+        dir_path = os.path.join(log_base_dir, str(request_id))
+        for file in os.listdir(dir_path):
+            dir_path_date = os.path.join(dir_path, file)
+            if os.path.exists(dir_path_date):
+                files = os.listdir(dir_path_date)
+                for file in files:
+                    file_path = os.path.join(dir_path_date, file)
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                # Check if the directory is empty after removing files
+                if not os.listdir(dir_path_date):
+                    os.rmdir(dir_path_date)
+            if os.path.exists(dir_path) and not os.listdir(dir_path):
+                os.rmdir(dir_path)
+        if os.path.exists(log_base_dir) and not os.listdir(log_base_dir):
+            os.rmdir(log_base_dir)
+    except Exception as e:
+        logger.error(f"An error occurred during cleanup: {e}")
 
 
 def clean_up(request_id, *directories):
