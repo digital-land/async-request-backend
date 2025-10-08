@@ -101,7 +101,7 @@ def healthcheck(
         db_result = db.execute(text("SELECT 1"))
         db_reachable = len(db_result.all()) == 1
     except SQLAlchemyError:
-        logging.exception("Health check of request-db failed")
+        logging.exception("Health checks of request-db failed")
         db_reachable = False
 
     try:
