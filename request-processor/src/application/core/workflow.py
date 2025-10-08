@@ -1,17 +1,108 @@
 import os
 import csv
-import urllib
 import yaml
 from urllib.error import HTTPError
+from pathlib import Path
 from application.core.utils import detect_encoding, extract_dataset_field_rows
 from application.logging.logger import get_logger
 from application.core.pipeline import fetch_response_data, resource_from_path
 from application.configurations.config import source_url
+from application.core.utils import append_endpoint, append_source
 from collections import defaultdict
 import json
 import warnings
+import pandas as pd
 
 logger = get_logger(__name__)
+
+
+def load_valid_organisations(organisation_csv_path):
+    """
+    Loads valid organisation CURIEs from organisation.csv.
+    Returns a set of valid organisation strings (lowercased).
+    """
+    valid_orgs = set()
+    try:
+        if not os.path.exists(organisation_csv_path):
+            logger.warning(f"organisation.csv not found at {organisation_csv_path}")
+            return valid_orgs
+        with open(organisation_csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                org = row.get("organisation")
+                if org:
+                    valid_orgs.add(org.strip().lower())
+        logger.info(
+            f"Loaded {len(valid_orgs)} valid organisations from {organisation_csv_path}"
+        )
+    except Exception as e:
+        logger.error(f"Failed to load organisations from {organisation_csv_path}: {e}")
+    return valid_orgs
+
+
+def log_lookup_csv_stats(lookup_csv_path, message_prefix=""):
+    try:
+        logger.info(f"Checking stats for {lookup_csv_path}")
+        size_mb = os.path.getsize(lookup_csv_path) / (1024 * 1024)
+        with open(lookup_csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            row_count = sum(1 for _ in reader)
+        logger.info(
+            f"{message_prefix}lookup.csv size: {size_mb:.2f} MB, rows: {row_count}"
+        )
+        return size_mb, row_count
+    except Exception as e:
+        logger.error(f"Failed to log stats for {lookup_csv_path}: {e}")
+        return 0, 0
+
+
+def append_to_lookup_csv(lookup_csv_path, new_rows):
+    if not new_rows:
+        return
+    with open(lookup_csv_path, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=new_rows[0].keys())
+        for row in new_rows:
+            writer.writerow(row)
+
+
+def run_preview_workflow(request_id, request_data, directories, existing_response_data):
+    """
+    Run a simplified workflow for an 'add_data' preview.
+    This does NOT re-run the pipeline. It re-uses the original response,
+    fetches the latest lookup.csv, and allows save_response_to_db to
+    re-calculate the entity summary.
+    """
+    logger.info(f"Running preview workflow for request {request_id}")
+    collection = request_data.collection
+    dataset = request_data.dataset
+    organisation = request_data.organisation
+
+    # We still need to fetch the latest pipeline configs to get the latest lookup.csv
+    pipeline_dir = os.path.join(directories.PIPELINE_DIR, dataset, request_id)
+    fetch_pipeline_csvs(
+        collection,
+        dataset,
+        pipeline_dir,
+        None,
+        None,
+        None,
+        directories.SPECIFICATION_DIR,
+        organisation,
+        directories.CACHE_DIR,
+    )
+
+    # Get the latest list of existing entities
+    lookup_csv_path = os.path.join(pipeline_dir, "lookup.csv")
+    latest_existing_entities = get_existing_entities_from_lookup(
+        lookup_csv_path, dataset, organisation
+    )
+
+    # Create a new response object by taking the original and updating the existing entities list
+    new_response_data = existing_response_data.copy()
+    new_response_data["existing-entities"] = latest_existing_entities
+
+    # The 'save_response_to_db' function will now correctly re-calculate the summary
+    return new_response_data
 
 
 def run_workflow(
@@ -20,19 +111,19 @@ def run_workflow(
     collection,
     dataset,
     organisation,
-    geom_type,
-    column_mapping,
     directories,
+    request_data=None,
+    cleanup: bool = False,
 ):
     additional_concats = None
 
     try:
+        geom_type = getattr(request_data, "geom_type", "")
+        column_mapping = getattr(request_data, "column_mapping", {})
+        url_to_check = getattr(request_data, "url", None)
         response_data = {}
-        # pipeline directory structure & download
         pipeline_dir = os.path.join(directories.PIPELINE_DIR, dataset, request_id)
-
         input_path = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
-
         file_path = os.path.join(input_path, fileName)
         resource = resource_from_path(file_path)
 
@@ -44,9 +135,21 @@ def run_workflow(
             column_mapping,
             resource,
             directories.SPECIFICATION_DIR,
+            organisation,
         )
 
-        fetch_response_data(
+        existing_entities = set()
+
+        lookup_csv_path = os.path.join(pipeline_dir, "lookup.csv")
+
+        if os.path.exists(lookup_csv_path):
+            existing_entities = get_existing_entities_from_lookup(
+                lookup_csv_path, dataset, organisation
+            )
+            # Convert set of tuples to list of dicts
+        # existing_entities = [{"reference": ref, "entity": entity} for ref, entity in existing_entities]
+
+        new_lookup_rows = fetch_response_data(
             dataset,
             organisation,
             request_id,
@@ -61,8 +164,14 @@ def run_workflow(
             directories.CACHE_DIR,
             additional_col_mappings=column_mapping,
             additional_concats=additional_concats,
+            lookup_csv_path=lookup_csv_path,  # pass this to pipeline.py
         )
-        # Need to get the mandatory fields from specification/central place. Hardcoding for MVP
+        # Append and log after assignment
+        if new_lookup_rows:
+            append_to_lookup_csv(lookup_csv_path, new_lookup_rows)
+            logger.info(f"Appended {len(new_lookup_rows)} new rows to lookup.csv")
+        log_lookup_csv_stats(lookup_csv_path, message_prefix="After assignment: ")
+
         required_fields_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
             "../application/configs/mandatory_fields.yaml",
@@ -107,32 +216,96 @@ def run_workflow(
             "column-field-log": column_field_json,
             "error-summary": summary_data,
             "transformed-csv": transformed_json,
+            # "existing-entities": sorted(list(existing_entities)),
+            "existing-entities": get_existing_entities_from_lookup(
+                lookup_csv_path, dataset, organisation
+            ),
         }
-        # logger.info("Error Summary: %s", summary_data)
+
+        # If a URL was provided, perform the endpoint validation check
+        if url_to_check:
+            endpoint_csv_path = os.path.join(pipeline_dir, "endpoint.csv")
+            endpoint_url_validation = check_endpoint_url_in_csv(
+                endpoint_csv_path, url_to_check
+            )
+            response_data["endpoint_url_validation"] = endpoint_url_validation
+            if endpoint_url_validation.get("found_in_endpoint_csv"):
+                msg = (
+                    f"Endpoint URL is already present in endpoint.csv "
+                    f"(entry-date: {endpoint_url_validation.get('entry_date')})"
+                )
+                response_data.setdefault("error-summary", []).append(msg)
+            else:
+                entry_date = pd.Timestamp.now().isoformat()
+                start_date = ""
+                end_date = ""
+                logger.info(
+                    f"[DL-ASYNC] Appending new endpoint to endpoint.csv: {url_to_check}"
+                )
+                endpoint_key, new_endpoint_row = append_endpoint(
+                    endpoint_csv_path, url_to_check, entry_date, start_date, end_date
+                )
+                logger.info(f"[DL-ASYNC] Appended endpoint with key: {endpoint_key}")
+
+                source_csv_path = os.path.join(pipeline_dir, "source.csv")
+                attribution = getattr(request_data, "attribution", "")
+                documentation_url = str(
+                    getattr(request_data, "documentation_url", "") or ""
+                )
+                licence = getattr(request_data, "licence", "")
+                pipelines = dataset  # Use the dataset name for the pipelines field
+                logger.info(
+                    f"[DL-ASYNC] Appending new source to source.csv for endpoint: {endpoint_key}, collection: {collection}, organisation: {organisation}"
+                )
+                source_key, new_source_row = append_source(
+                    source_csv_path,
+                    collection,
+                    organisation,
+                    endpoint_key,
+                    attribution,
+                    documentation_url,
+                    licence,
+                    pipelines,
+                    entry_date,
+                    start_date,
+                    end_date,
+                )
+                logger.info(f"[DL-ASYNC] Appended source with key: {source_key}")
+                # Add the new rows to the validation response
+                response_data["endpoint_url_validation"][
+                    "new_endpoint_entry"
+                ] = new_endpoint_row
+                response_data["endpoint_url_validation"][
+                    "new_source_entry"
+                ] = new_source_row
+
     except Exception as e:
         logger.exception(f"An error occurred: {e}")
 
     finally:
-        clean_up(
-            request_id,
-            directories.COLLECTION_DIR + "resource",
-            directories.COLLECTION_DIR,
-            directories.CONVERTED_DIR,
-            directories.ISSUE_DIR + dataset,
-            directories.ISSUE_DIR,
-            directories.COLUMN_FIELD_DIR,
-            directories.TRANSFORMED_DIR + dataset,
-            directories.TRANSFORMED_DIR,
-            directories.DATASET_RESOURCE_DIR,
-            directories.PIPELINE_DIR + dataset,
-            directories.PIPELINE_DIR,
-        )
+        if cleanup:
+            logger.info("Cleanup flag is True. Cleaning up directories.")
+            clean_up(
+                request_id,
+                directories.COLLECTION_DIR + "resource",
+                directories.COLLECTION_DIR,
+                directories.CONVERTED_DIR,
+                directories.ISSUE_DIR + dataset,
+                directories.ISSUE_DIR,
+                directories.COLUMN_FIELD_DIR,
+                directories.TRANSFORMED_DIR + dataset,
+                directories.TRANSFORMED_DIR,
+                directories.DATASET_RESOURCE_DIR,
+                directories.PIPELINE_DIR + dataset,
+                directories.PIPELINE_DIR,
+            )
+
+        else:
+            logger.info("Cleanup flag is False. Skipping cleanup.")
 
     return response_data
 
 
-# flake8: noqa
-# pragma: mccabe-complexity 11
 def fetch_pipeline_csvs(
     collection,
     dataset,
@@ -141,55 +314,198 @@ def fetch_pipeline_csvs(
     column_mapping,
     resource,
     specification_dir,
+    organisation,
+    cache_dir=None,
 ):
+    import urllib
+
     os.makedirs(pipeline_dir, exist_ok=True)
-    pipeline_csvs = ["column.csv", "transform.csv"]
-    downloaded = False
-    for pipeline_csv in pipeline_csvs:
+    if cache_dir:
+        os.makedirs(cache_dir, exist_ok=True)
+
+    # --- Download lookup.csv from CDN for the collection and log stats ---
+    try:
+        lookup_url = f"https://files.planning.data.gov.uk/config/pipeline/{collection}/lookup.csv"
+        lookup_csv_local = os.path.join(pipeline_dir, "lookup.csv")
+        urllib.request.urlretrieve(lookup_url, lookup_csv_local)
+        logger.info(f"Downloaded lookup.csv from {lookup_url} to {lookup_csv_local}")
+        log_lookup_csv_stats(lookup_csv_local, message_prefix="Before assignment: ")
+        lookup_csv_path = os.path.join(pipeline_dir, "lookup.csv")
+        logger.info(f"BEFORE get_existing_entities_from_lookup:")
+        logger.info(f"  lookup_csv_local = {lookup_csv_local}")
+        logger.info(f"  dataset = {dataset}")
+        logger.info(f"  organisation = {organisation}")
+        logger.info(f"  lookup file exists = {os.path.exists(lookup_csv_local)}")
+        existing_entities = get_existing_entities_from_lookup(
+            lookup_csv_path, dataset, organisation
+        )
+        logger.info("After exsisting entities")
         try:
-            csv_path = os.path.join(pipeline_dir, pipeline_csv)
-            print(
-                f"{source_url}/{collection + '-collection'}/main/pipeline/{pipeline_csv}"
+            existing_entities = get_existing_entities_from_lookup(
+                lookup_csv_local, dataset, organisation
             )
-            urllib.request.urlretrieve(
-                f"{source_url}/{collection + '-collection'}/main/pipeline/{pipeline_csv}",
-                csv_path,
+            if existing_entities:
+                logger.info(
+                    f"Found {len(existing_entities)} existing entities in lookup.csv: "
+                    f"{[e['reference'] for e in existing_entities[:10]]}"
+                    f"{' ...' if len(existing_entities) > 10 else ''}"
+                )
+            else:
+                logger.info(
+                    "No existing entities found in lookup.csv for this dataset and organisation."
+                )
+        except Exception as e:
+            logger.warning(f"Could not check existing entities in lookup.csv: {e}")
+    except Exception as e:
+        logger.error(f"Failed to download lookup.csv from CDN: {e}")
+
+    # --- Optionally overwrite lookup.csv with S3 version if env var is set ---
+    try:
+        from s3_transfer_manager import download_with_default_configuration
+
+        bucket_name = os.environ.get("LOOKUP_BUCKET_NAME")
+        object_key = "lookup.csv"
+        lookup_csv_local = os.path.join(pipeline_dir, "lookup.csv")
+        file_size_mb = 1  # Adjust if you know the size
+        if bucket_name:
+            download_with_default_configuration(
+                bucket_name, object_key, lookup_csv_local, file_size_mb
             )
-            downloaded = True
-        except HTTPError as e:
+            logger.info(f"Downloaded lookup.csv from S3 to {lookup_csv_local}")
+        else:
             logger.warning(
-                f"Failed to retrieve pipeline CSV: {e}. Attempting to download from central config repository"
+                "LOOKUP_BUCKET_NAME environment variable not set. Skipping lookup.csv download from S3."
             )
+    except Exception as e:
+        logger.error(f"Failed to download lookup.csv from S3: {e}")
+
+    # --- Download organisation.csv from CDN or S3 ---
+    try:
+        org_url = "http://files.planning.data.gov.uk/organisation-collection/dataset/organisation.csv"
+        org_csv_local = os.path.join(cache_dir or pipeline_dir, "organisation.csv")
+        # Try S3 first
+        try:
+            from s3_transfer_manager import download_with_default_configuration
+
+            org_bucket = os.environ.get("ORG_BUCKET_NAME")
+            org_object_key = "organisation.csv"
+            file_size_mb = 1
+            if org_bucket:
+                download_with_default_configuration(
+                    org_bucket, org_object_key, org_csv_local, file_size_mb
+                )
+                logger.info(f"Downloaded organisation.csv from S3 to {org_csv_local}")
+            else:
+                logger.warning(
+                    "ORG_BUCKET_NAME environment variable not set. Skipping organisation.csv download from S3."
+                )
+                raise Exception("ORG_BUCKET_NAME not set")
+        except Exception as s3e:
+            logger.warning(f"Falling back to CDN for organisation.csv due to: {s3e}")
+            urllib.request.urlretrieve(org_url, org_csv_local)
             logger.info(
-                f"{source_url}/{'config'}/main/pipeline/{collection}/{pipeline_csv}"
+                f"Downloaded organisation.csv from {org_url} to {org_csv_local}"
             )
+    except Exception as e:
+        logger.error(f"Failed to download organisation.csv: {e}")
+
+    # --- Download endpoint.csv and source.csv from CDN or S3 ---
+    for csv_name in ["endpoint.csv", "source.csv"]:
+        csv_url = f"http://files.planning.data.gov.uk/config/collection/{collection}/{csv_name}"
+        csv_local = os.path.join(pipeline_dir, csv_name)
+        # Try S3 first
+        try:
+            from s3_transfer_manager import download_with_default_configuration
+
+            pipeline_bucket = os.environ.get("PIPELINE_BUCKET_NAME")
+            object_key = f"{collection}/{csv_name}"
+            file_size_mb = 1
+            if pipeline_bucket:
+                download_with_default_configuration(
+                    pipeline_bucket, object_key, csv_local, file_size_mb
+                )
+                logger.info(f"Downloaded {csv_name} from S3 to {csv_local}")
+            else:
+                logger.warning(
+                    f"PIPELINE_BUCKET_NAME environment variable not set. Skipping {csv_name} download from S3."
+                )
+                raise Exception("PIPELINE_BUCKET_NAME not set")
+        except Exception as s3e:
+            logger.warning(f"Falling back to CDN for {csv_name} due to: {s3e}")
             try:
+                urllib.request.urlretrieve(csv_url, csv_local)
+                logger.info(f"Downloaded {csv_name} from {csv_url} to {csv_local}")
+            except Exception as cdne:
+                logger.error(f"Failed to download {csv_name} from CDN: {cdne}")
+
+    # --- Download column.csv and transform.csv from CDN or S3 ---
+    pipeline_csvs = ["column.csv", "transform.csv"]
+    for pipeline_csv in pipeline_csvs:
+        csv_path = os.path.join(pipeline_dir, pipeline_csv)
+        # Try S3 first
+        try:
+            from s3_transfer_manager import download_with_default_configuration
+
+            pipeline_bucket = os.environ.get("PIPELINE_BUCKET_NAME")
+            object_key = f"{collection}/{pipeline_csv}"
+            file_size_mb = 1
+            if pipeline_bucket:
+                download_with_default_configuration(
+                    pipeline_bucket, object_key, csv_path, file_size_mb
+                )
+                logger.info(f"Downloaded {pipeline_csv} from S3 to {csv_path}")
+            else:
+                logger.warning(
+                    f"PIPELINE_BUCKET_NAME environment variable not set. Skipping {pipeline_csv} download from S3."
+                )
+                raise Exception("PIPELINE_BUCKET_NAME not set")
+        except Exception as s3e:
+            logger.warning(f"Falling back to CDN for {pipeline_csv} due to: {s3e}")
+            try:
+                logger.info(f"Ensuring {pipeline_csv} is present at {csv_path}")
                 urllib.request.urlretrieve(
-                    f"{source_url}/{'config'}/main/pipeline/{collection}/{pipeline_csv}",
+                    f"{source_url}/{collection + '-collection'}/main/pipeline/{pipeline_csv}",
                     csv_path,
                 )
-                downloaded = True
+                logger.info(
+                    f"Downloaded {pipeline_csv} from {source_url}/{collection + '-collection'}/main/pipeline/{pipeline_csv} to {csv_path}"
+                )
             except HTTPError as e:
-                logger.error(f"Failed to retrieve from config repository: {e}")
+                logger.warning(
+                    f"Failed to retrieve pipeline CSV: {e}. Attempting to download from central config repository"
+                )
+                logger.info(
+                    f"{source_url}/{'config'}/main/pipeline/{collection}/{pipeline_csv}"
+                )
+                try:
+                    urllib.request.urlretrieve(
+                        f"{source_url}/{'config'}/main/pipeline/{collection}/{pipeline_csv}",
+                        csv_path,
+                    )
+                    logger.info(
+                        f"Downloaded {pipeline_csv} from central config repository to {csv_path}"
+                    )
+                except HTTPError as e:
+                    logger.error(f"Failed to retrieve from config repository: {e}")
 
-        if downloaded:
-            try:
-                if pipeline_csv == "column.csv":
-                    if column_mapping:
-                        not_mapped_columns = add_extra_column_mappings(
-                            csv_path,
-                            column_mapping,
-                            dataset,
-                            resource,
-                            specification_dir,
-                        )
-                        return not_mapped_columns
-                    if geom_type:
-                        add_geom_mapping(
-                            dataset, pipeline_dir, geom_type, resource, pipeline_csv
-                        )
-            except Exception as e:
-                logger.error(f"Error saving new mapping: {e}")
+        # --- Existing logic for column mapping and geom_type ---
+        try:
+            if pipeline_csv == "column.csv":
+                if column_mapping:
+                    not_mapped_columns = add_extra_column_mappings(
+                        csv_path,
+                        column_mapping,
+                        dataset,
+                        resource,
+                        specification_dir,
+                    )
+                    return not_mapped_columns
+                if geom_type:
+                    add_geom_mapping(
+                        dataset, pipeline_dir, geom_type, resource, pipeline_csv
+                    )
+        except Exception as e:
+            logger.error(f"Error saving new mapping: {e}")
     return {}
 
 
@@ -397,3 +713,76 @@ def convert_error_summary_to_json(error_summary):
                 json_data.append(f"{count} {key}")
                 logger.warning(f"Mapping not found for: {key}")
     return json_data
+
+
+def get_existing_entities_from_lookup(lookup_csv_path, dataset, organisation):
+    logger.info("inside the function")
+    if not os.path.exists(lookup_csv_path):
+        logger.info("lookup_csv_path does not exist")
+        return []
+    df = pd.read_csv(lookup_csv_path, dtype=str, keep_default_na=False)
+    logger.info(f"lookup.csv columns: {df.columns.tolist()}")
+    logger.info(f"First 5 rows of lookup.csv:\n{df.head()}")
+
+    # Standardize column names (strip whitespace)
+    df.columns = [col.strip() for col in df.columns]
+
+    # Filter for dataset and organisation
+    filtered = df[
+        (df.get("prefix", "") == dataset) & (df.get("organisation", "") == organisation)
+    ]
+
+    # Remove header rows and rows with missing/empty reference or entity
+    filtered = filtered[
+        (filtered["reference"].str.lower() != "reference")
+        & (filtered["entity"].str.lower() != "entity")
+        & (filtered["reference"].str.strip() != "")
+        & (filtered["entity"].str.strip() != "")
+    ]
+
+    logger.info(
+        f"Filtered {len(filtered)} rows for dataset={dataset} and organisation={organisation}"
+    )
+    if not filtered.empty:
+        logger.info(f"First filtered row as dict: {filtered.iloc[0].to_dict()}")
+
+    # Return only valid rows
+    return [
+        {"reference": row["reference"].strip(), "entity": row["entity"].strip()}
+        for _, row in filtered.iterrows()
+    ]
+
+
+def check_endpoint_url_in_csv(endpoint_csv_path, url_to_check):
+    """
+    Checks if the given URL is present in endpoint.csv.
+    Returns a dict with validation details.
+    """
+    import csv
+
+    result = {
+        "url": url_to_check,
+        "found_in_endpoint_csv": False,
+        "endpoint_csv_path": endpoint_csv_path,
+        "entry_date": None,
+    }
+
+    if not os.path.exists(endpoint_csv_path):
+        logger.warning(f"endpoint.csv not found at {endpoint_csv_path}")
+        return result
+
+    with open(endpoint_csv_path, newline="", encoding="utf-8") as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            endpoint_url = (row.get("endpoint-url") or "").strip()
+            if endpoint_url == url_to_check.strip():
+                entry_date = row.get("entry-date", "")
+                logger.info(
+                    f"Endpoint URL '{url_to_check}' is already present in {endpoint_csv_path} with entry-date: {entry_date}"
+                )
+                result["found_in_endpoint_csv"] = True
+                result["entry_date"] = entry_date
+                break
+    if not result["found_in_endpoint_csv"]:
+        logger.info(f"Endpoint URL '{url_to_check}' not found in {endpoint_csv_path}")
+    return result
