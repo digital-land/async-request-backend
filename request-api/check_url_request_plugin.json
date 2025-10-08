@@ -1,0 +1,9 @@
+    {    "params": {
+        "type": "check_url",
+        "dataset": "article-4-direction-area",
+        "collection": "article-4-direction",
+        "column_mapping": null,
+        "geom_type": null,
+        "url": "https://maps.doncaster.gov.uk/server/rest/services/Planning/Article_4/MapServer/6/",
+        "plugin": "arcgis"
+    }}

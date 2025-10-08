@@ -26,6 +26,7 @@ class CheckFileParams(Params):
 class CheckUrlParams(Params):
     type: Literal[RequestTypeEnum.check_url] = RequestTypeEnum.check_url
     url: str
+    plugin: Optional[str] = None
 
 
 class RequestBase(BaseModel):
@@ -67,9 +68,15 @@ class ResponseModel(BaseModel):
     error: Optional[Dict[str, Any]]
 
 
+class PluginTypeEnum(str, Enum):
+    arcgis = "arcgis"
+    wfs = "wfs"
+
+
 class Request(RequestBase):
     id: str
     type: RequestTypeEnum
+    plugin: Optional[PluginTypeEnum] = None
     status: str
     created: datetime.datetime
     modified: datetime.datetime

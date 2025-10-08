@@ -7,6 +7,7 @@ import os
 import database
 from request_model import models, schemas
 from src.tasks import check_datafile
+from digital_land.collect import FetchStatus
 
 
 @pytest.fixture(scope="module")
@@ -152,9 +153,17 @@ def test_check_datafile_url(
         key: str(path) for key, path in mock_directories._asdict().items()
     }
 
-    mocker.patch(
-        "application.core.utils.get_request", return_value=get_request_return_value
-    )
+    def mock_collector_fetch(self, url, plugin=None):
+        if expected_status == "COMPLETE":
+            resource_dir = self.resource_dir
+            resource_dir.mkdir(parents=True, exist_ok=True)
+            mock_file = resource_dir / "mock_resource_hash"
+            mock_file.write_text("mock csv data")
+            return FetchStatus.OK
+        else:
+            return FetchStatus.FAILED
+
+    mocker.patch("digital_land.collect.Collector.fetch", mock_collector_fetch)
 
     _register_and_check_request(
         mock_directories_str, celery_app, request, expected_status

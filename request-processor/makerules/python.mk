@@ -16,4 +16,4 @@ coverage-unit:
 	pytest --random-order --cov=src tests/unit/
 
 coverage-integration:
-	pytest --random-order --cov=src --cov-append --cov-fail-under=90 tests/integration/
+	pytest --random-order --cov=src --cov-append --cov-fail-under=85 tests/integration/

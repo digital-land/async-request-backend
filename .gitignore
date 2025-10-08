@@ -8,3 +8,4 @@ request-processor/src/digital-land
 request-processor/tests/converted
 request-processor/specification/*
 request-processor/var/*
+.DS_Store
