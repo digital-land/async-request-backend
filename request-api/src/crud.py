@@ -1,15 +1,15 @@
 from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
- 
+
 from pagination_model import PaginatedResult, PaginationParams
 from request_model import models, schemas
- 
- 
+
+
 def get_request(db: Session, request_id: str):
     return db.query(models.Request).filter(models.Request.id == request_id).first()
- 
- 
+
+
 def get_response_details(
     db: Session,
     request_id: str,
@@ -25,7 +25,7 @@ def get_response_details(
         base_query = base_query.filter(
             func.jsonb_path_match(models.ResponseDetails.detail, jsonpath)
         )
- 
+
     response_details = (
         base_query.offset(pagination_params.offset).limit(pagination_params.limit).all()
     )
@@ -34,8 +34,8 @@ def get_response_details(
         total_results_available=base_query.count(),
         data=response_details,
     )
- 
- 
+
+
 def create_request(db: Session, request: schemas.RequestCreate):
     db_request = models.Request(
         status="NEW",
@@ -46,5 +46,3 @@ def create_request(db: Session, request: schemas.RequestCreate):
     db.commit()
     db.refresh(db_request)
     return db_request
- 
- 
