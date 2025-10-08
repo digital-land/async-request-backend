@@ -42,7 +42,7 @@ services:
       - "8000:8000"
 
   request-db:
-    image: postgres:16.2-alpine
+    image: postgres:15-alpine
     environment:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: request_database
@@ -74,6 +74,7 @@ services:
       SENTRY_TRACING_ENABLED: "true"
       SENTRY_TRACING_SAMPLE_RATE: "0.50"
       SENTRY_DEBUG: "true"
+      
     restart: on-failure
     deploy:
       replicas: 1

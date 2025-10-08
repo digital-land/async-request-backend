@@ -116,9 +116,9 @@ def test_get_db_fails_after_retries(mock_restored, mock_slack, mock_session_make
 @patch("main.WebClient")
 @patch(
     "main.os.environ.get",
-    side_effect=lambda k, d=None: "fake_token"
-    if k == "SLACK_BOT_TOKEN"
-    else "fake_channel",
+    side_effect=lambda k, d=None: (
+        "fake_token" if k == "SLACK_BOT_TOKEN" else "fake_channel"
+    ),
 )
 def test_send_slack_alert(mock_env, mock_webclient):
     mock_client_instance = mock_webclient.return_value
@@ -129,10 +129,46 @@ def test_send_slack_alert(mock_env, mock_webclient):
 
 
 def test_create_request(db, sqs_queue, helpers):
+    """Tests basic request creation, ensuring a 202 Accepted response and a correct Location header."""
     response = client.post("/requests", json=helpers.request_create_dict())
     request_id = response.json()["id"]
     assert response.status_code == 202
     assert response.headers["Location"] == f"$testserver/requests/{request_id}"
+
+
+def test_create_request_with_optional_fields(db, sqs_queue, helpers):
+    """Ensure optional fields are stored & returned: documentation_url, licence, start_date."""
+    request_obj = schemas.RequestCreate(
+        params=schemas.CheckUrlParams(
+            type="check_url",
+            dataset="brownfield-land",
+            collection="brownfield-land",
+            url="http://example.com/data.csv",
+            documentation_url="https://government.gov.uk",
+            licence="ogl",
+            start_date="2025-08-10",
+        )
+    )
+    response = client.post("/requests", json=request_obj.model_dump(mode="json"))
+    request_id = response.json()["id"]
+
+    assert response.status_code == 202
+    assert response.headers["Location"] == f"$testserver/requests/{request_id}"
+
+    params = response.json()["params"]
+    assert params["documentation_url"] == "https://government.gov.uk"
+    assert params["licence"] == "ogl"
+    assert params["start_date"] == "2025-08-10"
+
+    # round trip check: GET should return the same
+    read_response = client.get(f"/requests/{request_id}")
+    assert read_response.status_code == 200
+    assert (
+        read_response.json()["params"]["documentation_url"]
+        == "https://government.gov.uk"
+    )
+    assert read_response.json()["params"]["licence"] == "ogl"
+    assert read_response.json()["params"]["start_date"] == "2025-08-10"
 
 
 def test_create_request_missing_uploaded_file(db, sqs_queue, helpers):
@@ -267,9 +303,7 @@ def test_read_unknown_request(db):
 
 @pytest.fixture(scope="module")
 def db_session(db):
-    session = database.session_maker()
-    session = session()
-
+    session = database.session_maker()()
     try:
         yield session
     finally:
