@@ -20,7 +20,7 @@ os.environ["AWS_SESSION_TOKEN"] = "testing"
 os.environ["CELERY_BROKER_URL"] = "memory://"
 os.environ["DATABASE_URL"] = "sqlite://"
 
-postgres_container = PostgresContainer("postgres:16.2-alpine")
+postgres_container = PostgresContainer("postgres:15-alpine")
 
 
 @pytest.fixture(scope="module")

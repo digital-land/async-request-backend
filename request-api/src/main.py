@@ -147,9 +147,9 @@ def create_request(
         logging.error("Async call to celery check data file task failed: %s", error)
         raise error
 
-    http_response.headers[
-        "Location"
-    ] = f"${http_request.headers['Host']}/requests/{request_schema.id}"
+    http_response.headers["Location"] = (
+        f"${http_request.headers['Host']}/requests/{request_schema.id}"
+    )
     return request_schema
 
 

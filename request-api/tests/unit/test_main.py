@@ -57,7 +57,11 @@ def test_read_request_when_not_found(mock_get_request):
     with pytest.raises(HTTPException) as exception:
         main.read_request("unknown")
     assert exception.value.status_code == 404
-    assert exception.value.detail == "Request with id unknown not found"
+    detail = exception.value.detail
+    assert detail["errCode"] == 400
+    assert detail["errType"] == "User Error"
+    assert detail["errMsg"] == "Response with $unknown was not found"
+
 
 
 @pytest.mark.parametrize(

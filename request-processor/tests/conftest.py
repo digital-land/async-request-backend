@@ -17,7 +17,7 @@ os.environ["AWS_SESSION_TOKEN"] = "testing"
 os.environ["REQUEST_FILES_BUCKET_NAME"] = "dluhc-data-platform-request-files-local"
 os.environ["CELERY_BROKER_URL"] = "memory://"
 
-postgres_container = PostgresContainer("postgres:16.2-alpine")
+postgres_container = PostgresContainer("postgres:15-alpine")
 
 
 @pytest.fixture(scope="module")
