@@ -61,7 +61,6 @@ def is_connection_restored(last_attempt_time, max_retry_duration=60):
     return (current_time - last_attempt_timestamp) > max_retry_duration
 
 
-# Dependency
 def _get_db():
     retries = 5
     for attempt in range(retries):
@@ -102,9 +101,7 @@ def healthcheck(
         db_result = db.execute(text("SELECT 1"))
         db_reachable = len(db_result.all()) == 1
     except SQLAlchemyError:
-        logging.exception(
-            "Health check of request-db failed",
-        )
+        logging.exception("Health check of request-db failed")
         db_reachable = False
 
     try:
@@ -126,9 +123,9 @@ def healthcheck(
             ),
             DependencyHealth(
                 name="sqs",
-                status=HealthStatus.HEALTHY
-                if queue_reachable
-                else HealthStatus.UNHEALTHY,
+                status=(
+                    HealthStatus.HEALTHY if queue_reachable else HealthStatus.UNHEALTHY
+                ),
             ),
         ],
     )
@@ -141,19 +138,18 @@ def create_request(
     http_response: Response,
     db: Session = Depends(_get_db),
 ):
-    request_schema = _map_to_schema(request_model=crud.create_request(db, request))
+    request_model = crud.create_request(db, request)
+    request_schema = _map_to_schema(request_model)
 
     try:
-        CheckDataFileTask.delay(request_schema.model_dump())
-
+        CheckDataFileTask.delay(request_schema.model_dump(mode="json"))
     except Exception as error:
         logging.error("Async call to celery check data file task failed: %s", error)
         raise error
 
-    http_response.headers[
-        "Location"
-    ] = f"${http_request.headers['Host']}/requests/{request_schema.id}"
-
+    http_response.headers["Location"] = (
+        f"${http_request.headers['Host']}/requests/{request_schema.id}"
+    )
     return request_schema
 
 

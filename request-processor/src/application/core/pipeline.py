@@ -53,19 +53,32 @@ def fetch_response_data(
     cache_dir,
     additional_col_mappings,
     additional_concats,
+    lookup_csv_path=None, 
 ):
-    # define variables for Pipeline and specification
     pipeline = Pipeline(pipeline_dir, dataset)
     specification = Specification(specification_dir)
 
     input_path = os.path.join(collection_dir, "resource", request_id)
-    # List all files in the "resource" directory
+
     files_in_resource = os.listdir(input_path)
     os.makedirs(os.path.join(issue_dir, dataset, request_id), exist_ok=True)
+
+    organisation_csv_path = os.path.join(cache_dir, "organisation.csv")
+    valid_organisations = set()
+    if os.path.exists(organisation_csv_path):
+         with open(organisation_csv_path, newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                org = row.get("organisation")
+                if org:
+                    valid_organisations.add(org.strip().lower())
+    
+    new_lookup_rows = []
+    
     try:
         for file_name in files_in_resource:
             file_path = os.path.join(input_path, file_name)
-            # retrieve unnassigned entities and assign
+            '''# retrieve unnassigned entities and assign
             assign_entries(
                 resource_path=file_path,
                 dataset=dataset,
@@ -75,9 +88,29 @@ def fetch_response_data(
                 cache_dir=cache_dir,
             )
     except Exception as err:
-        logger.error("An exception occured during assign_entries process: ", str(err))
+        logger.error("An exception occured during assign_entries process: ", str(err))'''
+            org_check = str(organisation).strip().lower()
+            if org_check and org_check not in valid_organisations:
+                logger.warning(
+                    f"Skipping file {file_name} due to unknown organisation: '{organisation}' (not in organisation.csv)"
+                    )
+                continue  # Skip this file, do NOT assign or log issues/entities
 
-    # Create directories if they don't exist
+            new_rows = assign_entries(
+                resource_path=file_path,
+                dataset=dataset,
+                organisation=organisation,
+                pipeline_dir=pipeline_dir,
+                specification=specification,
+                cache_dir=cache_dir,
+                lookup_csv_path=lookup_csv_path,
+            )
+            if new_rows:
+                new_lookup_rows.extend(new_rows)
+    except Exception as err:
+        logger.error("An exception occured during assign_entries process: %s", str(err))
+
+
     for directory in [
         collection_dir,
         issue_dir,
@@ -88,7 +121,7 @@ def fetch_response_data(
 
     os.makedirs(os.path.join(transformed_dir, dataset, request_id), exist_ok=True)
 
-    # Access each file in the "resource" directory
+
     for file_name in files_in_resource:
         file_path = os.path.join(input_path, file_name)
 
@@ -120,6 +153,7 @@ def fetch_response_data(
         except Exception as err:
             logger.error("An exception occured during pipeline_run: ", str(err))
 
+    return new_lookup_rows
 
 def pipeline_run(
     dataset,
@@ -130,7 +164,7 @@ def pipeline_run(
     output_path,
     organisations,
     converted_dir,
-    null_path=None,  # TBD: remove this
+    null_path=None,
     issue_dir=None,
     organisation_path=None,
     save_harmonised=False,
@@ -149,7 +183,7 @@ def pipeline_run(
     dataset_resource_log = DatasetResourceLog(dataset=dataset, resource=resource)
 
     api = API(specification=specification)
-    # load pipeline configuration
+
     skip_patterns = pipeline.skip_patterns(resource)
     columns = pipeline.columns(resource, endpoints=endpoints)
     concats = pipeline.concatenations(resource, endpoints=endpoints)
@@ -159,14 +193,14 @@ def pipeline_run(
     default_values = pipeline.default_values(endpoints=endpoints)
     combine_fields = pipeline.combine_fields(endpoints=endpoints)
 
-    # load organisations
+   
     organisation = Organisation(organisation_path, Path(pipeline.path))
 
     severity_csv_path = os.path.join(specification_dir, "issue-type.csv")
 
-    # Load valid category values
+
     valid_category_values = api.get_valid_category_values(dataset, pipeline)
-    # resource specific default values
+
     if len(organisations) == 1:
         default_values["organisation"] = organisations[0]
 
@@ -200,9 +234,7 @@ def pipeline_run(
             default_values=default_values,
             issues=issue_log,
         ),
-        # TBD: move migrating columns to fields to be immediately after map
-        # this will simplify harmonisation and remove intermediate_fieldnames
-        # but effects brownfield-land and other pipelines which operate on columns
+
         MigratePhase(
             fields=specification.schema_field[schema],
             migrations=pipeline.migrations(),
@@ -241,7 +273,7 @@ def pipeline_run(
 
     issue_log = duplicate_reference_check(issues=issue_log, csv_path=output_path)
 
-    # Add the 'severity' and 'description' column based on the mapping
+  
     issue_log.add_severity_column(severity_csv_path)
 
     issue_log.save(os.path.join(issue_dir, resource + ".csv"))
@@ -257,9 +289,8 @@ def default_output_path(command, input_path):
     directory = "" if command in ["harmonised", "transformed"] else "var/"
     return f"{directory}{command}/{resource_from_path(input_path)}.csv"
 
-
 def assign_entries(
-    resource_path, dataset, organisation, pipeline_dir, specification, cache_dir
+    resource_path, dataset, organisation, pipeline_dir, specification, cache_dir, lookup_csv_path=None
 ):
     pipeline = Pipeline(pipeline_dir, dataset)
     resource_lookups = get_resource_unidentified_lookups(
@@ -275,7 +306,7 @@ def assign_entries(
     unassigned_entries.append(resource_lookups)
 
     lookups = Lookups(pipeline_dir)
-    # Check if the lookups file exists, create it if not
+
     if not os.path.exists(lookups.lookups_path):
         with open(lookups.lookups_path, "w", newline="") as f:
             writer = csv.writer(f)
@@ -284,11 +315,27 @@ def assign_entries(
             )
 
     lookups.load_csv()
+
+
+    existing_entities = set()
+    if lookup_csv_path and os.path.exists(lookup_csv_path):
+        import pandas as pd
+        df = pd.read_csv(lookup_csv_path)
+        if "prefix" in df.columns and "organisation" in df.columns and "entity" in df.columns:
+            filtered = df[(df["prefix"] == dataset) & (df["organisation"] == organisation)]
+            existing_entities = set(filtered["entity"].astype(str))
+
+    new_rows = []
     for new_lookup in unassigned_entries:
         for idx, entry in enumerate(new_lookup):
+            entity = str(entry[0].get("entity", ""))
+            if entity and entity in existing_entities:
+                continue  
             lookups.add_entry(entry[0])
+            if lookup_csv_path:
+                new_rows.append(entry[0])
 
-    # save edited csvs
+
     max_entity_num = lookups.get_max_entity(pipeline.name, specification)
     lookups.entity_num_gen.state["current"] = max_entity_num
     lookups.entity_num_gen.state["range_max"] = specification.get_dataset_entity_max(
@@ -299,3 +346,4 @@ def assign_entries(
     )
 
     lookups.save_csv()
+    return new_rows
