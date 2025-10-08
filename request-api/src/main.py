@@ -2,7 +2,6 @@ import logging
 import os
 from datetime import datetime
 from typing import List, Dict, Any
-import sentry_sdk
 
 import boto3
 from botocore.exceptions import ClientError, BotoCoreError
@@ -10,6 +9,7 @@ from fastapi import FastAPI, Depends, Request, Response, HTTPException
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
 from slack_sdk import WebClient
+import sentry_sdk
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -111,7 +111,7 @@ def healthcheck(
         logging.exception("Health check of sqs failed")
         queue_reachable = False
 
-    response.status_code = 200 if db_reachable & queue_reachable else 500
+    response.status_code = 200 if db_reachable and queue_reachable else 500
 
     return HealthCheckResponse(
         name="request-api",
