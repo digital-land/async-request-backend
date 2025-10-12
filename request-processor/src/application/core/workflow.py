@@ -1,6 +1,7 @@
 import datetime
 import os
 import csv
+from pathlib import Path
 import urllib
 import yaml
 from urllib.error import HTTPError
@@ -264,27 +265,36 @@ def add_extra_column_mappings(
 
 def clean_up_logs(request_id, log_base_dir):
     """
-    Clean up log folders with structure: log/{request-id}/date/endpoint-hash
+    Clean up log folders with structure: log/{request-id}/date/resource-hash
+
+    This function is due to Collector class automatically creating log folders with a different structure to the rest of the process.
     """
     try:
-        dir_path = os.path.join(log_base_dir, str(request_id))
-        for file in os.listdir(dir_path):
-            dir_path_date = os.path.join(dir_path, file)
-            if os.path.exists(dir_path_date):
-                files = os.listdir(dir_path_date)
-                for file in files:
-                    file_path = os.path.join(dir_path_date, file)
-                    if os.path.isfile(file_path):
-                        os.remove(file_path)
-                # Check if the directory is empty after removing files
-                if not os.listdir(dir_path_date):
-                    os.rmdir(dir_path_date)
-            if os.path.exists(dir_path) and not os.listdir(dir_path):
-                os.rmdir(dir_path)
-        if os.path.exists(log_base_dir) and not os.listdir(log_base_dir):
-            os.rmdir(log_base_dir)
+        log_base = Path(log_base_dir)
+
+        # Find all files(resource hashes) under the request_id/date and remove.
+        request_pattern = f"{request_id}/**/*"
+        all_files = list(log_base.glob(request_pattern))
+        for item in all_files:
+            if item.is_file():
+                item.unlink()
+
+        # Find all date directories under request_id (YYYY-MM-DD format) and remove
+        date_pattern = f"{request_id}/????-??-??"
+        date_dirs = list(log_base.glob(date_pattern))
+        for date_dir in sorted(date_dirs, reverse=True):
+            if date_dir.exists() and not any(date_dir.iterdir()):
+                date_dir.rmdir()
+
+        # Remove request_id and log base directory
+        request_dir = log_base / str(request_id)
+        if request_dir.exists() and not any(request_dir.iterdir()):
+            request_dir.rmdir()
+        if log_base.exists() and not any(log_base.iterdir()):
+            log_base.rmdir()
+
     except Exception as e:
-        logger.error(f"An error occurred during cleanup: {e}")
+        logger.error(f"An error occurred during log cleanup: {e}")
 
 
 def clean_up(request_id, *directories):

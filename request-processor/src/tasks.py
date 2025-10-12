@@ -50,9 +50,7 @@ def check_datafile(request: Dict, directories=None):
 
         elif request_data.type == "check_url":
             # With Collector from digital-land/collect, edit to use correct directory path without changing Collector class
-            collector = Collector(
-                request_data.dataset, Path(directories.COLLECTION_DIR)
-            )
+            collector = Collector(collection_dir=Path(directories.COLLECTION_DIR))
             # Override the resource_dir to match our tmp_dir structure
             collector.resource_dir = Path(tmp_dir)  # Use the same directory as tmp_dir
             collector.log_dir = (
