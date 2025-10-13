@@ -78,17 +78,6 @@ def fetch_response_data(
     try:
         for file_name in files_in_resource:
             file_path = os.path.join(input_path, file_name)
-            '''# retrieve unnassigned entities and assign
-            assign_entries(
-                resource_path=file_path,
-                dataset=dataset,
-                organisation=organisation,
-                pipeline_dir=pipeline_dir,
-                specification=specification,
-                cache_dir=cache_dir,
-            )
-    except Exception as err:
-        logger.error("An exception occured during assign_entries process: ", str(err))'''
             org_check = str(organisation).strip().lower()
             if org_check and org_check not in valid_organisations:
                 logger.warning(
