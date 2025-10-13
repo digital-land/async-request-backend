@@ -78,6 +78,7 @@ def fetch_response_data(
     try:
         for file_name in files_in_resource:
             file_path = os.path.join(input_path, file_name)
+    #     logger.error("An exception occured during assign_entries process)
             org_check = str(organisation).strip().lower()
             if org_check and org_check not in valid_organisations:
                 logger.warning(
