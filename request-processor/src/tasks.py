@@ -16,6 +16,7 @@ from application.configurations.config import Directories
 import application.core.utils as utils
 from application.exceptions.customExceptions import CustomException
 from pathlib import Path
+from digital_land.collect import Collector, FetchStatus
 
 logger = get_task_logger(__name__)
 # Threshold for s3_transfer_manager to automatically use multipart download
@@ -40,7 +41,7 @@ def check_datafile(request: Dict, directories=None):
 
         fileName = ""
         tmp_dir = os.path.join(
-            directories.COLLECTION_DIR + "/resource" + f"/{request_schema.id}"
+            directories.COLLECTION_DIR, "resource", request_schema.id
         )
         # Ensure tmp_dir exists, create it if it doesn't
         Path(tmp_dir).mkdir(parents=True, exist_ok=True)
@@ -48,24 +49,45 @@ def check_datafile(request: Dict, directories=None):
             fileName = handle_check_file(request_schema, request_data, tmp_dir)
 
         elif request_data.type == "check_url":
-            log, content = utils.get_request(request_data.url)
-            if content:
-                check = utils.check_content(content)
-                if check:
-                    fileName = utils.save_content(content, tmp_dir)
+            # With Collector from digital-land/collect, edit to use correct directory path without changing Collector class
+            collector = Collector(collection_dir=Path(directories.COLLECTION_DIR))
+            # Override the resource_dir to match our tmp_dir structure
+            collector.resource_dir = Path(tmp_dir)  # Use the same directory as tmp_dir
+            collector.log_dir = (
+                Path(directories.COLLECTION_DIR) / "log" / request_schema.id
+            )
+
+            # TBD: Can test infering plugin from URL, then if fails retry normal method without plugin?
+            # if 'FeatureServer' in request_data.url or 'MapServer' in request_data.url:
+            #     request_data.plugin = "arcgis"
+
+            status = collector.fetch(request_data.url, plugin=request_data.plugin)
+            logger.info(f"Collector Fetch status: {status}")
+
+            # The resource is saved in collector.resource_dir with hash as filename
+            resource_files = list(collector.resource_dir.iterdir())
+
+            log = {}
+
+            if status == FetchStatus.OK:
+                if resource_files and len(resource_files) == 1:
+                    logger.info(f"Resource Files Path from collector: {resource_files}")
+                    fileName = resource_files[-1].name  # Get the hash filename
+                    logger.info(f"File Hash From Collector: {fileName}")
+
                 else:
-                    log = {}
-                    log[
-                        "message"
-                    ] = "Endpoint URL includes multiple dataset layers. Endpoint URL must include a single dataset layer only."  # noqa
-                    log["status"] = ""
+                    log["message"] = "No endpoint files found after successful fetch."
+                    log["status"] = str(status)
                     log["exception_type"] = "URL check failed"
                     save_response_to_db(request_schema.id, log)
-                    return
+                    raise CustomException(log)
             else:
+                log["status"] = str(status)
+                log["message"] = "Fetch operation failed"
+                log["exception_type"] = "URL check failed"
                 save_response_to_db(request_schema.id, log)
-                logger.warning(f"URL check failed: {log}")
-                return
+                logger.warning(f"URL check failed with fetch status: {status}")
+                raise CustomException(log)
 
         if fileName:
             response = workflow.run_workflow(

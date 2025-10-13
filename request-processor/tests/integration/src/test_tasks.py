@@ -7,6 +7,7 @@ import os
 import database
 from request_model import models, schemas
 from src.tasks import check_datafile
+from digital_land.collect import FetchStatus
 
 
 @pytest.fixture(scope="module")
@@ -78,11 +79,12 @@ def test_check_datafile(
 
 
 @pytest.mark.parametrize(
-    "test_name, url, get_request_return_value, expected_status, mock_response",
+    "test_name, url, plugin, get_request_return_value, expected_status, mock_response, expected_plugin_call",
     [
         (
-            "valid_url",
+            "valid_url_no_plugin",
             "exampleurl.csv",
+            None,
             (
                 None,
                 '{"type":"FeatureCollection","properties":{"exceededTransferLimit":true}, "features":[{"type":"Feature","id":1,"geometry":{"type":"Point", "coordinates":[-1.59153574212325,54.9392094142866]}, "properties": {"reference": "CA01","name": "Ashleworth Conservation Area"}}]}'.encode(  # noqa
@@ -91,13 +93,44 @@ def test_check_datafile(
             ),
             "COMPLETE",
             True,
+            None,
+        ),
+        (
+            "valid_url_with_arcgis_plugin",
+            "https://example.com/arcgis/rest/services/MapServer",
+            "arcgis",
+            (
+                None,
+                '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":"Test Feature"}}]}'.encode(
+                    "utf-8"
+                ),
+            ),
+            "COMPLETE",
+            True,
+            "arcgis",
+        ),
+        (
+            "valid_url_with_wfs_plugin",
+            "https://example.com/wfs?service=WFS",
+            "wfs",
+            (
+                None,
+                '<?xml version="1.0"?><wfs:FeatureCollection></wfs:FeatureCollection>'.encode(
+                    "utf-8"
+                ),
+            ),
+            "COMPLETE",
+            True,
+            "wfs",
         ),
         (
             "invalid_url",
             "exampleurl.csv",
+            None,
             ('{"status": "404", "message": "Unable to process"}', None),
             "FAILED",
             False,
+            None,
         ),
     ],
 )
@@ -112,12 +145,14 @@ def test_check_datafile_url(
     test_data_dir,
     test_name,
     url,
+    plugin,
     get_request_return_value,
     expected_status,
     mock_response,
+    expected_plugin_call,
 ):
     """
-    This function tests the check_datafile task for URL validation.
+    This function tests the check_datafile task for URL validation with plugin support.
 
     Args:
         mocker: Mocking framework for Python.
@@ -130,9 +165,11 @@ def test_check_datafile_url(
         test_data_dir: Directory containing test data.
         test_name: Name of the test case.
         url: The URL to validate.
+        plugin: The plugin type to use (arcgis, wfs, or None).
         get_request_return_value: The return value of the mocked get_request function.
         expected_status: The expected status of the request.
         mock_response: determine if mock fetch_pipeline_csvs should be called.
+        expected_plugin_call: The expected plugin parameter passed to collector.fetch().
     """
 
     params = {
@@ -140,6 +177,9 @@ def test_check_datafile_url(
         "dataset": "article-4-direction-area",
         "url": url,
     }
+    if plugin:
+        params["plugin"] = plugin
+
     request = _create_request(
         schemas.CheckUrlParams(**params), schemas.RequestTypeEnum.check_url
     )
@@ -152,13 +192,34 @@ def test_check_datafile_url(
         key: str(path) for key, path in mock_directories._asdict().items()
     }
 
-    mocker.patch(
-        "application.core.utils.get_request", return_value=get_request_return_value
-    )
+    # Track calls to collector.fetch to verify plugin parameter
+    fetch_calls = []
+
+    def mock_collector_fetch(self, url, plugin=None):
+        fetch_calls.append({"url": url, "plugin": plugin})
+        if expected_status == "COMPLETE":
+            resource_dir = self.resource_dir
+            resource_dir.mkdir(parents=True, exist_ok=True)
+            mock_file = resource_dir / "mock_resource_hash"
+            mock_file.write_text("mock csv data")
+            return FetchStatus.OK
+        else:
+            return FetchStatus.FAILED
+
+    mocker.patch("digital_land.collect.Collector.fetch", mock_collector_fetch)
 
     _register_and_check_request(
         mock_directories_str, celery_app, request, expected_status
     )
+
+    # Verify the plugin parameter was passed correctly
+    assert len(fetch_calls) == 1, f"Expected 1 fetch call, got {len(fetch_calls)}"
+    assert (
+        fetch_calls[0]["url"] == url
+    ), f"Expected URL {url}, got {fetch_calls[0]['url']}"
+    assert (
+        fetch_calls[0]["plugin"] == expected_plugin_call
+    ), f"Expected plugin {expected_plugin_call}, got {fetch_calls[0]['plugin']}"
 
 
 def _wait_for_request_status(

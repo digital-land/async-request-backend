@@ -1,8 +1,8 @@
-{
- "params": {
-   "type": "check_url",
-   "collection": "article_4_direction",
-   "dataset": "article_4_direction_area",
-   "url": "https://services3.arcgis.com/lCzPKKaGs7lhrnrV/ArcGIS/rest/services/Planning_Portal_Article_4_Direction_081223/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson",
- }
-}
+    {    "params": {
+        "type": "check_url",
+        "dataset": "conservation-area",
+        "collection": "conservation-area",
+        "column_mapping": null,
+        "geom_type": null,
+        "url": "https://gis.lambeth.gov.uk/arcgis/rest/services/LambethConservationAreas/MapServer/0/query?where=1%3D1&text=&objectIds=&time=&geometry=&geometryType=esriGeometryEnvelope&inSR=&spatialRel=esriSpatialRelIntersects&distance=&units=esriSRUnit_Foot&relationParam=&outFields=*&returnGeometry=true&returnTrueCurves=false&maxAllowableOffset=&geometryPrecision=&outSR=&havingClause=&returnIdsOnly=false&returnCountOnly=false&orderByFields=&groupByFieldsForStatistics=&outStatistics=&returnZ=false&returnM=false&gdbVersion=&historicMoment=&returnDistinctValues=false&resultOffset=&resultRecordCount=&returnExtentOnly=false&datumTransformation=&parameterValues=&rangeValues=&quantizationParameters=&featureEncoding=esriDefault&f=geojson"
+    }}

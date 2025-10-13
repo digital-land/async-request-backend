@@ -62,6 +62,12 @@ curl --location 'http://localhost:8000/requests' \
 }'
 ```
 
+Alternatively, a good way to test local service (with Postman) is go to https://provide.planning.data.gov.uk/ select a dataset and use it's Enpoint URL. Fill in the check_url_request.json template in request-api folder with this endpoint and create a POST to http://localhost:8000/requests with this json in the body.
+
+You can then go to GET http://localhost:8000/requests/{request.id} to see the results. http://localhost:8000/requests/{request.id}/response-details provides the breakdown that the provide front end builds of.
+
+If changes are made, you can use the production async-backend at (http://production-pub-async-api-lb-636110663.eu-west-2.elb.amazonaws.com) with a POST to /requests. Then compare the results of production to what your localhost machine is producing.
+
 ### SQS
 
 To create an SQS queue, you can use the AWS CLI:
