@@ -9,6 +9,11 @@ class RequestTypeEnum(str, Enum):
     check_file = "check_file"
 
 
+class PluginTypeEnum(str, Enum):
+    arcgis = "arcgis"
+    wfs = "wfs"
+
+
 class Params(BaseModel):
     type: RequestTypeEnum
     dataset: str
@@ -26,8 +31,8 @@ class CheckFileParams(Params):
 class CheckUrlParams(Params):
     type: Literal[RequestTypeEnum.check_url] = RequestTypeEnum.check_url
     url: str
-    plugin: Optional[str] = None
-
+    plugin: Optional[PluginTypeEnum] = None
+    
 
 class RequestBase(BaseModel):
     params: Union[CheckUrlParams, CheckFileParams] = Field(discriminator="type")
@@ -68,18 +73,11 @@ class ResponseModel(BaseModel):
     error: Optional[Dict[str, Any]]
 
 
-class PluginTypeEnum(str, Enum):
-    arcgis = "arcgis"
-    wfs = "wfs"
-
-
 class Request(RequestBase):
     id: str
     type: RequestTypeEnum
-    plugin: Optional[PluginTypeEnum] = None
     status: str
     created: datetime.datetime
     modified: datetime.datetime
     response: Optional[ResponseModel]
-
     model_config = ConfigDict(from_attributes=True)
