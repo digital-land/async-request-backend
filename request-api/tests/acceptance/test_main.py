@@ -85,7 +85,10 @@ def test_read_response_details_jsonpath_filters(
     assert response.headers["X-Pagination-Limit"] == str(expected_pglimit)
 
 
-def test_create_request_invalid_plugin():
+def test_create_request_invalid_plugin(
+    db,
+    helpers,
+):
     """Tests creating a request with an invalid plugin."""
     invalid_request_data = {
         "params": {
