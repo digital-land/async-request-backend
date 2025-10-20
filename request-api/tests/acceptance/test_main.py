@@ -99,11 +99,11 @@ def test_create_request_invalid_plugin():
     response = client.post("/requests", json=invalid_request_data)
 
     assert response.status_code == 422
-    error_deail = response.json()
+    error_detail = response.json()
 
-    assert "detail" in error_deail
-    assert len(error_deail["detail"]) > 0
-    error = error_deail["detail"][0]
+    assert "detail" in error_detail
+    assert len(error_detail["detail"]) > 0
+    error = error_detail["detail"][0]
     assert error["type"] == "enum"
     assert "plugin" in error["loc"]
     assert "Input should be 'arcgis' or 'wfs'" in error["msg"]
