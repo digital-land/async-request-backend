@@ -134,3 +134,53 @@ def test_append_endpoint_existing(tmp_path):
         reader = list(csv.DictReader(f))
         assert len(reader) == 1
         assert reader[0]["endpoint-url"] == endpoint_url
+
+
+def test_append_source_existing(tmp_path):
+    import csv
+
+    source_csv = tmp_path / "source.csv"
+    collection = "coll"
+    organisation = "org"
+    endpoint_key = "endpointkey"
+    source_key = utils.hash_md5(f"{collection}|{organisation}|{endpoint_key}")
+
+    fieldnames = [
+        "source",
+        "attribution",
+        "collection",
+        "documentation-url",
+        "endpoint",
+        "licence",
+        "organisation",
+        "pipelines",
+        "entry-date",
+        "start-date",
+        "end-date",
+    ]
+    existing_row = {
+        "source": source_key,
+        "attribution": "",
+        "collection": collection,
+        "documentation-url": "",
+        "endpoint": endpoint_key,
+        "licence": "",
+        "organisation": organisation,
+        "pipelines": "",
+        "entry-date": "2024-01-01T00:00:00",
+        "start-date": "",
+        "end-date": "",
+    }
+    with open(source_csv, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerow(existing_row)
+
+    _, new_row = utils.append_source(
+        str(source_csv), collection, organisation, endpoint_key
+    )
+    assert new_row is None
+    with open(source_csv, newline="", encoding="utf-8") as f:
+        reader = list(csv.DictReader(f))
+        assert len(reader) == 1
+        assert reader[0]["source"] == source_key
