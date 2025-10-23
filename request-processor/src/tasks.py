@@ -9,11 +9,10 @@ import request_model.models as models
 import s3_transfer_manager
 import crud
 import database
-from task_interface.tasks import celery, CheckDataFileTask,CheckDataUrlTask
+from task_interface.tasks import celery, CheckDataFileTask, CheckDataUrlTask
 import json
 from application.core import workflow
 from application.configurations.config import Directories
-import application.core.utils as utils
 from application.exceptions.customExceptions import CustomException
 from pathlib import Path
 from digital_land.collect import Collector, FetchStatus
@@ -64,9 +63,11 @@ def check_data_file(request: Dict, directories=None):
             )
             save_response_to_db(request_schema.id, response)
         else:
-            save_response_to_db(request_schema.id, log)
-            raise CustomException(log)
+            print("need to fix")
+            # save_response_to_db(request_schema.id, log)
+            # raise CustomException(log)
     return _get_request(request_schema.id)
+
 
 @celery.task(base=CheckDataUrlTask, name=CheckDataUrlTask.name)
 def check_data_url(request: Dict, directories=None):
@@ -97,9 +98,7 @@ def check_data_url(request: Dict, directories=None):
         collector = Collector(collection_dir=Path(directories.COLLECTION_DIR))
         # Override the resource_dir to match our tmp_dir structure
         collector.resource_dir = Path(tmp_dir)  # Use the same directory as tmp_dir
-        collector.log_dir = (
-            Path(directories.COLLECTION_DIR) / "log" / request_schema.id
-        )
+        collector.log_dir = Path(directories.COLLECTION_DIR) / "log" / request_schema.id
 
         # TBD: Can test infering plugin from URL, then if fails retry normal method without plugin?
         # if 'FeatureServer' in request_data.url or 'MapServer' in request_data.url:
@@ -153,6 +152,7 @@ def check_data_url(request: Dict, directories=None):
             save_response_to_db(request_schema.id, log)
             raise CustomException(log)
     return _get_request(request_schema.id)
+
 
 def handle_check_file(request_schema, request_data, tmp_dir):
     fileName = request_data.uploaded_filename

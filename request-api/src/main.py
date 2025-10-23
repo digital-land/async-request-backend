@@ -30,10 +30,7 @@ CheckDataFileTask = celery.register_task(CheckDataFileTask())
 CheckDataUrlTask = celery.register_task(CheckDataUrlTask())
 
 # TODO maybe move to factory
-task_map = {
-    "check_file":CheckDataFileTask,
-    "check_url":CheckDataUrlTask
-}
+task_map = {"check_file": CheckDataFileTask, "check_url": CheckDataUrlTask}
 
 if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
     sentry_sdk.init(
@@ -133,9 +130,9 @@ def healthcheck(
             ),
             DependencyHealth(
                 name="sqs",
-                status=HealthStatus.HEALTHY
-                if queue_reachable
-                else HealthStatus.UNHEALTHY,
+                status=(
+                    HealthStatus.HEALTHY if queue_reachable else HealthStatus.UNHEALTHY
+                ),
             ),
         ],
     )
@@ -151,7 +148,7 @@ def create_request(
     request_schema = _map_to_schema(request_model=crud.create_request(db, request))
 
     try:
-        if request_schema.type == 'check_file':
+        if request_schema.type == "check_file":
             CheckDataFileTask.delay(request_schema.model_dump())
         elif request_schema.type == "check_url":
             CheckDataUrlTask.delay(request_schema.model_dump())
