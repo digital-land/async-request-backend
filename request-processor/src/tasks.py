@@ -67,7 +67,9 @@ def check_datafile(request: Dict, directories=None):
             # if 'FeatureServer' in request_data.url or 'MapServer' in request_data.url:
             #     request_data.plugin = "arcgis"
 
-            status = collector.fetch(request_data.url, plugin=request_data.plugin)
+            status = collector.fetch(
+                request_data.url, plugin=getattr(request_data, "plugin", None)
+            )
             logger.info(f"Collector Fetch status: {status}")
 
             # The resource is saved in collector.resource_dir with hash as filename
