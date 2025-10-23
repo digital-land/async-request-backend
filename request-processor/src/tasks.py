@@ -269,6 +269,8 @@ def _schedule_add_data_chain(request: Dict, directories=None):
 
 @task_prerun.connect
 def before_task(task_id, task, args, **kwargs):
+    if not args or not isinstance(args[0], dict) or "id" not in args[0]:
+        return
     request_id = args[0]["id"]
     logger.debug(f"Set status to PROCESSING for request {request_id}")
     _update_request_status(request_id, "PROCESSING")
@@ -276,8 +278,15 @@ def before_task(task_id, task, args, **kwargs):
 
 @task_success.connect
 def after_task_success(sender, result, **kwargs):
+    if (
+        not hasattr(sender.request, "args")
+        or not sender.request.args
+        or not isinstance(sender.request.args[0], dict)
+        or "id" not in sender.request.args[0]
+    ):
+        return
     request_id = sender.request.args[0]["id"]
-    logger.debug(f"Set status to PROCESSING for request {request_id}")
+    logger.debug(f"Set status to COMPLETE for request {request_id}")
     _update_request_status(request_id, "COMPLETE")
 
 
