@@ -9,7 +9,7 @@ import request_model.models as models
 import s3_transfer_manager
 import crud
 import database
-from task_interface.check_tasks import celery, CheckDataFileTask
+from task_interface.tasks import celery, CheckDataFileTask,CheckDataUrlTask
 import json
 from application.core import workflow
 from application.configurations.config import Directories
@@ -24,8 +24,53 @@ max_file_size_mb = 30
 
 
 @celery.task(base=CheckDataFileTask, name=CheckDataFileTask.name)
-def check_datafile(request: Dict, directories=None):
-    logger.info("check datafile")
+def check_data_file(request: Dict, directories=None):
+    logger.info("check data file")
+    request_schema = schemas.Request.model_validate(request)
+    request_data = request_schema.params
+    if not request_schema.status == "COMPLETE":
+        if not directories:
+            directories = Directories
+        elif directories:
+            data_dict = json.loads(directories)
+            # Create an instance of the Directories class
+            directories = Directories()
+            # Update attribute values based on the dictionary
+            for key, value in data_dict.items():
+                setattr(directories, key, value)
+
+        file_name = ""
+        tmp_dir = os.path.join(
+            directories.COLLECTION_DIR, "resource", request_schema.id
+        )
+        # Ensure tmp_dir exists, create it if it doesn't
+        Path(tmp_dir).mkdir(parents=True, exist_ok=True)
+        file_name = handle_check_file(request_schema, request_data, tmp_dir)
+
+        if file_name:
+            response = workflow.run_workflow(
+                file_name,
+                request_schema.id,
+                request_data.collection,
+                request_data.dataset,
+                "",
+                request_data.geom_type if hasattr(request_data, "geom_type") else "",
+                (
+                    request_data.column_mapping
+                    if hasattr(request_data, "column_mapping")
+                    else {}
+                ),
+                directories,
+            )
+            save_response_to_db(request_schema.id, response)
+        else:
+            save_response_to_db(request_schema.id, log)
+            raise CustomException(log)
+    return _get_request(request_schema.id)
+
+@celery.task(base=CheckDataUrlTask, name=CheckDataUrlTask.name)
+def check_data_url(request: Dict, directories=None):
+    logger.info("check data url")
     request_schema = schemas.Request.model_validate(request)
     request_data = request_schema.params
     if not request_schema.status == "COMPLETE":
@@ -45,49 +90,48 @@ def check_datafile(request: Dict, directories=None):
         )
         # Ensure tmp_dir exists, create it if it doesn't
         Path(tmp_dir).mkdir(parents=True, exist_ok=True)
-        if request_data.type == "check_file":
-            fileName = handle_check_file(request_schema, request_data, tmp_dir)
+        # if request_data.type == "check_file":
+        #     fileName = handle_check_file(request_schema, request_data, tmp_dir)
 
-        elif request_data.type == "check_url":
-            # With Collector from digital-land/collect, edit to use correct directory path without changing Collector class
-            collector = Collector(collection_dir=Path(directories.COLLECTION_DIR))
-            # Override the resource_dir to match our tmp_dir structure
-            collector.resource_dir = Path(tmp_dir)  # Use the same directory as tmp_dir
-            collector.log_dir = (
-                Path(directories.COLLECTION_DIR) / "log" / request_schema.id
-            )
+        # With Collector from digital-land/collect, edit to use correct directory path without changing Collector class
+        collector = Collector(collection_dir=Path(directories.COLLECTION_DIR))
+        # Override the resource_dir to match our tmp_dir structure
+        collector.resource_dir = Path(tmp_dir)  # Use the same directory as tmp_dir
+        collector.log_dir = (
+            Path(directories.COLLECTION_DIR) / "log" / request_schema.id
+        )
 
-            # TBD: Can test infering plugin from URL, then if fails retry normal method without plugin?
-            # if 'FeatureServer' in request_data.url or 'MapServer' in request_data.url:
-            #     request_data.plugin = "arcgis"
+        # TBD: Can test infering plugin from URL, then if fails retry normal method without plugin?
+        # if 'FeatureServer' in request_data.url or 'MapServer' in request_data.url:
+        #     request_data.plugin = "arcgis"
 
-            status = collector.fetch(request_data.url, plugin=request_data.plugin)
-            logger.info(f"Collector Fetch status: {status}")
+        status = collector.fetch(request_data.url, plugin=request_data.plugin)
+        logger.info(f"Collector Fetch status: {status}")
 
-            # The resource is saved in collector.resource_dir with hash as filename
-            resource_files = list(collector.resource_dir.iterdir())
+        # The resource is saved in collector.resource_dir with hash as filename
+        resource_files = list(collector.resource_dir.iterdir())
 
-            log = {}
+        log = {}
 
-            if status == FetchStatus.OK:
-                if resource_files and len(resource_files) == 1:
-                    logger.info(f"Resource Files Path from collector: {resource_files}")
-                    fileName = resource_files[-1].name  # Get the hash filename
-                    logger.info(f"File Hash From Collector: {fileName}")
+        if status == FetchStatus.OK:
+            if resource_files and len(resource_files) == 1:
+                logger.info(f"Resource Files Path from collector: {resource_files}")
+                fileName = resource_files[-1].name  # Get the hash filename
+                logger.info(f"File Hash From Collector: {fileName}")
 
-                else:
-                    log["message"] = "No endpoint files found after successful fetch."
-                    log["status"] = str(status)
-                    log["exception_type"] = "URL check failed"
-                    save_response_to_db(request_schema.id, log)
-                    raise CustomException(log)
             else:
+                log["message"] = "No endpoint files found after successful fetch."
                 log["status"] = str(status)
-                log["message"] = "Fetch operation failed"
                 log["exception_type"] = "URL check failed"
                 save_response_to_db(request_schema.id, log)
-                logger.warning(f"URL check failed with fetch status: {status}")
                 raise CustomException(log)
+        else:
+            log["status"] = str(status)
+            log["message"] = "Fetch operation failed"
+            log["exception_type"] = "URL check failed"
+            save_response_to_db(request_schema.id, log)
+            logger.warning(f"URL check failed with fetch status: {status}")
+            raise CustomException(log)
 
         if fileName:
             response = workflow.run_workflow(
@@ -109,7 +153,6 @@ def check_datafile(request: Dict, directories=None):
             save_response_to_db(request_schema.id, log)
             raise CustomException(log)
     return _get_request(request_schema.id)
-
 
 def handle_check_file(request_schema, request_data, tmp_dir):
     fileName = request_data.uploaded_filename
