@@ -1,5 +1,5 @@
 import os
-from typing import Dict
+from typing import Dict, Optional
 
 import sentry_sdk
 from celery.utils.log import get_task_logger
@@ -17,6 +17,7 @@ import application.core.utils as utils
 from application.exceptions.customExceptions import CustomException
 from pathlib import Path
 from digital_land.collect import Collector, FetchStatus
+from celery import chain
 
 logger = get_task_logger(__name__)
 # Threshold for s3_transfer_manager to automatically use multipart download
@@ -29,27 +30,32 @@ def check_datafile(request: Dict, directories=None):
     request_schema = schemas.Request.model_validate(request)
     request_data = request_schema.params
     if not request_schema.status == "COMPLETE":
-        if not directories:
-            directories = Directories
-        elif directories:
-            data_dict = json.loads(directories)
-            # Create an instance of the Directories class
-            directories = Directories()
-            # Update attribute values based on the dictionary
-            for key, value in data_dict.items():
-                setattr(directories, key, value)
-
+        directories = _resolve_directories(directories)
         fileName = ""
         tmp_dir = os.path.join(
             directories.COLLECTION_DIR, "resource", request_schema.id
         )
         # Ensure tmp_dir exists, create it if it doesn't
         Path(tmp_dir).mkdir(parents=True, exist_ok=True)
-        if request_data.type == "check_file":
+        if request_data.type == "add_data":
+            logger.info(
+                json.dumps(
+                    {
+                        "phase": "add_data.dispatch",
+                        "request_id": request_schema.id,
+                        "dataset": request_data.dataset,
+                    }
+                )
+            )
+            _schedule_add_data_chain(request, directories)
+            return _get_request(request_schema.id)
+
+        elif request_data.type == "check_file":
             fileName = handle_check_file(request_schema, request_data, tmp_dir)
 
         elif request_data.type == "check_url":
-            # With Collector from digital-land/collect, edit to use correct directory path without changing Collector class
+            # With Collector from digital-land/collect, edit to use correct directory path
+            # without changing Collector class
             collector = Collector(collection_dir=Path(directories.COLLECTION_DIR))
             # Override the resource_dir to match our tmp_dir structure
             collector.resource_dir = Path(tmp_dir)  # Use the same directory as tmp_dir
@@ -111,6 +117,19 @@ def check_datafile(request: Dict, directories=None):
     return _get_request(request_schema.id)
 
 
+def _resolve_directories(directories):
+    if not directories:
+        directories = Directories()
+    elif directories:
+        data_dict = json.loads(directories)
+        # Create an instance of the Directories class
+        directories = Directories()
+        # Update attribute values based on the dictionary
+        for key, value in data_dict.items():
+            setattr(directories, key, value)
+    return directories
+
+
 def handle_check_file(request_schema, request_data, tmp_dir):
     fileName = request_data.uploaded_filename
     try:
@@ -129,6 +148,123 @@ def handle_check_file(request_schema, request_data, tmp_dir):
         save_response_to_db(request_schema.id, log)
         raise CustomException(log)
     return fileName
+
+
+@celery.task(base=CheckDataFileTask, name="add_data.prepare")
+def add_data_prepare(request: Dict, directories=None):
+    request_schema = schemas.Request.model_validate(request)
+    params = request_schema.params
+    dirs = Directories() if not directories else directories
+    tmp_dir = os.path.join(dirs.COLLECTION_DIR, "resource", request_schema.id)
+    Path(tmp_dir).mkdir(parents=True, exist_ok=True)
+    logger.info(
+        json.dumps(
+            {
+                "phase": "add_data.prepare",
+                "request_id": request_schema.id,
+                "dataset": params.dataset,
+                "collection": params.collection,
+            }
+        )
+    )
+    return {
+        "request_id": request_schema.id,
+        "request": request,
+        "directories": {},
+        "tmp_dir": tmp_dir,
+        "file_name": None,
+    }
+
+
+@celery.task(base=CheckDataFileTask, name="add_data.fetch")
+def add_data_fetch(ctx: Dict):
+    request_schema = schemas.Request.model_validate(ctx["request"])
+    params = request_schema.params
+    logger.info(
+        json.dumps({"phase": "add_data.fetch", "request_id": request_schema.id})
+    )
+    tmp_dir = ctx["tmp_dir"]
+    file_name = None
+    if getattr(params, "url", None):
+        file_name = _get_content_from_url(params.url, request_schema.id, tmp_dir)
+    elif getattr(params, "content", None):
+        file_name = utils.save_content(params.content.encode("utf-8"), tmp_dir)
+    ctx["file_name"] = file_name
+    return ctx
+
+
+def _get_content_from_url(url: str, request_id: str, tmp_dir: str) -> Optional[str]:
+    """Fetch content from a URL, save it, and return the filename."""
+    log, content = utils.get_request(url)
+    if content:
+        if utils.check_content(content):
+            return utils.save_content(content, tmp_dir)
+        else:
+            log = {
+                "message": "EndpointURL includes multiple dataset layers.",
+                "status": "",
+                "exception_type": "URL check failed",
+            }
+    save_response_to_db(request_id, log)
+    logger.warning(f"URL fetch for request {request_id} failed: {log}")
+    return None
+
+
+@celery.task(base=CheckDataFileTask, name="add_data.pipeline")
+def add_data_pipeline(ctx: Dict):
+    request_schema = schemas.Request.model_validate(ctx["request"])
+    params = request_schema.params
+    logger.info(
+        json.dumps({"phase": "add_data.pipeline", "request_id": request_schema.id})
+    )
+    dirs = Directories()
+    file_name = ctx.get("file_name")
+    if getattr(params, "source_request_id", None) and not file_name:
+        original = _get_response(params.source_request_id)
+        if original and original.data:
+            preview_response = workflow.run_preview_workflow(
+                request_schema.id, params, dirs, original.data
+            )
+            save_response_to_db(request_schema.id, preview_response)
+            return {"request_id": request_schema.id}
+    if not file_name:
+        save_response_to_db(
+            request_schema.id,
+            {
+                "message": "No file content for add_data",
+                "status": "",
+                "exception_type": "FileMissing",
+            },
+        )
+        return {"request_id": request_schema.id}
+    org = (getattr(params, "organisation", "") or "").strip()
+    response_data = workflow.run_workflow(
+        file_name,
+        request_schema.id,
+        params.collection,
+        params.dataset,
+        org,
+        dirs,
+        request_data=params,
+    )
+    save_response_to_db(request_schema.id, response_data)
+    return {"request_id": request_schema.id}
+
+
+@celery.task(base=CheckDataFileTask, name="add_data.finalize")
+def add_data_finalize(ctx: Dict):
+    request_id = ctx["request_id"]
+    logger.info(json.dumps({"phase": "add_data.finalize", "request_id": request_id}))
+    return _get_request(request_id)
+
+
+def _schedule_add_data_chain(request: Dict, directories=None):
+    chain(
+        add_data_prepare.s(request, directories),
+        add_data_fetch.s(),
+        add_data_pipeline.s(),
+        add_data_finalize.s(),
+    ).apply_async()
 
 
 @task_prerun.connect

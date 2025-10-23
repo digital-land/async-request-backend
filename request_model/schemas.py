@@ -1,12 +1,15 @@
 import datetime
+from datetime import date
 from enum import Enum
 from typing import Union, Literal, Optional, List, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, AnyHttpUrl, field_serializer
+from urllib.parse import urlsplit, urlunsplit
 
 
 class RequestTypeEnum(str, Enum):
     check_url = "check_url"
     check_file = "check_file"
+    add_data = "add_data"
 
 
 class Params(BaseModel):
@@ -15,6 +18,20 @@ class Params(BaseModel):
     collection: str
     column_mapping: Optional[Dict[str, str]] = None
     geom_type: Optional[str] = None
+    documentation_url: Optional[AnyHttpUrl] = None
+    licence: Optional[str] = None
+    start_date: Optional[date] = None
+    organisation: Optional[str] = None
+
+    @field_serializer("documentation_url", when_used="json-unless-none")
+    def _serialize_doc_url(self, v: AnyHttpUrl):
+        s = str(v)
+        parts = urlsplit(s)
+        # Only drop the trailing slash if the path is exactly "/"
+        if parts.path == "/":
+            parts = parts._replace(path="")
+            return urlunsplit(parts)
+        return s
 
 
 class CheckFileParams(Params):
@@ -26,11 +43,18 @@ class CheckFileParams(Params):
 class CheckUrlParams(Params):
     type: Literal[RequestTypeEnum.check_url] = RequestTypeEnum.check_url
     url: str
-    plugin: Optional[str] = None
+
+
+class AddDataParams(Params):
+    type: Literal[RequestTypeEnum.add_data] = RequestTypeEnum.add_data
+    url: Optional[str] = None
+    source_request_id: Optional[str] = None
 
 
 class RequestBase(BaseModel):
-    params: Union[CheckUrlParams, CheckFileParams] = Field(discriminator="type")
+    params: Union[CheckUrlParams, CheckFileParams, AddDataParams] = Field(
+        discriminator="type"
+    )
 
 
 class RequestCreate(RequestBase):
