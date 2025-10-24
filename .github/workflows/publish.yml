@@ -70,7 +70,10 @@ jobs:
 
       - run: docker push $DOCKER_REPO:${{ steps.vars.outputs.sha_short }}
 
+      - run: docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:main
+
       - run: docker push $DOCKER_REPO:${GITHUB_REF_NAME}
+      - run: docker push $DOCKER_REPO:${$DOCKER_REPO:main}
 
       - uses: aws-actions/configure-aws-credentials@v1
         with:
