@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field, ConfigDict
 class RequestTypeEnum(str, Enum):
     check_url = "check_url"
     check_file = "check_file"
-    add_data = "add_data"
 
 
 class PluginTypeEnum(str, Enum):
@@ -33,18 +32,10 @@ class CheckUrlParams(Params):
     type: Literal[RequestTypeEnum.check_url] = RequestTypeEnum.check_url
     url: str
     plugin: Optional[PluginTypeEnum] = None
-
-
-class AddDataParams(Params):
-    type: Literal[RequestTypeEnum.add_data] = RequestTypeEnum.add_data
-    url: str
-    plugin: Optional[PluginTypeEnum] = None
-
+    
 
 class RequestBase(BaseModel):
-    params: Union[CheckUrlParams, CheckFileParams, AddDataParams] = Field(
-        discriminator="type"
-    )
+    params: Union[CheckUrlParams, CheckFileParams] = Field(discriminator="type")
 
 
 class RequestCreate(RequestBase):
