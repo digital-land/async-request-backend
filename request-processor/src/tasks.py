@@ -25,7 +25,10 @@ max_file_size_mb = 30
 
 @celery.task(base=CheckDataFileTask, name=CheckDataFileTask.name)
 def check_datafile(request: Dict, directories=None):
-    logger.info("check datafile")
+    logger.info(
+        f"Started check_datafile task for request_id={request.get('id', 'unknown')}"
+    )
+    logger.debug(f"Request payload: {json.dumps(request, default=str)}")
     request_schema = schemas.Request.model_validate(request)
     request_data = request_schema.params
     if not request_schema.status == "COMPLETE":
@@ -48,7 +51,89 @@ def check_datafile(request: Dict, directories=None):
         if request_data.type == "check_file":
             fileName = handle_check_file(request_schema, request_data, tmp_dir)
 
-        elif request_data.type == "check_url":
+        log = {
+            "message": "No file processed",
+            "status": "",
+            "exception_type": "File processing failed",
+        }
+
+        if fileName:
+            logger.info(f"Running workflow for file: {fileName}")
+            response = workflow.run_workflow(
+                fileName,
+                request_schema.id,
+                request_data.collection,
+                request_data.dataset,
+                "",
+                request_data.geom_type if hasattr(request_data, "geom_type") else "",
+                (
+                    request_data.column_mapping
+                    if hasattr(request_data, "column_mapping")
+                    else {}
+                ),
+                directories,
+            )
+            save_response_to_db(request_schema.id, response)
+            logger.info(
+                f"Workflow completed and response saved for request_id={request_schema.id}"
+            )
+        else:
+            logger.error(
+                f"No fileName found for request_id={request_schema.id}, saving error log and raising exception."
+            )
+            save_response_to_db(request_schema.id, log)
+            raise CustomException(log)
+    return _get_request(request_schema.id)
+
+
+def handle_check_file(request_schema, request_data, tmp_dir):
+    fileName = request_data.uploaded_filename
+    try:
+        logger.info(f"Attempting to download file {fileName} from S3 to {tmp_dir}")
+        s3_transfer_manager.download_with_default_configuration(
+            os.environ["REQUEST_FILES_BUCKET_NAME"],
+            request_data.uploaded_filename,
+            f"{tmp_dir}/{request_data.uploaded_filename}",
+            max_file_size_mb,
+        )
+        logger.info(f"File {fileName} downloaded successfully.")
+    except Exception as e:
+        logger.error(str(e))
+        log = {}
+        log["message"] = "The uploaded file not found in S3 bucket"
+        log["status"] = ""
+        log["exception_type"] = type(e).__name__
+        save_response_to_db(request_schema.id, log)
+        raise CustomException(log)
+    return fileName
+
+
+@celery.task(base=CheckDataUrlTask, name=CheckDataUrlTask.name)
+def check_dataurl(request: Dict, directories=None):
+    logger.info(
+        f"Started check_dataurl task for request_id={request.get('id', 'unknown')}"
+    )
+    logger.debug(f"Request payload: {json.dumps(request, default=str)}")
+    request_schema = schemas.Request.model_validate(request)
+    request_data = request_schema.params
+    if not request_schema.status == "COMPLETE":
+        if not directories:
+            directories = Directories
+        elif directories:
+            data_dict = json.loads(directories)
+            # Create an instance of the Directories class
+            directories = Directories()
+            # Update attribute values based on the dictionary
+            for key, value in data_dict.items():
+                setattr(directories, key, value)
+
+        fileName = ""
+        tmp_dir = os.path.join(
+            directories.COLLECTION_DIR, "resource", request_schema.id
+        )
+        # Ensure tmp_dir exists, create it if it doesn't
+        Path(tmp_dir).mkdir(parents=True, exist_ok=True)
+        if request_data.type == "check_url":
             # With Collector from digital-land/collect, edit to use correct directory path without changing Collector class
             collector = Collector(collection_dir=Path(directories.COLLECTION_DIR))
             # Override the resource_dir to match our tmp_dir structure
@@ -88,7 +173,6 @@ def check_datafile(request: Dict, directories=None):
                 save_response_to_db(request_schema.id, log)
                 logger.warning(f"URL check failed with fetch status: {status}")
                 raise CustomException(log)
-
         if fileName:
             response = workflow.run_workflow(
                 fileName,
@@ -109,26 +193,6 @@ def check_datafile(request: Dict, directories=None):
             save_response_to_db(request_schema.id, log)
             raise CustomException(log)
     return _get_request(request_schema.id)
-
-
-def handle_check_file(request_schema, request_data, tmp_dir):
-    fileName = request_data.uploaded_filename
-    try:
-        s3_transfer_manager.download_with_default_configuration(
-            os.environ["REQUEST_FILES_BUCKET_NAME"],
-            request_data.uploaded_filename,
-            f"{tmp_dir}/{request_data.uploaded_filename}",
-            max_file_size_mb,
-        )
-    except Exception as e:
-        logger.error(str(e))
-        log = {}
-        log["message"] = "The uploaded file not found in S3 bucket"
-        log["status"] = ""
-        log["exception_type"] = type(e).__name__
-        save_response_to_db(request_schema.id, log)
-        raise CustomException(log)
-    return fileName
 
 
 @task_prerun.connect
