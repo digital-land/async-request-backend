@@ -40,7 +40,7 @@ def _create_request_model():
 
 @patch("crud.create_request", return_value=_create_request_model())
 @patch(
-    "task_interface.check_tasks.CheckDataFileTask.delay",
+    "task_interface.base_tasks.CheckDataFileTask.delay",
     side_effect=OperationalError(exception_msg),
 )
 def test_create_request_when_celery_throws_exception(

@@ -24,9 +24,16 @@ from schema import (
     HealthStatus,
     DependencyHealth,
 )
-from task_interface.check_tasks import celery, CheckDataFileTask
+from task_interface.base_tasks import (
+    celery,
+    CheckDataFileTask,
+    CheckDataUrlTask,
+    AddDataTask,
+)
 
 CheckDataFileTask = celery.register_task(CheckDataFileTask())
+CheckDataUrlTask = celery.register_task(CheckDataUrlTask())
+AddDataTask = celery.register_task(AddDataTask())
 
 if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
     sentry_sdk.init(
@@ -144,10 +151,17 @@ def create_request(
     request_schema = _map_to_schema(request_model=crud.create_request(db, request))
 
     try:
-        CheckDataFileTask.delay(request_schema.model_dump())
+        if request_schema.type == "check_file":
+            CheckDataFileTask.delay(request_schema.model_dump())
+        elif request_schema.type == "check_url":
+            CheckDataUrlTask.delay(request_schema.model_dump())
+        elif request_schema.type == "add_data":
+            AddDataTask.delay(request_schema.model_dump())
+        else:
+            raise ValueError("invalid request type")
 
     except Exception as error:
-        logging.error("Async call to celery check data file task failed: %s", error)
+        logging.error("Async call to celery task failed: %s", error)
         raise error
 
     http_response.headers[

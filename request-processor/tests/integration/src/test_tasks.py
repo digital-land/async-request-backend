@@ -6,7 +6,7 @@ import shutil
 import os
 import database
 from request_model import models, schemas
-from src.tasks import check_datafile
+from src.tasks import check_datafile, check_dataurl
 from digital_land.collect import FetchStatus
 
 
@@ -289,6 +289,11 @@ def _register_and_check_request(
     mock_directories_str, celery_app, request, expected_status
 ):
     mock_directories_json = json.dumps(mock_directories_str)
-    check_datafile_task = celery_app.register_task(check_datafile)
-    check_datafile_task.delay(request.model_dump(), directories=mock_directories_json)
+    if request.type == schemas.RequestTypeEnum.check_file:
+        task = celery_app.register_task(check_datafile)
+    elif request.type == schemas.RequestTypeEnum.check_url:
+        task = celery_app.register_task(check_dataurl)
+    else:
+        raise ValueError(f"Unknown request type: {request.type}")
+    task.delay(request.model_dump(), directories=mock_directories_json)
     _wait_for_request_status(request.id, expected_status)
