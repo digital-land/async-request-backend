@@ -89,12 +89,16 @@ def test_extract_dataset_field_rows(tmp_path):
     assert result == [rows[0]]
 
 
-def test_append_endpoint_and_source(tmp_path):
+def test_append_endpoint(tmp_path):
     endpoint_csv = tmp_path / "endpoint.csv"
-    source_csv = tmp_path / "source.csv"
     endpoint_url = "http://example.com"
     endpoint_key, new_row = utils.append_endpoint(str(endpoint_csv), endpoint_url)
     assert new_row["endpoint-url"] == endpoint_url
+
+
+def test_append_source(tmp_path):
+    source_csv = tmp_path / "source.csv"
+    endpoint_key = "endpointkey"
     source_key, source_row = utils.append_source(
         str(source_csv), "coll", "org", endpoint_key
     )
