@@ -198,8 +198,72 @@ def check_dataurl(request: Dict, directories=None):
 @celery.task(base=AddDataTask, name=AddDataTask.name)
 def add_data_task(request: Dict, directories=None):
     logger.info(f"Started add_data task for request_id={request.get('id', 'unknown')}")
-    logger.debug(f"Request payload: {json.dumps(request, default=str)}")
-    return
+    logger.info(f"Request payload: {json.dumps(request, default=str)}")
+    request_schema = schemas.Request.model_validate(request)
+    request_data = request_schema.params
+    source_request_id = getattr(request_data, "source_request_id", None)
+    if not source_request_id:
+        logger.error("source_request_id is required for add_data_task")
+        raise CustomException(
+            {"message": "source_request_id is required", "status": "FAILED"}
+        )
+
+    check_url_saved_request = _get_request(source_request_id)
+    if not check_url_saved_request:
+        logger.error(
+            f"Original request not found for source_request_id={source_request_id}"
+        )
+        raise CustomException(
+            {"message": "Original request not found", "status": "FAILED"}
+        )
+
+    check_url_params = check_url_saved_request.params
+    dataset = check_url_params.get("dataset")
+    collection = check_url_params.get("collection")
+    column_mapping = check_url_params.get("column_mapping", {})
+    geom_type = check_url_params.get("geom_type", "")
+    url = check_url_params.get("url")
+    documentation_url = check_url_params.get("documentation_url")
+    licence = check_url_params.get("licence")
+    start_date = check_url_params.get("start_date")
+    organisation = check_url_params.get("organisation")
+    logger.info(
+        f"Extracted values from check_url_params: "
+        f"dataset={dataset}, collection={collection}, column_mapping={column_mapping}, "
+        f"geom_type={geom_type}, url={url}, documentation_url={documentation_url}, "
+        f"licence={licence}, start_date={start_date}, organisation={organisation}"
+        f" for check_url_request_id={check_url_saved_request.id}"
+    )
+    logger.info(f"check_url_params: {json.dumps(check_url_params, default=str)}")
+
+    if not request_schema.status == "COMPLETE":
+        if not directories:
+            directories = Directories
+        else:
+            data_dict = json.loads(directories)
+            directories = Directories()
+            for key, value in data_dict.items():
+                setattr(directories, key, value)
+
+        resource_dir = os.path.join(
+            directories.COLLECTION_DIR, "resource", check_url_saved_request.id
+        )
+        logger.info(f"Resource directory path: {resource_dir}")
+        if not os.path.exists(resource_dir):
+            logger.warning(f"Resource directory does not exist: {resource_dir}.")
+            Path(resource_dir).mkdir(parents=True, exist_ok=True)
+            logger.info(f"Resource directory created: {resource_dir}")
+
+        pipeline_dir = os.path.join(
+            directories.PIPELINE_DIR, dataset, check_url_saved_request.id
+        )
+        logger.info(f"Pipeline directory path: {pipeline_dir}")
+        if not os.path.exists(pipeline_dir):
+            logger.warning(f"Pipeline directory does not exist: {pipeline_dir}.")
+            Path(pipeline_dir).mkdir(parents=True, exist_ok=True)
+            logger.info(f"Pipeline directory created: {pipeline_dir}")
+
+    return _get_request(request_schema.id)
 
 
 @task_prerun.connect

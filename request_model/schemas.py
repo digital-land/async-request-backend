@@ -35,10 +35,12 @@ class CheckUrlParams(Params):
     plugin: Optional[PluginTypeEnum] = None
 
 
-class AddDataParams(Params):
+class AddDataParams(BaseModel):
     type: Literal[RequestTypeEnum.add_data] = RequestTypeEnum.add_data
+    source_request_id: str
+    dataset: Optional[str] = None
+    collection: Optional[str] = None
     url: Optional[str] = None
-    source_request_id: Optional[str] = None
     documentation_url: Optional[str] = None
     licence: Optional[str] = None
     start_date: Optional[str] = None
