@@ -43,7 +43,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - id: vars
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          # choose the ref name (workflow_dispatch uses head input sometimes)
+          ref_name="${GITHUB_REF_NAME:-${GITHUB_HEAD_REF}}"
+          # sanitize: replace slashes with '-', lowercase, replace invalid chars with '-', limit length
+          ref_sanitized=$(echo "$ref_name" | tr '/' '-' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_.-]/-/g' | cut -c1-128)
+          echo "ref_sanitized=$ref_sanitized" >> $GITHUB_OUTPUT
 
       - run: |
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -63,15 +69,16 @@ jobs:
           registry-type: public
 
       - run: docker pull $DOCKER_REPO:${GITHUB_REF_NAME} || echo "no current latest image"
-
+      - run: docker pull $DOCKER_REPO:${{ steps.vars.outputs.ref_sanitized }} || echo "no current image for sanitized ref"
+      
       - run: docker build --build-arg DEPLOY_TIME="$(date +%Y-%m-%dT%H:%M:%S)" --build-arg GIT_COMMIT="${{ steps.vars.outputs.sha_short }}" -t $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} -f request-api/Dockerfile .
-
-      - run: docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:${GITHUB_REF_NAME}
+      
+      - run: docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:${{ steps.vars.outputs.ref_sanitized }}
       - run: docker push $DOCKER_REPO:${{ steps.vars.outputs.sha_short }}
       - run: docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:main
-
-      - run: docker push $DOCKER_REPO:${GITHUB_REF_NAME}
-      - run: docker push $DOCKER_REPO:${$DOCKER_REPO:main}
+      
+      - run: docker push $DOCKER_REPO:${{ steps.vars.outputs.ref_sanitized }}
+      - run: docker push $DOCKER_REPO:main
 
       - uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -97,7 +104,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - id: vars
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          ref_name="${GITHUB_REF_NAME:-${GITHUB_HEAD_REF}}"
+          ref_sanitized=$(echo "$ref_name" | tr '/' '-' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_.-]/-/g' | cut -c1-128)
+          echo "ref_sanitized=$ref_sanitized" >> $GITHUB_OUTPUT
 
       - run: |
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -117,15 +128,16 @@ jobs:
           registry-type: public
 
       - run: docker pull $DOCKER_REPO:${GITHUB_REF_NAME} || echo "no current latest image"
-
+      - run: docker pull $DOCKER_REPO:${{ steps.vars.outputs.ref_sanitized }} || echo "no current image for sanitized ref"
+      
       - run: docker build --build-arg DEPLOY_TIME="$(date +%Y-%m-%dT%H:%M:%S)" --build-arg GIT_COMMIT="${{ steps.vars.outputs.sha_short }}" -t $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} -f request-processor/Dockerfile .
-
-      - run: docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:${GITHUB_REF_NAME}
-
+      
+      - run: docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:${{ steps.vars.outputs.ref_sanitized }}
+      
       - run: docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:main
-
-      - run: docker push $DOCKER_REPO:${GITHUB_REF_NAME}
-      - run: docker push $DOCKER_REPO:${$DOCKER_REPO:main}
+      
+      - run: docker push $DOCKER_REPO:${{ steps.vars.outputs.ref_sanitized }}
+      - run: docker push $DOCKER_REPO:main
 
       - uses: aws-actions/configure-aws-credentials@v1
         with:
