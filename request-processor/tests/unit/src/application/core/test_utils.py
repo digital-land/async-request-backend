@@ -38,16 +38,20 @@ def test_check_content():
     assert check_content(content_str)
 
 
-def test_hash_sha256_and_md5():
+def test_hash_sha256():
     value = "test"
     assert (
         utils.hash_sha256(value)
         == "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
     )
+
+
+def test_hash_md5():
+    value = "test"
     assert utils.hash_md5(value) == "098f6bcd4621d373cade4e832627b4f6"
 
 
-def test_save_and_save_content(tmp_path):
+def test_save_content_saves_data_to_file(tmp_path):
     data = b"hello world"
     tmp_dir = tmp_path
     resource = utils.save_content(data, tmp_dir)
