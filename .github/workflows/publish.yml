@@ -51,6 +51,25 @@ jobs:
           ref_sanitized=$(echo "$ref_name" | tr '/' '-' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_.-]/-/g' | cut -c1-128)
           echo "ref_sanitized=$ref_sanitized" >> $GITHUB_OUTPUT
 
+      # Docker metadata for intelligent tagging
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REPO }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ matrix.environment }}-{{sha}}
+            type=raw,value=${{ matrix.environment }}-latest
+
+      # Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - run: |
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
           unzip -q awscliv2.zip
@@ -58,7 +77,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y rsync
 
-      - uses: aws-actions/configure-aws-credentials@v1-node16
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.DEPLOY_AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.DEPLOY_AWS_SECRET_ACCESS_KEY }}
@@ -68,19 +88,29 @@ jobs:
         with:
           registry-type: public
 
-      - run: docker pull $DOCKER_REPO:${GITHUB_REF_NAME} || echo "no current latest image"
-      - run: docker pull $DOCKER_REPO:${{ steps.vars.outputs.ref_sanitized }} || echo "no current image for sanitized ref"
-      
-      - run: docker build --build-arg DEPLOY_TIME="$(date +%Y-%m-%dT%H:%M:%S)" --build-arg GIT_COMMIT="${{ steps.vars.outputs.sha_short }}" -t $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} -f request-api/Dockerfile .
-      
-      - run: docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:${{ steps.vars.outputs.ref_sanitized }}
-      - run: docker push $DOCKER_REPO:${{ steps.vars.outputs.sha_short }}
-      - run: docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:main
-      
-      - run: docker push $DOCKER_REPO:${{ steps.vars.outputs.ref_sanitized }}
-      - run: docker push $DOCKER_REPO:main
+      # Build and push with metadata tags
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: request-api/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            DEPLOY_TIME=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            GIT_COMMIT=${{ steps.vars.outputs.sha_short }}
+          provenance: false
 
-      - uses: aws-actions/configure-aws-credentials@v1
+      # Keep sanitized ref tag for backward compatibility
+      - name: Tag and push with sanitized ref
+        run: |
+          docker pull $DOCKER_REPO:${{ steps.vars.outputs.sha_short }}
+          docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:${{ steps.vars.outputs.ref_sanitized }}
+          docker push $DOCKER_REPO:${{ steps.vars.outputs.ref_sanitized }}
+
+      - name: Configure AWS credentials for ECS
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.DEPLOY_AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.DEPLOY_AWS_SECRET_ACCESS_KEY }}
@@ -110,6 +140,25 @@ jobs:
           ref_sanitized=$(echo "$ref_name" | tr '/' '-' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_.-]/-/g' | cut -c1-128)
           echo "ref_sanitized=$ref_sanitized" >> $GITHUB_OUTPUT
 
+      # Docker metadata for intelligent tagging
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REPO }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ matrix.environment }}-{{sha}}
+            type=raw,value=${{ matrix.environment }}-latest
+
+      # Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - run: |
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
           unzip -q awscliv2.zip
@@ -117,7 +166,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y rsync
 
-      - uses: aws-actions/configure-aws-credentials@v1-node16
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.DEPLOY_AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.DEPLOY_AWS_SECRET_ACCESS_KEY }}
@@ -127,19 +177,29 @@ jobs:
         with:
           registry-type: public
 
-      - run: docker pull $DOCKER_REPO:${GITHUB_REF_NAME} || echo "no current latest image"
-      - run: docker pull $DOCKER_REPO:${{ steps.vars.outputs.ref_sanitized }} || echo "no current image for sanitized ref"
-      
-      - run: docker build --build-arg DEPLOY_TIME="$(date +%Y-%m-%dT%H:%M:%S)" --build-arg GIT_COMMIT="${{ steps.vars.outputs.sha_short }}" -t $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} -f request-processor/Dockerfile .
-      
-      - run: docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:${{ steps.vars.outputs.ref_sanitized }}
-      
-      - run: docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:main
-      
-      - run: docker push $DOCKER_REPO:${{ steps.vars.outputs.ref_sanitized }}
-      - run: docker push $DOCKER_REPO:main
+      # Build and push with metadata tags
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: request-processor/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            DEPLOY_TIME=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            GIT_COMMIT=${{ steps.vars.outputs.sha_short }}
+          provenance: false
 
-      - uses: aws-actions/configure-aws-credentials@v1
+      # Keep sanitized ref tag for backward compatibility
+      - name: Tag and push with sanitized ref
+        run: |
+          docker pull $DOCKER_REPO:${{ steps.vars.outputs.sha_short }}
+          docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:${{ steps.vars.outputs.ref_sanitized }}
+          docker push $DOCKER_REPO:${{ steps.vars.outputs.ref_sanitized }}
+
+      - name: Configure AWS credentials for ECS
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.DEPLOY_AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.DEPLOY_AWS_SECRET_ACCESS_KEY }}
