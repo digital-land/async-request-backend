@@ -35,18 +35,13 @@ class CheckUrlParams(Params):
     plugin: Optional[PluginTypeEnum] = None
 
 
-class AddDataParams(BaseModel):
+class AddDataParams(Params):
     type: Literal[RequestTypeEnum.add_data] = RequestTypeEnum.add_data
-    source_request_id: str
-    dataset: Optional[str] = None
-    collection: Optional[str] = None
     url: Optional[str] = None
     documentation_url: Optional[str] = None
     licence: Optional[str] = None
     start_date: Optional[str] = None
     organisation: Optional[str] = None
-    column_mapping: Optional[Dict[str, str]] = None
-    geom_type: Optional[str] = None
 
 
 class RequestBase(BaseModel):
