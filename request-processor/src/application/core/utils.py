@@ -5,6 +5,7 @@ import requests
 from cchardet import UniversalDetector
 import csv
 import json
+from datetime import datetime
 
 logger = get_logger(__name__)
 
@@ -114,3 +115,105 @@ def extract_dataset_field_rows(folder_path, dataset):
     else:
         logger.error("Error extracting dataset-field.csv in the specified folder.")
         return None
+
+
+def hash_sha256(value):
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def hash_md5(value):
+    return hashlib.md5(value.encode("utf-8")).hexdigest()
+
+
+def append_endpoint(
+    endpoint_csv_path, endpoint_url, entry_date=None, start_date=None, end_date=None
+):
+    endpoint_key = hash_sha256(endpoint_url)
+    exists = False
+    new_row = None
+    if os.path.exists(endpoint_csv_path):
+        with open(endpoint_csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row.get("endpoint-url") == endpoint_url:
+                    exists = True
+                    break
+    if not exists:
+        with open(endpoint_csv_path, "a", newline="", encoding="utf-8") as f:
+            fieldnames = [
+                "endpoint",
+                "endpoint-url",
+                "parameters",
+                "plugin",
+                "entry-date",
+                "start-date",
+                "end-date",
+            ]
+            new_row = {
+                "endpoint": endpoint_key,
+                "endpoint-url": endpoint_url,
+                "parameters": "",
+                "plugin": "",
+                "entry-date": entry_date or datetime.now().isoformat(),
+                "start-date": start_date or "",
+                "end-date": end_date or "",
+            }
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writerow(new_row)
+    return endpoint_key, new_row
+
+
+def append_source(
+    source_csv_path,
+    collection,
+    organisation,
+    endpoint_key,
+    attribution="",
+    documentation_url="",
+    licence="",
+    pipelines="",
+    entry_date=None,
+    start_date=None,
+    end_date=None,
+):
+    source_key = hash_md5(f"{collection}|{organisation}|{endpoint_key}")
+    exists = False
+    new_row = None
+    if os.path.exists(source_csv_path):
+        with open(source_csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row.get("source") == source_key:
+                    exists = True
+                    break
+    if not exists:
+        with open(source_csv_path, "a", newline="", encoding="utf-8") as f:
+            fieldnames = [
+                "source",
+                "attribution",
+                "collection",
+                "documentation-url",
+                "endpoint",
+                "licence",
+                "organisation",
+                "pipelines",
+                "entry-date",
+                "start-date",
+                "end-date",
+            ]
+            new_row = {
+                "source": source_key,
+                "attribution": attribution,
+                "collection": collection,
+                "documentation-url": documentation_url,
+                "endpoint": endpoint_key,
+                "licence": licence,
+                "organisation": organisation,
+                "pipelines": pipelines,
+                "entry-date": entry_date or datetime.now().isoformat(),
+                "start-date": start_date or "",
+                "end-date": end_date or "",
+            }
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writerow(new_row)
+    return source_key, new_row
