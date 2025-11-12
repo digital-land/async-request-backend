@@ -435,3 +435,12 @@ def convert_error_summary_to_json(error_summary):
                 json_data.append(f"{count} {key}")
                 logger.warning(f"Mapping not found for: {key}")
     return json_data
+
+
+def add_data_workflow(fileName,
+            request_id,
+            collection,
+            dataset,
+            organisation,
+            directories,):
+    return organisation
