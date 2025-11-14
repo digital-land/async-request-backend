@@ -1,6 +1,7 @@
 import datetime
 import database
 import pytest
+import json
 from src import tasks
 from src.tasks import save_response_to_db
 from request_model import models, schemas
@@ -116,7 +117,9 @@ def test_save_response_to_db(
 def test_add_data_task_success(monkeypatch):
     request = {"id": "req-123", "status": "NEW", "params": {"collection": "col", "dataset": "ds", "organisation": "org",
                                                             "url": "http://example.com/data.csv"}}
-    directories = MagicMock()
+    directories_dict = {"COLLECTION_DIR": "/tmp/collection", "PIPELINE_DIR": "/tmp/pipeline"}
+    directories_json = json.dumps(directories_dict)
+    request_schema = MagicMock()
     request_schema = MagicMock()
     request_schema.status = "NEW"
     request_schema.id = "req-123"
@@ -132,7 +135,7 @@ def test_add_data_task_success(monkeypatch):
     monkeypatch.setattr(tasks, "save_response_to_db", lambda *a, **kw: None)
     monkeypatch.setattr(tasks, "_get_request", lambda rid: {"id": rid, "status": "COMPLETE"})
 
-    result = tasks.add_data_task(request, directories)
+    result = tasks.add_data_task(request, directories_json)
 
     assert result["id"] == "req-123"
     assert result["status"] == "COMPLETE"
@@ -141,7 +144,8 @@ def test_add_data_task_success(monkeypatch):
 def test_add_data_task_fail(monkeypatch):
     request = {"id": "req-123", "status": "NEW", "params": {"collection": "col", "dataset": "ds", "organisation": "org",
                                                             "url": "http://example.com/data.csv"}}
-    directories = MagicMock()
+    directories_dict = {"COLLECTION_DIR": "/tmp/collection", "PIPELINE_DIR": "/tmp/pipeline"}
+    directories_json = json.dumps(directories_dict)
     request_schema = MagicMock()
     request_schema.status = "NEW"
     request_schema.id = "req-123"
@@ -160,4 +164,4 @@ def test_add_data_task_fail(monkeypatch):
     monkeypatch.setattr(tasks, "_get_request", lambda rid: {"id": rid, "status": "FAILED"})
 
     with pytest.raises(tasks.CustomException):
-        tasks.add_data_task(request, directories)
+        tasks.add_data_task(request, directories_json)
