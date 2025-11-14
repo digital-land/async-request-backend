@@ -8,7 +8,7 @@ from urllib.error import HTTPError
 from application.core.utils import detect_encoding, extract_dataset_field_rows
 from application.logging.logger import get_logger
 from application.core.pipeline import fetch_response_data, resource_from_path
-from application.configurations.config import source_url
+from application.configurations.config import source_url, add_data_url
 from collections import defaultdict
 import json
 import warnings
@@ -437,10 +437,40 @@ def convert_error_summary_to_json(error_summary):
     return json_data
 
 
-def add_data_workflow(fileName,
-            request_id,
-            collection,
-            dataset,
-            organisation,
-            directories,):
+def add_data_workflow(
+    file_name,
+    request_id,
+    collection,
+    dataset,
+    organisation,
+    directories,
+):
+
+    pipeline_dir = os.path.join(directories.PIPELINE_DIR, collection, request_id)
+    logger.info(f"pipeline_dir is : {pipeline_dir}")
+    input_path = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
+    file_path = os.path.join(input_path, file_name)
+    resource = resource_from_path(file_path)
+    logger.info(f"resource is : {resource}")
+    fetch_csv = fetch_add_data_csvs(collection, pipeline_dir)
+    logger.info(f"files fetched are : {fetch_csv}")
+
     return organisation
+
+
+def fetch_add_data_csvs(collection, pipeline_dir):
+    os.makedirs(pipeline_dir, exist_ok=True)
+    add_data_csvs = ["lookup.csv"]
+    fetched_files = []
+    for csv_name in add_data_csvs:
+        csv_path = os.path.join(pipeline_dir, csv_name)
+        if csv_name == "lookup.csv":
+            url = f"{add_data_url}pipeline/{collection}/{csv_name}"
+        else:
+            url = f"{add_data_url}collection/{collection}/{csv_name}"
+        try:
+            urllib.request.urlretrieve(url, csv_path)
+            logger.info(f"Downloaded {csv_name} from {url} to {csv_path}")
+        except HTTPError as e:
+            logger.warning(f"Failed to retrieve {csv_name}: {e}.")
+    return fetched_files

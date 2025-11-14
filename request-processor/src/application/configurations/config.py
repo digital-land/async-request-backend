@@ -1,5 +1,5 @@
 source_url = "https://raw.githubusercontent.com/digital-land/"
-
+add_data_url = "https://files.planning.data.gov.uk/config/"
 
 class Directories:
     COLLECTION_DIR = "/opt/collection/"
