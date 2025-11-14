@@ -157,7 +157,7 @@ def test_add_data_task_fail(monkeypatch):
 
     monkeypatch.setattr(tasks.schemas.Request, "model_validate", lambda r: request_schema)
 
-    def raise_custom(*a, **kw): raise tasks.CustomException({"message": "fail"})
+    def raise_custom(*a, **kw): raise tasks.CustomException({"message": "fail", "status": "404"})
 
     monkeypatch.setattr(tasks, "_fetch_resource", raise_custom)
     monkeypatch.setattr(tasks, "save_response_to_db", lambda *a, **kw: None)
