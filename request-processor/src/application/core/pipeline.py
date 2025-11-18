@@ -299,3 +299,47 @@ def assign_entries(
     )
 
     lookups.save_csv()
+
+
+def fetch_add_data_response( dataset, organisation, pipeline_dir, input_path, specification_dir, cache_dir):
+
+    specification = Specification(specification_dir)
+    files_in_resource = os.listdir(input_path)
+    response_data = {}
+
+    if not files_in_resource:
+        logger.warning(f"No files found in {input_path}")
+        return response_data
+
+    new_entities_count = 0
+    for idx, resource_file in enumerate(files_in_resource):
+        resource_file_path = os.path.join(input_path, resource_file)
+        logger.info(f" Processing file {idx + 1}/{len(files_in_resource)}: {resource_file}")
+        try:
+
+            assign_entries(
+                resource_path=resource_file_path,
+                dataset=dataset,
+                organisation=organisation,
+                pipeline_dir=pipeline_dir,
+                specification=specification,
+                cache_dir=cache_dir,
+            )
+
+            logger.info(f" assign_entries completed successfully for {resource_file}")
+            new_entities_count += 1
+
+        except Exception as err:
+            logger.error(f" Error processing {resource_file}: {err}")
+
+    new_entity_breakdown = []
+
+    entity_summary = {
+        "new-in-resource": new_entities_count,
+        "new-entities-breakdown": new_entity_breakdown
+    }
+    response_data = {
+        "entity-summary": entity_summary
+    }
+
+    return response_data

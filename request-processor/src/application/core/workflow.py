@@ -7,7 +7,7 @@ import yaml
 from urllib.error import HTTPError
 from application.core.utils import detect_encoding, extract_dataset_field_rows
 from application.logging.logger import get_logger
-from application.core.pipeline import fetch_response_data, resource_from_path
+from application.core.pipeline import fetch_response_data, resource_from_path, fetch_add_data_response
 from application.configurations.config import source_url, add_data_url
 from collections import defaultdict
 import json
@@ -455,7 +455,12 @@ def add_data_workflow(
     fetch_csv = fetch_add_data_csvs(collection, pipeline_dir)
     logger.info(f"files fetched are : {fetch_csv}")
 
-    return organisation
+    response_data = fetch_add_data_response(dataset, organisation, pipeline_dir,
+                                            input_path, directories.SPECIFICATION_DIR,
+                                            directories.CACHE_DIR, )
+    logger.info(f"add data response is : {response_data}")
+
+    return response_data
 
 
 def fetch_add_data_csvs(collection, pipeline_dir):
