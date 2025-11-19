@@ -1,5 +1,6 @@
 source_url = "https://raw.githubusercontent.com/digital-land/"
-add_data_url = "https://files.planning.data.gov.uk/config/"
+DATASTORE_URL = os.getenv("DATASTORE_URL", "https://files.planning.data.gov.uk/")
+CONFIG_URL = f"{DATASTORE_URL}config/"
 
 class Directories:
     COLLECTION_DIR = "/opt/collection/"

@@ -131,15 +131,32 @@ def check_dataurl(request: Dict, directories=None):
                 setattr(directories, key, value)
 
         file_name = ""
+        log = {}
         resource_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_schema.id)
         log_dir = os.path.join(directories.COLLECTION_DIR, "log", request_schema.id)
-        file_name, log = _fetch_resource(
-            directories.COLLECTION_DIR,
-            resource_dir,
-            log_dir,
-            request_data.url,
-            getattr(request_data, "plugin", None)
-        )
+        try:
+            file_name, log = _fetch_resource(
+                directories.COLLECTION_DIR,
+                resource_dir,
+                log_dir,
+                request_data.url,
+                getattr(request_data, "plugin", None)
+            )
+
+        except CustomException as e:
+            logger.error(f"Exception during _fetch_resource: {e.detail}")
+            save_response_to_db(request_schema.id, e.detail)
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected exception during _fetch_resource: {e}")
+            logger.exception("Full traceback:")
+            error_log = {
+                "message": f"Failed to fetch resource: {str(e)}",
+                "status": "ERROR",
+                "exception_type": type(e).__name__
+            }
+            save_response_to_db(request_schema.id, error_log)
+            raise CustomException(error_log)
         if file_name:
             response = workflow.run_workflow(
                 file_name,

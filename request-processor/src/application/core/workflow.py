@@ -8,7 +8,7 @@ from urllib.error import HTTPError
 from application.core.utils import detect_encoding, extract_dataset_field_rows
 from application.logging.logger import get_logger
 from application.core.pipeline import fetch_response_data, resource_from_path, fetch_add_data_response
-from application.configurations.config import source_url, add_data_url
+from application.configurations.config import source_url, CONFIG_URL
 from collections import defaultdict
 import json
 import warnings
@@ -470,9 +470,9 @@ def fetch_add_data_csvs(collection, pipeline_dir):
     for csv_name in add_data_csvs:
         csv_path = os.path.join(pipeline_dir, csv_name)
         if csv_name == "lookup.csv":
-            url = f"{add_data_url}pipeline/{collection}/{csv_name}"
+            url = f"{CONFIG_URL}pipeline/{collection}/{csv_name}"
         else:
-            url = f"{add_data_url}collection/{collection}/{csv_name}"
+            url = f"{CONFIG_URL}collection/{collection}/{csv_name}"
         try:
             urllib.request.urlretrieve(url, csv_path)
             logger.info(f"Downloaded {csv_name} from {url} to {csv_path}")
