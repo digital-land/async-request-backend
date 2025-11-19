@@ -412,8 +412,8 @@ def test_fetch_add_data_csvs_from_url(monkeypatch, tmp_path):
     collection = "test-collection"
     pipeline_dir = tmp_path / "pipeline"
     pipeline_dir_str = str(pipeline_dir)
-    add_data_url = "http://example.com/"
-    monkeypatch.setattr("src.application.core.workflow.add_data_url", add_data_url)
+    monkeypatch.setattr("src.application.core.workflow.CONFIG_URL", "http://example.com/config/")
+
 
     # Patch urllib.request.urlretrieve to simulate download
     downloads = []
@@ -436,8 +436,8 @@ def test_fetch_add_data_csvs_handles_http_error(monkeypatch, tmp_path):
     collection = "test-collection"
     pipeline_dir = tmp_path / "pipeline"
     pipeline_dir_str = str(pipeline_dir)
-    add_data_url = "http://example.com/"
-    monkeypatch.setattr("src.application.core.workflow.add_data_url", add_data_url)
+    monkeypatch.setattr("src.application.core.workflow.CONFIG_URL", "http://example.com/config/")
+
 
     def raise_http_error(url, path):
         raise HTTPError(url, 404, "Not Found", None, None)
