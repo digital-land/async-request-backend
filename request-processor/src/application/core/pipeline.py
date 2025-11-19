@@ -313,12 +313,6 @@ def fetch_add_data_response( dataset, organisation, pipeline_dir, input_path, sp
         files_in_resource = os.listdir(input_path)
         logger.info(f"Total files: {len(files_in_resource)}")
 
-        response_data = {}
-
-        if not files_in_resource:
-            logger.warning(f"No files found in {input_path}")
-            return response_data
-
         new_entities = []
         existing_entities = []
         lookup_path = os.path.join(pipeline_dir, 'lookup.csv')
@@ -359,7 +353,7 @@ def fetch_add_data_response( dataset, organisation, pipeline_dir, input_path, sp
 
             except Exception as err:
                 logger.error(f"Error processing {resource_file}: {err}")
-                logger.exception(f"Full traceback: ")
+                logger.exception("Full traceback: ")
 
         new_entities_breakdown = _get_entities_breakdown(new_entities)
         existing_entities_breakdown = _get_existing_entities_breakdown(existing_entities)
@@ -446,7 +440,7 @@ def _check_existing_entities(unidentified_lookups, lookup_path):
             except Exception as e:
                 logger.error(f"Error reading lookup file: {e}")
         else:
-            logger.info(f"lookup file does not exist yet")
+            logger.info("lookup file does not exist yet")
 
         new_lookups = []
         existing_lookups = []
