@@ -42,6 +42,7 @@ class AddDataParams(Params):
     licence: Optional[str] = None
     start_date: Optional[str] = None
     organisation: Optional[str] = None
+    plugin: Optional[PluginTypeEnum] = None
 
 
 class RequestBase(BaseModel):
