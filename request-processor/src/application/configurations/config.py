@@ -1,8 +1,5 @@
-import os
-
 source_url = "https://raw.githubusercontent.com/digital-land/"
-DATASTORE_URL = os.getenv("DATASTORE_URL", "https://files.planning.data.gov.uk/")
-CONFIG_URL = f"{DATASTORE_URL}config/"
+
 
 class Directories:
     COLLECTION_DIR = "/opt/collection/"

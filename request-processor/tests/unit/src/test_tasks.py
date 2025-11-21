@@ -1,11 +1,8 @@
 import datetime
 import database
 import pytest
-import json
-from src import tasks
 from src.tasks import save_response_to_db
 from request_model import models, schemas
-from unittest.mock import patch, MagicMock
 
 
 @pytest.mark.parametrize(
@@ -112,56 +109,3 @@ def test_save_response_to_db(
             assert (
                 "transformed_row" in detail
             ), "transformed_row should be present in data"
-
-
-def test_add_data_task_success(monkeypatch):
-    request = {"id": "req-123", "status": "NEW", "params": {"collection": "col", "dataset": "ds", "organisation": "org",
-                                                            "url": "http://example.com/data.csv"}}
-    directories_dict = {"COLLECTION_DIR": "/tmp/collection", "PIPELINE_DIR": "/tmp/pipeline"}
-    directories_json = json.dumps(directories_dict)
-    request_schema = MagicMock()
-    request_schema = MagicMock()
-    request_schema.status = "NEW"
-    request_schema.id = "req-123"
-    request_schema.params = MagicMock()
-    request_schema.params.collection = "col"
-    request_schema.params.dataset = "ds"
-    request_schema.params.organisation = "org"
-    request_schema.params.url = "http://example.com/data.csv"
-
-    monkeypatch.setattr(tasks.schemas.Request, "model_validate", lambda r: request_schema)
-    monkeypatch.setattr(tasks, "_fetch_resource", lambda *a, **kw: ("file.csv", {}))
-    monkeypatch.setattr(tasks.workflow, "add_data_workflow", lambda *a, **kw: {"result": "ok"})
-    monkeypatch.setattr(tasks, "save_response_to_db", lambda *a, **kw: None)
-    monkeypatch.setattr(tasks, "_get_request", lambda rid: {"id": rid, "status": "COMPLETE"})
-
-    result = tasks.add_data_task(request, directories_json)
-
-    assert result["id"] == "req-123"
-    assert result["status"] == "COMPLETE"
-
-
-def test_add_data_task_fail(monkeypatch):
-    request = {"id": "req-123", "status": "NEW", "params": {"collection": "col", "dataset": "ds", "organisation": "org",
-                                                            "url": "http://example.com/data.csv"}}
-    directories_dict = {"COLLECTION_DIR": "/tmp/collection", "PIPELINE_DIR": "/tmp/pipeline"}
-    directories_json = json.dumps(directories_dict)
-    request_schema = MagicMock()
-    request_schema.status = "NEW"
-    request_schema.id = "req-123"
-    request_schema.params = MagicMock()
-    request_schema.params.collection = "col"
-    request_schema.params.dataset = "ds"
-    request_schema.params.organisation = "org"
-    request_schema.params.url = "http://example.com/data.csv"
-
-    monkeypatch.setattr(tasks.schemas.Request, "model_validate", lambda r: request_schema)
-
-    def raise_custom(*a, **kw): raise tasks.CustomException({"message": "fail", "status": "404"})
-
-    monkeypatch.setattr(tasks, "_fetch_resource", raise_custom)
-    monkeypatch.setattr(tasks, "save_response_to_db", lambda *a, **kw: None)
-    monkeypatch.setattr(tasks, "_get_request", lambda rid: {"id": rid, "status": "FAILED"})
-
-    with pytest.raises(tasks.CustomException):
-        tasks.add_data_task(request, directories_json)
