@@ -7,8 +7,8 @@ import yaml
 from urllib.error import HTTPError
 from application.core.utils import detect_encoding, extract_dataset_field_rows
 from application.logging.logger import get_logger
-from application.core.pipeline import fetch_response_data, resource_from_path, fetch_add_data_response
-from application.configurations.config import source_url, CONFIG_URL
+from application.core.pipeline import fetch_response_data, resource_from_path
+from application.configurations.config import source_url
 from collections import defaultdict
 import json
 import warnings
@@ -467,7 +467,7 @@ def add_data_workflow(
 
 def fetch_add_data_csvs(collection, pipeline_dir):
     os.makedirs(pipeline_dir, exist_ok=True)
-    add_data_csvs = ["lookup.csv"]
+    add_data_csvs = ["lookup.csv","endpoint.csv","source.csv"]
     fetched_files = []
     for csv_name in add_data_csvs:
         csv_path = os.path.join(pipeline_dir, csv_name)
