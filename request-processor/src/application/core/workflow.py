@@ -443,6 +443,8 @@ def add_data_workflow(
     collection,
     dataset,
     organisation,
+    url,
+    documentation_url,
     directories,
 ):
 
@@ -457,7 +459,7 @@ def add_data_workflow(
 
     response_data = fetch_add_data_response(dataset, organisation, pipeline_dir,
                                             input_path, directories.SPECIFICATION_DIR,
-                                            directories.CACHE_DIR, )
+                                            directories.CACHE_DIR, url, documentation_url)
     logger.info(f"add data response is : {response_data}")
 
     return response_data
