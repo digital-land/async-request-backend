@@ -202,6 +202,41 @@ def add_data_task(request: Dict, directories=None):
     request_schema = schemas.Request.model_validate(request)
     request_data = request_schema.params
     logger.info(f"request_payload_params: {json.dumps(request_data, default=str)}")
+    if not request_schema.status == "COMPLETE":
+        if not directories:
+            directories = Directories
+        else:
+            data_dict = json.loads(directories)
+            directories = Directories()
+            for key, value in data_dict.items():
+                setattr(directories, key, value)
+
+        resource_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_schema.id)
+        log_dir = os.path.join(directories.COLLECTION_DIR, "log", request_schema.id)
+        file_name, log = _fetch_resource(
+            directories.COLLECTION_DIR,
+            resource_dir,
+            log_dir,
+            request_data.url,
+            getattr(request_data, "plugin", None)
+        )
+        logger.info(f"file name from fetch resource is : {file_name} and the log from fetch resource is {log}")
+        if file_name:
+            response = workflow.add_data_workflow(
+                file_name,
+                request_schema.id,
+                request_data.collection,
+                request_data.dataset,
+                request_data.organisation,
+                request_data.url,
+                request_data.documentation_url,
+                directories
+            )
+            logger.info(f"response is : {response}")
+            save_response_to_db(request_schema.id, response)
+        else:
+            save_response_to_db(request_schema.id, log)
+            raise CustomException(log)
     return _get_request(request_schema.id)
 
 
