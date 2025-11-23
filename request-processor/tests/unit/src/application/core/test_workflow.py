@@ -375,14 +375,17 @@ def test_add_data_workflow_calls(monkeypatch):
         called["fetch_add_data_csvs"] = (col, pdir)
         return ["/tmp/pipeline/lookup.csv"]
 
-    def fake_fetch_add_data_response(ds, org, pdir, ipath, spec_dir, cache_dir):
+    def fake_fetch_add_data_response(col, ds, org, pdir, ipath, spec_dir, cache_dir, e_url, d_url):
         called["fetch_add_data_response"] = {
+            "collection": col,
             "dataset": ds,
             "organisation": org,
             "pipeline_dir": pdir,
             "input_path": ipath,
             "specification_dir": spec_dir,
             "cache_dir": cache_dir,
+            "url": e_url,
+            "documentation_url": d_url,
         }
         return {"result": "ok"}
 
@@ -413,6 +416,8 @@ def test_add_data_workflow_calls(monkeypatch):
     assert called["fetch_add_data_response"]["input_path"] == expected_input_path
     assert called["fetch_add_data_response"]["specification_dir"] == directories.SPECIFICATION_DIR
     assert called["fetch_add_data_response"]["cache_dir"] == directories.CACHE_DIR
+    assert called["fetch_add_data_response"]["url"] == url
+    assert called["fetch_add_data_response"]["documentation_url"] == documentation_url
 
 
 def test_fetch_add_data_csvs_from_url(monkeypatch, tmp_path):

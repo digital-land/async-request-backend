@@ -195,6 +195,8 @@ def add_data_task(request: Dict, directories=None):
                 request_data.collection,
                 request_data.dataset,
                 request_data.organisation,
+                request_data.url,
+                request_data.documentation_url,
                 directories,
             )
             logger.info(f"response is : {response}")
