@@ -48,7 +48,6 @@ def test_fetch_add_data_response_success(monkeypatch, tmp_path):
     monkeypatch.setattr("src.application.core.pipeline.Lookups", lambda x: mock_lookups_instance)
 
     result = fetch_add_data_response(
-        fetch_csv=[],
         request_id="req-001",
         collection="test-collection",
         dataset=dataset,
@@ -83,7 +82,6 @@ def test_fetch_add_data_response_no_files(monkeypatch, tmp_path):
     monkeypatch.setattr("src.application.core.pipeline.Specification", lambda x: mock_spec)
 
     result = fetch_add_data_response(
-        fetch_csv=[],
         request_id="req-001",
         collection="test-collection",
         dataset=dataset,
@@ -114,7 +112,6 @@ def test_fetch_add_data_response_file_not_found(monkeypatch, tmp_path):
 
     with pytest.raises(FileNotFoundError):
         fetch_add_data_response(
-            fetch_csv=[],
             request_id="req-001",
             collection="test-collection",
             dataset=dataset,

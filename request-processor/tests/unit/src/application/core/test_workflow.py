@@ -315,6 +315,8 @@ def test_add_data_workflow(monkeypatch):
     collection = "test-collection"
     dataset = "test-dataset"
     organisation = "test-org"
+    url = "http://example.com/url"
+    documentation_url = "http://example.com/doc"
 
     class DummyDirectories:
         PIPELINE_DIR = "/tmp/pipeline"
@@ -338,6 +340,8 @@ def test_add_data_workflow(monkeypatch):
         collection,
         dataset,
         organisation,
+        url,
+        documentation_url,
         directories,
     )
 
@@ -350,6 +354,8 @@ def test_add_data_workflow_calls(monkeypatch):
     collection = "test-collection"
     dataset = "test-dataset"
     organisation = "test-org"
+    url = "http://example.com/url"
+    documentation_url = "http://example.com/doc"
 
     class DummyDirectories:
         PIPELINE_DIR = "/tmp/pipeline"
@@ -390,6 +396,8 @@ def test_add_data_workflow_calls(monkeypatch):
         collection,
         dataset,
         organisation,
+        url,
+        documentation_url,
         directories,
     )
 
