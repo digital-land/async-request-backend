@@ -1,5 +1,6 @@
 import pytest
 import os
+import csv
 from unittest.mock import MagicMock
 from src.application.core.pipeline import (
     fetch_add_data_response,
@@ -10,8 +11,6 @@ from src.application.core.pipeline import (
     _get_existing_entities_breakdown,
     _validate_endpoint,
 )
-import tempfile
-import shutil
 
 def test_fetch_add_data_response_success(monkeypatch, tmp_path):
     """Test successful execution of fetch_add_data_response"""
@@ -49,12 +48,19 @@ def test_fetch_add_data_response_success(monkeypatch, tmp_path):
     monkeypatch.setattr("src.application.core.pipeline.Lookups", lambda x: mock_lookups_instance)
 
     result = fetch_add_data_response(
+        fetch_csv=[],
+        request_id="req-001",
+        collection="test-collection",
         dataset=dataset,
         organisation=organisation,
         pipeline_dir=str(pipeline_dir),
+        file_name="test.csv",
         input_path=str(input_path),
+        file_path=str(input_path) + "/test.csv",
         specification_dir=str(specification_dir),
-        cache_dir=str(cache_dir)
+        cache_dir=str(cache_dir),
+        url="http://example.com/endpoint",
+        documentation_url="http://example.com/doc"
     )
 
     assert "entity-summary" in result
@@ -77,31 +83,50 @@ def test_fetch_add_data_response_no_files(monkeypatch, tmp_path):
     monkeypatch.setattr("src.application.core.pipeline.Specification", lambda x: mock_spec)
 
     result = fetch_add_data_response(
+        fetch_csv=[],
+        request_id="req-001",
+        collection="test-collection",
         dataset=dataset,
         organisation=organisation,
         pipeline_dir=str(pipeline_dir),
+        file_name="test.csv",
         input_path=str(input_path),
+        file_path=str(input_path) + "/test.csv",
         specification_dir=str(specification_dir),
-        cache_dir=str(cache_dir)
+        cache_dir=str(cache_dir),
+        url="http://example.com/endpoint",
+        documentation_url="http://example.com/doc"
     )
 
     assert "entity-summary" in result
     assert result["entity-summary"]["new-in-resource"] == 0
 
 
-def test_fetch_add_data_response_file_not_found(monkeypatch):
-    """Test when input path does not exist"""
+def test_fetch_add_data_response_file_not_found(monkeypatch, tmp_path):
+    dataset = "test-dataset"
+    organisation = "test-org"
+    pipeline_dir = tmp_path / "pipeline"
+    input_path = tmp_path / "resource"
+    specification_dir = tmp_path / "specification"
+    cache_dir = tmp_path / "cache"
     mock_spec = MagicMock()
     monkeypatch.setattr("src.application.core.pipeline.Specification", lambda x: mock_spec)
 
     with pytest.raises(FileNotFoundError):
         fetch_add_data_response(
-            dataset="test",
-            organisation="test-org",
-            pipeline_dir="/fake/path",
-            input_path="/nonexistent/path",
-            specification_dir="/fake/spec",
-            cache_dir="/fake/cache"
+            fetch_csv=[],
+            request_id="req-001",
+            collection="test-collection",
+            dataset=dataset,
+            organisation=organisation,
+            pipeline_dir=str(pipeline_dir),
+            file_name="test.csv",
+            input_path=str(input_path),
+            file_path=str(input_path) + "/test.csv",
+            specification_dir=str(specification_dir),
+            cache_dir=str(cache_dir),
+            url="http://example.com/endpoint",
+            documentation_url="http://example.com/doc"
         )
 
 
