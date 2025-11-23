@@ -60,6 +60,7 @@ def test_fetch_add_data_response_success(monkeypatch, tmp_path):
         dataset=dataset,
         organisation=organisation,
         pipeline_dir=str(pipeline_dir),
+        input_path=str(input_path),
         specification_dir=str(specification_dir),
         cache_dir=str(cache_dir),
         url=url,
