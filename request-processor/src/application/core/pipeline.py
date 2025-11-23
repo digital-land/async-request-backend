@@ -32,7 +32,7 @@ from digital_land.pipeline import run_pipeline, Pipeline, Lookups
 from digital_land.commands import get_resource_unidentified_lookups
 from digital_land.check import duplicate_reference_check
 from digital_land.api import API
-from application.core.utils import hash_sha256, append_endpoint,append_source,hash_md5
+from application.core.utils import append_endpoint,append_source
 from datetime import datetime
 from pathlib import Path
 
@@ -302,7 +302,7 @@ def assign_entries(
     lookups.save_csv()
 
 
-def fetch_add_data_response( dataset, organisation, pipeline_dir, input_path, specification_dir, cache_dir, url, documentation_url):
+def fetch_add_data_response(collection, dataset, organisation, pipeline_dir, input_path, specification_dir, cache_dir, url, documentation_url):
     try:
         specification = Specification(specification_dir)
 
@@ -407,7 +407,7 @@ def _add_data_read_entities(resource_path, dataset, organisation, specification)
                     reference = row.get('reference', '').strip()
 
                     if not reference:
-                        logger.warning(f"[read_resource_references] Row {idx} has no reference, skipping")
+                        logger.warning(f"Row {idx} has no reference, skipping")
                         continue
 
                     lookup_entry = {
@@ -555,7 +555,7 @@ def _validate_endpoint(url, pipeline_dir):
 
     endpoint_csv_path = os.path.join(pipeline_dir, 'endpoint.csv')
     if not url:
-        logger.info(f"No endpoint URL provided")
+        logger.info("No endpoint URL provided")
         return {}
 
     if not os.path.exists(endpoint_csv_path):
@@ -584,7 +584,7 @@ def _validate_endpoint(url, pipeline_dir):
                         "start-date": row.get('start-date', ''),
                         "end-date": row.get('end-date', '')
                     }
-                    logger.info(f"Endpoint URL found in endpoint.csv")
+                    logger.info("Endpoint URL found in endpoint.csv")
                     break
     except Exception as e:
         logger.error(f"Error reading endpoint.csv: {e}")
@@ -616,42 +616,48 @@ def _validate_endpoint(url, pipeline_dir):
 
 
 def _validate_source(documentation_url, pipeline_dir, collection, organisation, dataset, endpoint_summary):
-
     source_csv_path = os.path.join(pipeline_dir, 'source.csv')
 
-    endpoint_key = None
-    if endpoint_summary.get("existing_endpoint_entry"):
-        endpoint_key = endpoint_summary["existing_endpoint_entry"]["endpoint"]
-    elif endpoint_summary.get("new_endpoint_entry"):
-        endpoint_key = endpoint_summary["new_endpoint_entry"]["endpoint"]
-
+    endpoint_key = (
+        endpoint_summary.get("existing_endpoint_entry", {}).get("endpoint")
+        or endpoint_summary.get("new_endpoint_entry", {}).get("endpoint")
+    )
     if not endpoint_key:
-        logger.warning(f"No endpoint_key available from endpoint_summary")
+        logger.warning("No endpoint_key available from endpoint_summary")
         return {}
 
     if not documentation_url:
-        logger.warning(f"No documentation URL provided")
+        logger.warning("No documentation URL provided")
 
-    if not os.path.exists(source_csv_path):
-        os.makedirs(os.path.dirname(source_csv_path), exist_ok=True)
-        with open(source_csv_path, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow(['source', 'attribution', 'collection', 'documentation-url',
-                             'endpoint', 'licence', 'organisation', 'pipelines',
-                             'entry-date', 'start-date', 'end-date'])
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    entry_date = datetime.now().isoformat()
 
-    source_key = hash_md5(f"{collection}|{organisation}|{endpoint_key}")
+    source_key_returned, new_source_row = append_source(
+        source_csv_path=source_csv_path,
+        collection=collection,
+        organisation=organisation,
+        endpoint_key=endpoint_key,
+        attribution="",
+        documentation_url=documentation_url or "",
+        licence="",
+        pipelines=dataset,
+        entry_date=entry_date,
+        start_date=current_date,
+        end_date=""
+    )
 
-    source_exists = False
-    existing_entry = None
+    if new_source_row:
+        return {
+            "documentation_url_in_source_csv": False,
+            "new_source_entry": new_source_row,
+        }
 
+    source_summary = {"documentation_url_in_source_csv": True}
     try:
         with open(source_csv_path, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                if row.get('source', '').strip() == source_key:
-                    source_exists = True
-                    existing_entry = {
+            for row in csv.DictReader(f):
+                if row.get('source', '').strip() == source_key_returned:
+                    source_summary["existing_source_entry"] = {
                         "source": row.get('source', ''),
                         "attribution": row.get('attribution', ''),
                         "collection": row.get('collection', ''),
@@ -664,39 +670,8 @@ def _validate_source(documentation_url, pipeline_dir, collection, organisation, 
                         "start-date": row.get('start-date', ''),
                         "end-date": row.get('end-date', '')
                     }
-                    logger.info(f"Source found in source.csv with key: {source_key}")
                     break
     except Exception as e:
-        logger.error(f"Error reading source.csv: {e}")
-
-    source_summary = {
-        "documentation_url_in_source_csv": source_exists,
-    }
-
-    if source_exists and existing_entry:
-        source_summary["existing_source_entry"] = existing_entry
-
-    else:
-
-        current_date = datetime.now().strftime("%Y-%m-%d")
-        entry_date = datetime.now().isoformat()
-
-        source_key_returned, new_source_row = append_source(
-            source_csv_path=source_csv_path,
-            collection=collection,
-            organisation=organisation,
-            endpoint_key=endpoint_key,
-            attribution="",
-            documentation_url=documentation_url or "",
-            licence="",
-            pipelines=dataset,
-            entry_date=entry_date,
-            start_date=current_date,
-            end_date=""
-        )
-
-        if new_source_row:
-            logger.info(f" Appended new source with key: {source_key_returned}")
-            source_summary["new_source_entry"] = new_source_row
+        logger.error(f"Error reading existing source: {e}")
 
     return source_summary

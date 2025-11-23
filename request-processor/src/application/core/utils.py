@@ -131,6 +131,15 @@ def append_endpoint(
     endpoint_key = hash_sha256(endpoint_url)
     exists = False
     new_row = None
+
+    if os.path.exists(endpoint_csv_path) and os.path.getsize(endpoint_csv_path) > 0:
+        with open(endpoint_csv_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        while lines and lines[-1].strip() == "":
+            lines.pop()
+        with open(endpoint_csv_path, "w", encoding="utf-8", newline="") as f:
+            f.writelines(lines)
+
     if os.path.exists(endpoint_csv_path):
         with open(endpoint_csv_path, newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
@@ -154,9 +163,9 @@ def append_endpoint(
                 "endpoint-url": endpoint_url,
                 "parameters": "",
                 "plugin": "",
-                "entry-date": entry_date or datetime.now().isoformat(),
-                "start-date": start_date or "",
-                "end-date": end_date or "",
+                "entry-date": _formatted_date(entry_date) or datetime.now().date().isoformat(),
+                "start-date": _formatted_date(start_date),
+                "end-date": _formatted_date(end_date),
             }
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writerow(new_row)
@@ -179,6 +188,14 @@ def append_source(
     source_key = hash_md5(f"{collection}|{organisation}|{endpoint_key}")
     exists = False
     new_row = None
+    if os.path.exists(source_csv_path) and os.path.getsize(source_csv_path) > 0:
+        with open(source_csv_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        while lines and lines[-1].strip() == "":
+            lines.pop()
+        with open(source_csv_path, "w", encoding="utf-8", newline="") as f:
+            f.writelines(lines)
+
     if os.path.exists(source_csv_path):
         with open(source_csv_path, newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
@@ -210,10 +227,27 @@ def append_source(
                 "licence": licence,
                 "organisation": organisation,
                 "pipelines": pipelines,
-                "entry-date": entry_date or datetime.now().isoformat(),
-                "start-date": start_date or "",
-                "end-date": end_date or "",
+                "entry-date": _formatted_date(entry_date) or datetime.now().date().isoformat(),
+                "start-date": _formatted_date(start_date),
+                "end-date": _formatted_date(end_date),
             }
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writerow(new_row)
     return source_key, new_row
+
+
+def _formatted_date(date_value):
+    if not date_value:
+        return ""
+    if isinstance(date_value, datetime):
+        return date_value.date().isoformat()
+    if isinstance(date_value, str):
+        if len(date_value) == 10 and date_value[4] == '-' and date_value[7] == '-':
+            return date_value
+        if "T" in date_value:
+            return date_value.split("T")[0]
+        try:
+            return datetime.fromisoformat(date_value).date().isoformat()
+        except Exception:
+            pass
+    return str(date_value)
