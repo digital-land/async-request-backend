@@ -19,7 +19,6 @@ def test_fetch_add_data_response_success(monkeypatch, tmp_path):
     dataset = "test-dataset"
     organisation = "test-org"
     collection = "test-collection"
-    request_id = "req-001"
     pipeline_dir = tmp_path / "pipeline"
     input_path = tmp_path / "resource"
     specification_dir = tmp_path / "specification"
@@ -57,15 +56,10 @@ def test_fetch_add_data_response_success(monkeypatch, tmp_path):
                         lambda *a, **k: {"documentation_url_in_source_csv": True})
 
     result = fetch_add_data_response(
-        fetch_csv=[],
-        request_id=request_id,
         collection=collection,
         dataset=dataset,
         organisation=organisation,
         pipeline_dir=str(pipeline_dir),
-        file_name="test.csv",
-        input_path=str(input_path),
-        file_path=str(test_file),
         specification_dir=str(specification_dir),
         cache_dir=str(cache_dir),
         url=url,
@@ -82,7 +76,6 @@ def test_fetch_add_data_response_no_files(monkeypatch, tmp_path):
     dataset = "test-dataset"
     organisation = "test-org"
     collection = "test-collection"
-    request_id = "req-002"
     pipeline_dir = tmp_path / "pipeline"
     input_path = tmp_path / "resource"
     specification_dir = tmp_path / "specification"
@@ -101,15 +94,11 @@ def test_fetch_add_data_response_no_files(monkeypatch, tmp_path):
                         lambda *a, **k: {"documentation_url_in_source_csv": True})
 
     result = fetch_add_data_response(
-        fetch_csv=[],
-        request_id=request_id,
         collection=collection,
         dataset=dataset,
         organisation=organisation,
         pipeline_dir=str(pipeline_dir),
-        file_name="test.csv",
         input_path=str(input_path),
-        file_path=str(input_path / "test.csv"),
         specification_dir=str(specification_dir),
         cache_dir=str(cache_dir),
         url=url,
@@ -140,15 +129,11 @@ def test_fetch_add_data_response_file_not_found(monkeypatch, tmp_path):
 
     with pytest.raises(FileNotFoundError):
         fetch_add_data_response(
-            fetch_csv=[],
-            request_id=request_id,
             collection=collection,
             dataset=dataset,
             organisation=organisation,
             pipeline_dir=str(pipeline_dir),
-            file_name="test.csv",
             input_path=str(input_path),
-            file_path=str(input_path / "test.csv"),
             specification_dir=str(specification_dir),
             cache_dir=str(cache_dir),
             url=url,
@@ -204,15 +189,11 @@ def test_fetch_add_data_response_with_existing_entities(monkeypatch, tmp_path):
     monkeypatch.setattr("src.application.core.pipeline._validate_source", lambda *a, **k: {"documentation_url_in_source_csv": True})
 
     result = fetch_add_data_response(
-        fetch_csv=[],
-        request_id=request_id,
         collection=collection,
         dataset=dataset,
         organisation=organisation,
         pipeline_dir=str(pipeline_dir),
-        file_name="test.csv",
         input_path=str(input_path),
-        file_path=str(test_file),
         specification_dir=str(specification_dir),
         cache_dir=str(cache_dir),
         url=url,
@@ -256,15 +237,11 @@ def test_fetch_add_data_response_handles_processing_error(monkeypatch, tmp_path)
     monkeypatch.setattr("src.application.core.pipeline._validate_source", lambda *a, **k: {"documentation_url_in_source_csv": True})
 
     result = fetch_add_data_response(
-        fetch_csv=[],
-        request_id=request_id,
         collection=collection,
         dataset=dataset,
         organisation=organisation,
         pipeline_dir=str(pipeline_dir),
-        file_name="test.csv",
         input_path=str(input_path),
-        file_path=str(test_file),
         specification_dir=str(specification_dir),
         cache_dir=str(cache_dir),
         url=url,
