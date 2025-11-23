@@ -457,7 +457,7 @@ def add_data_workflow(
     fetch_csv = fetch_add_data_csvs(collection, pipeline_dir)
     logger.info(f"files fetched are : {fetch_csv}")
 
-    response_data = fetch_add_data_response(dataset, organisation, pipeline_dir,
+    response_data = fetch_add_data_response(collection, dataset, organisation, pipeline_dir,
                                             input_path, directories.SPECIFICATION_DIR,
                                             directories.CACHE_DIR, url, documentation_url)
     logger.info(f"add data response is : {response_data}")

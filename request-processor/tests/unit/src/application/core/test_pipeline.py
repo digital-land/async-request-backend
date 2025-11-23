@@ -7,9 +7,11 @@ from src.application.core.pipeline import (
     _check_existing_entities,
     _assign_entity_numbers,
     _get_entities_breakdown,
-    _get_existing_entities_breakdown
+    _get_existing_entities_breakdown,
+    _validate_endpoint,
 )
-
+import tempfile
+import shutil
 
 def test_fetch_add_data_response_success(monkeypatch, tmp_path):
     """Test successful execution of fetch_add_data_response"""
@@ -391,3 +393,54 @@ def test_get_existing_entities_breakdown_filters_empty_values():
     assert len(result) == 2
     assert result[0]["entity"] == "1000001"
     assert result[1]["entity"] == "1000004"
+
+def test_validate_endpoint_creates_file_and_appends(monkeypatch, tmp_path):
+
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+    url = "http://example.com/endpoint"
+    endpoint_csv_path = pipeline_dir / "endpoint.csv"
+
+
+    def fake_append_endpoint(endpoint_csv_path, endpoint_url, entry_date, start_date, end_date):
+        return "endpoint_hash", {
+            "endpoint": "endpoint_hash",
+            "endpoint-url": endpoint_url,
+            "parameters": "",
+            "plugin": "",
+            "entry-date": entry_date,
+            "start-date": start_date,
+            "end-date": end_date
+        }
+    monkeypatch.setattr("src.application.core.pipeline.append_endpoint", fake_append_endpoint)
+
+
+    result = _validate_endpoint(url, str(pipeline_dir))
+    assert result["endpoint_url_in_endpoint_csv"] is False or "new_endpoint_entry" in result
+    assert endpoint_csv_path.exists()
+
+def test_validate_endpoint_finds_existing(monkeypatch, tmp_path):
+
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+    url = "http://example.com/endpoint"
+    endpoint_csv_path = pipeline_dir / "endpoint.csv"
+    with open(endpoint_csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=['endpoint', 'endpoint-url', 'parameters', 'plugin', 'entry-date', 'start-date', 'end-date'])
+        writer.writeheader()
+        writer.writerow({
+            "endpoint": "endpoint_hash",
+            "endpoint-url": url,
+            "parameters": "",
+            "plugin": "",
+            "entry-date": "2024-01-01T00:00:00",
+            "start-date": "2024-01-01",
+            "end-date": ""
+        })
+
+    monkeypatch.setattr("src.application.core.pipeline.append_endpoint", lambda *a, **kw: (_ for _ in ()).throw(Exception("Should not be called")))
+
+    result = _validate_endpoint(url, str(pipeline_dir))
+    assert result["endpoint_url_in_endpoint_csv"] is True
+    assert "existing_endpoint_entry" in result
+    assert result["existing_endpoint_entry"]["endpoint-url"] == url
