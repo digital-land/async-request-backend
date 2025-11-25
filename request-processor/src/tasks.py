@@ -113,64 +113,93 @@ def handle_check_file(request_schema, request_data, tmp_dir):
 
 @celery.task(base=CheckDataUrlTask, name=CheckDataUrlTask.name)
 def check_dataurl(request: Dict, directories=None):
-    logger.info(
-        f"Started check_dataurl task for request_id={request.get('id', 'unknown')}"
-    )
+    logger.info(f"Started check_dataurl task for request_id={request.get('id', 'unknown')}")
     logger.debug(f"Request payload: {json.dumps(request, default=str)}")
     request_schema = schemas.Request.model_validate(request)
     request_data = request_schema.params
-    if not request_schema.status == "COMPLETE":
-        if not directories:
-            directories = Directories
-        elif directories:
-            data_dict = json.loads(directories)
-            # Create an instance of the Directories class
-            directories = Directories()
-            # Update attribute values based on the dictionary
-            for key, value in data_dict.items():
-                setattr(directories, key, value)
 
-        file_name = ""
-        resource_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_schema.id)
-        log_dir = os.path.join(directories.COLLECTION_DIR, "log", request_schema.id)
+    if request_schema.status == "COMPLETE":
+        logger.info(f"Request {request_schema.id} already COMPLETE")
+        return _get_request(request_schema.id)
+
+    if not directories:
+        directories = Directories
+    elif directories:
+        data_dict = json.loads(directories)
+        directories = Directories()
+        for key, value in data_dict.items():
+            setattr(directories, key, value)
+
+    file_name = None
+    resource_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_schema.id)
+    log_dir = os.path.join(directories.COLLECTION_DIR, "log", request_schema.id)
+
+    try:
+        file_name, fetch_log = _fetch_resource(
+            directories.COLLECTION_DIR,
+            resource_dir,
+            log_dir,
+            request_data.url,
+            getattr(request_data, "plugin", None)
+        )
+        logger.info(f"Fetched resource: file_name={file_name}")
+
+    except CustomException as e:
+        logger.error(f"CustomException during _fetch_resource: {e.detail}")
+        error_log = {
+            "message": e.detail.get("errMsg", "An error occurred"),
+            "status": e.detail.get("errCode", "ERROR"),
+            "exception_type": e.detail.get("errType", type(e).__name__)
+        }
+        save_response_to_db(request_schema.id, error_log)
+        raise
+
+    except Exception as e:
+        logger.error(f"Unexpected error during _fetch_resource: {e}")
+        logger.exception("Full traceback:")
+        msg = getattr(e, "detail", {}).get("errMsg") or getattr(e, "detail", {}).get("message") or str(e) or "Unknown error occured"
+        error_log = {
+            "message": f"Failed to fetch resource: {msg}",
+            "status": "ERROR",
+            "exception_type": type(e).__name__
+        }
+        save_response_to_db(request_schema.id, error_log)
+        raise CustomException(error_log)
+
+    if file_name:
         try:
-            file_name = _fetch_resource(
-                directories.COLLECTION_DIR,
-                resource_dir,
-                log_dir,
-                request_data.url,
-                getattr(request_data, "plugin", None)
-            )
-            logger.info(f"Fetched resource: file_name={file_name}")
-
-        except CustomException as e:
-            logger.error(f"CustomException during _fetch_resource: {e.detail}")
-            error_log = {
-                "message": e.detail.get("errMsg", "An error occurred"),
-                "status": e.detail.get("errCode", "ERROR"),
-                "exception_type": e.detail.get("errType", type(e).__name__)
-            }
-            save_response_to_db(request_schema.id, error_log)
-        if file_name:
             response = workflow.run_workflow(
                 file_name,
                 request_schema.id,
                 request_data.collection,
                 request_data.dataset,
                 "",
-                request_data.geom_type if hasattr(request_data, "geom_type") else "",
-                (
-                    request_data.column_mapping
-                    if hasattr(request_data, "column_mapping")
-                    else {}
-                ),
+                getattr(request_data, "geom_type", ""),
+                getattr(request_data, "column_mapping", {}),
                 directories,
             )
             save_response_to_db(request_schema.id, response)
-        else:
-            logger.info("File could not be fetched from collector")
-    return _get_request(request_schema.id)
+        except Exception as e:
+            logger.error(f"Workflow failed: {e}")
+            logger.exception("Full traceback:")
+            error_log = {
+                "message": f"Workflow failed: {str(e)}",
+                "status": "ERROR",
+                "exception_type": type(e).__name__
+            }
+            save_response_to_db(request_schema.id, error_log)
+            raise CustomException(error_log)
+    else:
+        logger.error("File could not be fetched from collector")
+        error_log = {
+            "message": "File could not be fetched from collector",
+            "status": "ERROR",
+            "exception_type": "FileMissing"
+        }
+        save_response_to_db(request_schema.id, error_log)
+        raise CustomException(error_log)
 
+    return _get_request(request_schema.id)
 
 @celery.task(base=AddDataTask, name=AddDataTask.name)
 def add_data_task(request: Dict, directories=None):
