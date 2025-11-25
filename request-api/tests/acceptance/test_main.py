@@ -1,3 +1,4 @@
+import time
 import datetime
 from urllib.parse import quote
 from fastapi.testclient import TestClient
@@ -14,7 +15,10 @@ ERROR_URL = "https://raw.githubusercontent.com/digital-land/PublishExamples/refs
 SSL_ERROR_URL = "https://expired.badssl.com/"
 TIMEOUT_URL = "http://httpbin.org/delay/60"
 CONNECTION_REFUSED_URL = "http://localhost:9999/nonexistent"
-SERVER_ERROR_URL = "https://www.tendringdc.gov.uk/sites/default/files/documents/planning/CAD%20csv.csv"
+SERVER_ERROR_URL = (
+    "https://www.tendringdc.gov.uk/sites/default/files/documents/planning/CAD%20csv.csv"
+)
+
 
 expected_json = [
     {
@@ -66,40 +70,42 @@ def wait_for_request_completion(request_id, timeout=30, poll_interval=2):
 
         time.sleep(poll_interval)
 
-    raise TimeoutError(f"Request {request_id} did not complete within {timeout} seconds")
+    raise TimeoutError(
+        f"Request {request_id} did not complete within {timeout} seconds"
+    )
 
 
 @pytest.mark.parametrize(
     "jsonpath, expected_json, expected_total, expected_pglimit",
     [
         (
-                '$.issue_logs[*]."severity"=="warning"',
-                [expected_json[0], expected_json[2]],
-                "2",
-                "50",
+            '$.issue_logs[*]."severity"=="warning"',
+            [expected_json[0], expected_json[2]],
+            "2",
+            "50",
         ),
         (
-                '$.issue_logs[*]."severity"=="error" && $.issue_logs[*]."field"=="geometry"',
-                [expected_json[1]],
-                "1",
-                "50",
+            '$.issue_logs[*]."severity"=="error" && $.issue_logs[*]."field"=="geometry"',
+            [expected_json[1]],
+            "1",
+            "50",
         ),
         (
-                '$.issue_logs[*]."issue-type"=="invalid organisation" && $.issue_logs[*]."field"=="organisation"',
-                [expected_json[0], expected_json[2]],
-                "2",
-                "50",
+            '$.issue_logs[*]."issue-type"=="invalid organisation" && $.issue_logs[*]."field"=="organisation"',
+            [expected_json[0], expected_json[2]],
+            "2",
+            "50",
         ),
     ],
 )
 def test_read_response_details_jsonpath_filters(
-        db,
-        helpers,
-        create_test_request,
-        jsonpath,
-        expected_json,
-        expected_total,
-        expected_pglimit,
+    db,
+    helpers,
+    create_test_request,
+    jsonpath,
+    expected_json,
+    expected_total,
+    expected_pglimit,
 ):
     jsonpath = quote(jsonpath)
     response = client.get(
@@ -112,8 +118,8 @@ def test_read_response_details_jsonpath_filters(
 
 
 def test_create_request_invalid_plugin(
-        db,
-        helpers,
+    db,
+    helpers,
 ):
     """Tests creating a request with an invalid plugin."""
     invalid_request_data = {
@@ -231,7 +237,10 @@ class TestCheckUrlAcceptance:
 
         error = result["response"]["error"]
         assert "message" in error
-        assert any(keyword in error["message"].lower() for keyword in ["ssl", "certificate", "verify"])
+        assert any(
+            keyword in error["message"].lower()
+            for keyword in ["ssl", "certificate", "verify"]
+        )
 
     def test_check_url_with_timeout_fails_gracefully(self, db, helpers):
         """
@@ -264,7 +273,10 @@ class TestCheckUrlAcceptance:
 
         error = result["response"]["error"]
         assert "message" in error
-        assert any(keyword in error["message"].lower() for keyword in ["timeout", "timed out", "time"])
+        assert any(
+            keyword in error["message"].lower()
+            for keyword in ["timeout", "timed out", "time"]
+        )
 
     def test_check_url_with_connection_refused_fails_gracefully(self, db, helpers):
         """
@@ -297,7 +309,10 @@ class TestCheckUrlAcceptance:
 
         error = result["response"]["error"]
         assert "message" in error
-        assert any(keyword in error["message"].lower() for keyword in ["connection", "refused", "connect"])
+        assert any(
+            keyword in error["message"].lower()
+            for keyword in ["connection", "refused", "connect"]
+        )
 
     def test_check_url_with_server_error_fails_gracefully(self, db, helpers):
         """
@@ -499,7 +514,9 @@ class TestResponseDetailsAcceptance:
         assert result["status"] == "COMPLETE"
 
         # Fetch response details with pagination
-        response = client.get(f"/requests/{request_id}/response-details?offset=0&limit=10")
+        response = client.get(
+            f"/requests/{request_id}/response-details?offset=0&limit=10"
+        )
         assert response.status_code == 200
 
         details = response.json()
