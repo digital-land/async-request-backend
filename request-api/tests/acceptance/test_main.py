@@ -10,8 +10,16 @@ from request_model import models, schemas
 
 client = TestClient(app)
 
-OK_URL = "https://raw.githubusercontent.com/digital-land/PublishExamples/refs/heads/main/Article4Direction/Files/Article4DirectionArea/article4directionareas-ok.csv"
-ERROR_URL = "https://raw.githubusercontent.com/digital-land/PublishExamples/refs/heads/main/Article4Direction/Files/Article4DirectionArea/article4directionareas-errors.csv"
+OK_URL = (
+    "https://raw.githubusercontent.com/digital-land/PublishExamples/"
+    "refs/heads/main/Article4Direction/Files/Article4DirectionArea/"
+    "article4directionareas-ok.csv"
+)
+ERROR_URL = (
+    "https://raw.githubusercontent.com/digital-land/PublishExamples/"
+    "refs/heads/main/Article4Direction/Files/Article4DirectionArea/"
+    "article4directionareas-errors.csv"
+)
 SSL_ERROR_URL = "https://expired.badssl.com/"
 TIMEOUT_URL = "http://httpbin.org/delay/60"
 CONNECTION_REFUSED_URL = "http://localhost:9999/nonexistent"
