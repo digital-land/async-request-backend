@@ -114,7 +114,7 @@ def handle_check_file(request_schema, request_data, tmp_dir):
 @celery.task(base=CheckDataUrlTask, name=CheckDataUrlTask.name)
 def check_dataurl(request: Dict, directories=None):
     logger.info(f"Started check_dataurl task for request_id={request.get('id', 'unknown')}")
-    logger.debug(f"Request payload: {json.dumps(request, default=str)}")
+    logger.info(f"Request payload: {json.dumps(request, default=str)}")
     request_schema = schemas.Request.model_validate(request)
     request_data = request_schema.params
 
