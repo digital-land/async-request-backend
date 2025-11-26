@@ -113,87 +113,93 @@ def handle_check_file(request_schema, request_data, tmp_dir):
 
 @celery.task(base=CheckDataUrlTask, name=CheckDataUrlTask.name)
 def check_dataurl(request: Dict, directories=None):
-    logger.info(
-        f"Started check_dataurl task for request_id={request.get('id', 'unknown')}"
-    )
-    logger.debug(f"Request payload: {json.dumps(request, default=str)}")
+    logger.info(f"Started check_dataurl task for request_id = {request.get('id', 'unknown')}")
+    logger.info(f"Request payload: {json.dumps(request, default=str)}")
     request_schema = schemas.Request.model_validate(request)
     request_data = request_schema.params
-    if not request_schema.status == "COMPLETE":
-        if not directories:
-            directories = Directories
-        elif directories:
-            data_dict = json.loads(directories)
-            # Create an instance of the Directories class
-            directories = Directories()
-            # Update attribute values based on the dictionary
-            for key, value in data_dict.items():
-                setattr(directories, key, value)
 
-        fileName = ""
-        tmp_dir = os.path.join(
-            directories.COLLECTION_DIR, "resource", request_schema.id
+    if request_schema.status == "COMPLETE":
+        logger.info(f"Request {request_schema.id} already COMPLETE")
+        return _get_request(request_schema.id)
+
+    if not directories:
+        directories = Directories
+    elif directories:
+        data_dict = json.loads(directories)
+        directories = Directories()
+        for key, value in data_dict.items():
+            setattr(directories, key, value)
+
+    file_name = None
+    resource_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_schema.id)
+    log_dir = os.path.join(directories.COLLECTION_DIR, "log", request_schema.id)
+
+    try:
+        file_name, fetch_log = _fetch_resource(
+            directories.COLLECTION_DIR,
+            resource_dir,
+            log_dir,
+            request_data.url,
+            getattr(request_data, "plugin", None)
         )
-        # Ensure tmp_dir exists, create it if it doesn't
-        Path(tmp_dir).mkdir(parents=True, exist_ok=True)
-        # With Collector from digital-land/collect, edit to use correct directory path without changing Collector class
-        collector = Collector(collection_dir=Path(directories.COLLECTION_DIR))
-        # Override the resource_dir to match our tmp_dir structure
-        collector.resource_dir = Path(tmp_dir)  # Use the same directory as tmp_dir
-        collector.log_dir = Path(directories.COLLECTION_DIR) / "log" / request_schema.id
+        logger.info(f"Fetched resource: file_name={file_name}")
 
-        # TBD: Can test infering plugin from URL, then if fails retry normal method without plugin?
-        # if 'FeatureServer' in request_data.url or 'MapServer' in request_data.url:
-        #     request_data.plugin = "arcgis"
+    except CustomException as e:
+        logger.error(f"CustomException during _fetch_resource: {e.detail}")
+        error_log = {
+            "message": e.detail.get("errMsg", "An error occurred"),
+            "status": e.detail.get("errCode", "ERROR"),
+            "exception_type": e.detail.get("errType", type(e).__name__)
+        }
+        save_response_to_db(request_schema.id, error_log)
+        raise
 
-        status = collector.fetch(request_data.url, plugin=request_data.plugin)
-        logger.info(f"Collector Fetch status: {status}")
+    except Exception as e:
+        logger.error(f"Unexpected error during _fetch_resource: {e}")
+        logger.exception("Full traceback:")
+        msg = getattr(e, "detail", {}).get("errMsg") or getattr(e, "detail", {}).get("message") or str(e) or "Unknown error occured"
+        error_log = {
+            "message": f"Failed to fetch resource: {msg}",
+            "status": "ERROR",
+            "exception_type": type(e).__name__
+        }
+        save_response_to_db(request_schema.id, error_log)
+        raise CustomException(error_log)
 
-        # The resource is saved in collector.resource_dir with hash as filename
-        resource_files = list(collector.resource_dir.iterdir())
-
-        log = {}
-
-        if status == FetchStatus.OK:
-            if resource_files and len(resource_files) == 1:
-                logger.info(f"Resource Files Path from collector: {resource_files}")
-                fileName = resource_files[-1].name  # Get the hash filename
-                logger.info(f"File Hash From Collector: {fileName}")
-
-            else:
-                log["message"] = "No endpoint files found after successful fetch."
-                log["status"] = str(status)
-                log["exception_type"] = "URL check failed"
-                save_response_to_db(request_schema.id, log)
-                raise CustomException(log)
-        else:
-            log["status"] = str(status)
-            log["message"] = "Fetch operation failed"
-            log["exception_type"] = "URL check failed"
-            save_response_to_db(request_schema.id, log)
-            logger.warning(f"URL check failed with fetch status: {status}")
-            raise CustomException(log)
-        if fileName:
+    if file_name:
+        try:
             response = workflow.run_workflow(
-                fileName,
+                file_name,
                 request_schema.id,
                 request_data.collection,
                 request_data.dataset,
                 "",
-                request_data.geom_type if hasattr(request_data, "geom_type") else "",
-                (
-                    request_data.column_mapping
-                    if hasattr(request_data, "column_mapping")
-                    else {}
-                ),
+                getattr(request_data, "geom_type", ""),
+                getattr(request_data, "column_mapping", {}),
                 directories,
             )
             save_response_to_db(request_schema.id, response)
-        else:
-            save_response_to_db(request_schema.id, log)
-            raise CustomException(log)
-    return _get_request(request_schema.id)
+        except Exception as e:
+            logger.error(f"Workflow failed: {e}")
+            logger.exception("Full traceback:")
+            error_log = {
+                "message": f"Workflow failed: {str(e)}",
+                "status": "ERROR",
+                "exception_type": type(e).__name__
+            }
+            save_response_to_db(request_schema.id, error_log)
+            raise CustomException(error_log)
+    else:
+        logger.error("File could not be fetched from collector")
+        error_log = {
+            "message": "File could not be fetched from collector",
+            "status": "ERROR",
+            "exception_type": "FileMissing"
+        }
+        save_response_to_db(request_schema.id, error_log)
+        raise CustomException(error_log)
 
+    return _get_request(request_schema.id)
 
 @celery.task(base=AddDataTask, name=AddDataTask.name)
 def add_data_task(request: Dict, directories=None):
@@ -202,6 +208,41 @@ def add_data_task(request: Dict, directories=None):
     request_schema = schemas.Request.model_validate(request)
     request_data = request_schema.params
     logger.info(f"request_payload_params: {json.dumps(request_data, default=str)}")
+    if not request_schema.status == "COMPLETE":
+        if not directories:
+            directories = Directories
+        else:
+            data_dict = json.loads(directories)
+            directories = Directories()
+            for key, value in data_dict.items():
+                setattr(directories, key, value)
+
+        resource_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_schema.id)
+        log_dir = os.path.join(directories.COLLECTION_DIR, "log", request_schema.id)
+        file_name, log = _fetch_resource(
+            directories.COLLECTION_DIR,
+            resource_dir,
+            log_dir,
+            request_data.url,
+            getattr(request_data, "plugin", None)
+        )
+        logger.info(f"file name from fetch resource is : {file_name} and the log from fetch resource is {log}")
+        if file_name:
+            response = workflow.add_data_workflow(
+                file_name,
+                request_schema.id,
+                request_data.collection,
+                request_data.dataset,
+                request_data.organisation,
+                request_data.url,
+                request_data.documentation_url,
+                directories,
+            )
+            logger.info(f"response is : {response}")
+            save_response_to_db(request_schema.id, response)
+        else:
+            save_response_to_db(request_schema.id, log)
+            raise CustomException(log)
     return _get_request(request_schema.id)
 
 
@@ -267,17 +308,18 @@ def _get_response(request_id):
 
 
 def save_response_to_db(request_id, response_data):
+    logger.info(f"save_response_to_db started for request_id: {request_id}")
     db_session = database.session_maker()
     with db_session() as session:
         try:
             existing = _get_response(request_id)
             if not existing:
                 if (
-                    "column-field-log" in response_data
-                    and "error-summary" in response_data
-                    and "converted-csv" in response_data
-                    and "issue-log" in response_data
-                    and "transformed-csv" in response_data
+                        "column-field-log" in response_data
+                        and "error-summary" in response_data
+                        and "converted-csv" in response_data
+                        and "issue-log" in response_data
+                        and "transformed-csv" in response_data
                 ):
                     data = {
                         "column-field-log": response_data.get("column-field-log", {}),
@@ -328,6 +370,14 @@ def save_response_to_db(request_id, response_data):
                     # Commit the changes to the database
                     session.commit()
 
+                elif "entity-summary" in response_data:
+                    new_response = models.Response(
+                        request_id=request_id,
+                        data=response_data
+                    )
+                    session.add(new_response)
+                    session.commit()
+
                 elif "message" in response_data:
                     error = CustomException(response_data)
                     # error_detail_json = json.dumps(error.detail)
@@ -346,3 +396,48 @@ def save_response_to_db(request_id, response_data):
         except Exception as e:
             session.rollback()
             raise e
+
+
+def _fetch_resource(collection_dir, resource_dir, log_dir, url, plugin=None):
+    """
+    Fetches resource files using Collector,
+    Raises CustomException and logs error if fetch fails.
+    """
+
+    # Ensure tmp_dir exists, create it if it doesn't
+    Path(resource_dir).mkdir(parents=True, exist_ok=True)
+    # With Collector from digital-land/collect, edit to use correct directory path without changing Collector class
+    collector = Collector(collection_dir=Path(collection_dir))
+    # Override the resource_dir to match our tmp_dir structure
+    collector.resource_dir = Path(resource_dir)  # Use the same directory as tmp_dir
+    collector.log_dir = Path(log_dir)
+    # TBD: Can test infering plugin from URL, then if fails retry normal method without plugin?
+    # if 'FeatureServer' in request_data.url or 'MapServer' in request_data.url:
+    #     request_data.plugin = "arcgis"
+
+    status = collector.fetch(url, plugin=plugin)
+    logger.info(f"Collector Fetch status: {status}")
+
+    # The resource is saved in collector.resource_dir with hash as filename
+    resource_files = list(collector.resource_dir.iterdir())
+
+    log = {}
+
+    if status == FetchStatus.OK:
+        if resource_files and len(resource_files) == 1:
+            logger.info(f"Resource Files Path from collector: {resource_files}")
+            file_name = resource_files[-1].name  # Get the hash filename
+            logger.info(f"File Hash From Collector: {file_name}")
+
+        else:
+            log["message"] = "No endpoint files found after successful fetch."
+            log["status"] = str(status)
+            log["exception_type"] = "URL check failed"
+            raise CustomException(log)
+    else:
+        log["status"] = str(status)
+        log["message"] = "Fetch operation failed"
+        log["exception_type"] = "URL check failed"
+        logger.warning(f"URL check failed with fetch status: {status}")
+        raise CustomException(log)
+    return file_name, log
