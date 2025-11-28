@@ -519,7 +519,7 @@ def _get_entities_breakdown(new_entities):
                 "prefix": entity_entry.get('prefix', ''),
                 "end-date": "",
                 "endpoint": "",
-                "resource": entity_entry.get('resource', ''),
+                "resource": "",
                 "reference": entity_entry.get('reference', ''),
                 "entry-date": "",
                 "start-date": "",
