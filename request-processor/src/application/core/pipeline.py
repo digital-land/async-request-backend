@@ -32,9 +32,12 @@ from digital_land.pipeline import run_pipeline, Pipeline, Lookups
 from digital_land.commands import get_resource_unidentified_lookups
 from digital_land.check import duplicate_reference_check
 from digital_land.api import API
+from digital_land.log import DatasetResourceLog, ColumnFieldLog, IssueLog
 from application.core.utils import append_endpoint,append_source
 from datetime import datetime
 from pathlib import Path
+from typing import List, Tuple
+import shutil
 
 logger = get_logger(__name__)
 
@@ -317,14 +320,25 @@ def fetch_add_data_response(collection, dataset, organisation, pipeline_dir, inp
         new_entities = []
         existing_entities = []
         lookup_path = os.path.join(pipeline_dir, 'lookup.csv')
-
+        organisation_path = os.path.join(cache_dir, "organisation.csv")
+        pipeline = Pipeline(pipeline_dir, dataset)
         for idx, resource_file in enumerate(files_in_resource):
             resource_file_path = os.path.join(input_path, resource_file)
+            resource_name = resource_from_path(resource_file_path)
             logger.info(
                 f"Processing file {idx + 1}/{len(files_in_resource)}: {resource_file}")
             try:
+                csv_for_entities = _add_data_pipeline(
+                    resource_file_path=resource_file_path,
+                    resource_name=resource_name,
+                    pipeline_dir=pipeline_dir,
+                    specification=specification,
+                    dataset=dataset,
+                    pipeline=pipeline,
+                    organisation_path=organisation_path,
+                )
                 unidentified_lookups = _add_data_read_entities(
-                    resource_file_path,
+                    csv_for_entities,
                     dataset,
                     organisation,
                     specification
@@ -414,7 +428,7 @@ def _add_data_read_entities(resource_path, dataset, organisation, specification)
                         'prefix': dataset_prefix,
                         'organisation': organisation,
                         'reference': reference,
-                        'resource': Path(resource_path).stem,
+                        'resource': "",
                         'entity': ''
                     }
 
@@ -675,3 +689,164 @@ def _validate_source(documentation_url, pipeline_dir, collection, organisation, 
         logger.error(f"Error reading existing source: {e}")
 
     return source_summary
+
+
+def _add_data_csv(resource_file_path: str,
+                           converted_csv_path: str,
+                           dataset_resource_log: DatasetResourceLog,
+                           skip_patterns: List[str],
+                           intermediate_fieldnames: List[str],
+                           columns: List[Tuple[str, str]],
+                           column_field_log: ColumnFieldLog):
+    return [
+        ConvertPhase(
+            path=resource_file_path,
+            dataset_resource_log=dataset_resource_log,
+            output_path=converted_csv_path,
+        ),
+        NormalisePhase(skip_patterns=skip_patterns, null_path=None),
+        ParsePhase(),
+        MapPhase(fieldnames=intermediate_fieldnames, columns=columns, log=column_field_log),
+        SavePhase(converted_csv_path, fieldnames=intermediate_fieldnames),
+    ]
+
+
+def _add_data_non_csv(resource_file_path: str,
+                               converted_csv_path: str,
+                               harmonised_csv_path: str,
+                               transformed_csv_path: str,
+                               dataset_resource_log: DatasetResourceLog,
+                               issue_log: IssueLog,
+                               column_field_log: ColumnFieldLog,
+                               specification: Specification,
+                               pipeline: Pipeline,
+                               resource_name: str,
+                               skip_patterns: List[str],
+                               concats,
+                               columns,
+                               patches,
+                               default_fields,
+                               default_values,
+                               combine_fields,
+                               lookups,
+                               organisation_path: str):
+    api = API(specification=specification)
+    valid_category_values = api.get_valid_category_values(pipeline.name, pipeline)
+    schema = specification.pipeline[pipeline.name]["schema"]
+    return [
+        ConvertPhase(
+            path=resource_file_path,
+            dataset_resource_log=dataset_resource_log,
+            output_path=converted_csv_path,
+        ),
+        NormalisePhase(skip_patterns=skip_patterns, null_path=None),
+        ParsePhase(),
+        ConcatFieldPhase(concats=concats, log=column_field_log),
+        MapPhase(fieldnames=specification.intermediate_fieldnames(pipeline), columns=columns, log=column_field_log),
+        FilterPhase(filters=pipeline.filters(resource_name)),
+        PatchPhase(issues=issue_log, patches=patches),
+        HarmonisePhase(
+            field_datatype_map=specification.get_field_datatype_map(),
+            issues=issue_log,
+            dataset=pipeline.name,
+            valid_category_values=valid_category_values,
+        ),
+        DefaultPhase(default_fields=default_fields, default_values=default_values, issues=issue_log),
+        MigratePhase(fields=specification.schema_field[schema], migrations=pipeline.migrations()),
+        OrganisationPhase(organisation=Organisation(organisation_path, Path(pipeline.path)), issues=issue_log),
+        FieldPrunePhase(fields=specification.current_fieldnames(schema)),
+        EntityReferencePhase(dataset=pipeline.name, prefix=specification.dataset_prefix(pipeline.name)),
+        EntityPrefixPhase(dataset=pipeline.name),
+        EntityLookupPhase(lookups),
+        SavePhase(harmonised_csv_path, fieldnames=specification.intermediate_fieldnames(pipeline), enabled=True),
+        PriorityPhase(config=None),
+        PivotPhase(),
+        FactCombinePhase(issue_log=issue_log, fields=combine_fields),
+        FactorPhase(),
+        FactReferencePhase(
+            field_typology_map=specification.get_field_typology_map(),
+            field_prefix_map=specification.get_field_prefix_map(),
+        ),
+        FactLookupPhase(lookups=lookups, odp_collections=specification.get_odp_collections()),
+        FactPrunePhase(),
+        SavePhase(transformed_csv_path, fieldnames=specification.factor_fieldnames()),
+    ]
+
+
+def _add_data_pipeline(resource_file_path: str,
+                               resource_name: str,
+                               pipeline_dir: str,
+                               specification: Specification,
+                               dataset: str,
+                               pipeline: Pipeline,
+                               organisation_path: str) -> str:
+
+    converted_base_dir = os.path.join(pipeline_dir, "converted")
+    os.makedirs(converted_base_dir, exist_ok=True)
+    converted_csv_path = os.path.join(converted_base_dir, f"{resource_name}.csv")
+    harmonised_csv_path = default_output_path("harmonised", resource_file_path)
+    os.makedirs(os.path.dirname(harmonised_csv_path), exist_ok=True)
+    transformed_csv_path = os.path.join(pipeline_dir, "transformed", f"{resource_name}.csv")
+    os.makedirs(os.path.dirname(transformed_csv_path), exist_ok=True)
+
+    skip_patterns = pipeline.skip_patterns(resource_name)
+    concats = pipeline.concatenations(resource_name, endpoints=[])
+    columns = pipeline.columns(resource_name, endpoints=[])
+    patches = pipeline.patches(resource=resource_name)
+    default_fields = pipeline.default_fields(resource=resource_name)
+    default_values = pipeline.default_values(endpoints=[])
+    combine_fields = pipeline.combine_fields(endpoints=[])
+    lookups = pipeline.lookups(resource=resource_name)
+
+    dataset_resource_log = DatasetResourceLog(dataset=dataset, resource=resource_name)
+    issue_log = IssueLog(dataset=dataset, resource=resource_name)
+    column_field_log = ColumnFieldLog(dataset=dataset, resource=resource_name)
+
+    phases_csv = _add_data_csv(
+        resource_file_path,
+        converted_csv_path,
+        dataset_resource_log,
+        skip_patterns,
+        specification.intermediate_fieldnames(pipeline),
+        columns,
+        column_field_log,
+    )
+    run_pipeline(*phases_csv)
+
+    mime = (getattr(dataset_resource_log, "mime_type", "") or "").lower()
+    is_csv = mime.startswith("text/csv")
+    logger.info(f"[add-data] Detected mime_type={mime} is_csv={is_csv}")
+
+    if is_csv:
+        if not os.path.exists(converted_csv_path):
+            shutil.copyfile(resource_file_path, converted_csv_path)
+            logger.info(f"[add-data] Copied original -> converted: {converted_csv_path}")
+        return converted_csv_path
+
+    phases_full = _add_data_non_csv(
+        resource_file_path,
+        converted_csv_path,
+        harmonised_csv_path,
+        transformed_csv_path,
+        dataset_resource_log,
+        issue_log,
+        column_field_log,
+        specification,
+        pipeline,
+        resource_name,
+        skip_patterns,
+        concats,
+        columns,
+        patches,
+        default_fields,
+        default_values,
+        combine_fields,
+        lookups,
+        organisation_path=organisation_path,
+    )
+    run_pipeline(*phases_full)
+
+    if os.path.exists(harmonised_csv_path):
+        return harmonised_csv_path
+
+    return converted_csv_path if os.path.exists(converted_csv_path) else resource_file_path
