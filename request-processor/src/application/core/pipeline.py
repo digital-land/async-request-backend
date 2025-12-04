@@ -2,7 +2,6 @@ import os
 import csv
 from application.logging.logger import get_logger
 from digital_land.specification import Specification
-from digital_land.log import DatasetResourceLog, IssueLog, ColumnFieldLog
 from digital_land.organisation import Organisation
 from digital_land.phase.combine import FactCombinePhase
 from digital_land.phase.concat import ConcatFieldPhase

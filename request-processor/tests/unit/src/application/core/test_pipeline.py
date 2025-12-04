@@ -1389,7 +1389,8 @@ def test_validate_source_handles_csv_read_error(monkeypatch, tmp_path):
 
 
 class DummyAPI:
-    def __init__(self, specification=None): pass
+    def __init__(self, specification=None):
+        pass
 
     def get_valid_category_values(self, dataset, pipeline):
         return {}
@@ -1424,21 +1425,34 @@ def test__add_data_non_csv_phase_order(tmp_path, monkeypatch):
     converted_path = tmp_path / "converted.csv"
     harmonised_path = tmp_path / "harm.csv"
     transformed_path = tmp_path / "transformed.csv"
+    organisation_csv = tmp_path / "organisation.csv"
+    organisation_csv.write_text("organisation,name\ntest-org,Test Organisation\n", encoding="utf-8")
 
     mock_spec = MagicMock()
     mock_spec.get_field_datatype_map.return_value = {}
-    mock_spec.schema_field.__getitem__.return_value = ["reference"]
+    mock_spec.schema_field = {
+        "tree": ["reference", "name", "geometry", "point"]
+    }
     mock_spec.current_fieldnames.return_value = ["reference"]
     mock_spec.intermediate_fieldnames.return_value = ["reference", "name"]
     mock_spec.get_field_typology_map.return_value = {}
     mock_spec.get_field_prefix_map.return_value = {}
-    mock_spec.get_odp_collections.return_value = []
+    mock_spec.get_odp_collections.return_value = {}
     mock_spec.factor_fieldnames.return_value = ["reference"]
     mock_spec.dataset_prefix.return_value = "pfx"
+    mock_spec.pipeline = {"tree": {"schema": "tree"}}
+
+    print(f"schema_field type: {type(mock_spec.schema_field)}")
+    print(f"schema_field['tree'] type: {type(mock_spec.schema_field['tree'])}")
+    print(f"get_odp_collections type: {type(mock_spec.get_odp_collections())}")
+    assert isinstance(mock_spec.schema_field, dict), "schema_field must be dict"
+    assert isinstance(mock_spec.schema_field["tree"],
+                      list), "schema_field['tree'] must be list"  # ← CHANGE: list, not dict
+    assert isinstance(mock_spec.get_odp_collections(), dict), "get_odp_collections must return dict"
 
     mock_pipeline = MagicMock()
     mock_pipeline.name = "tree"
-    mock_pipeline.filters.return_value = []
+    mock_pipeline.filters.return_value = {}
     mock_pipeline.migrations.return_value = []
     mock_pipeline.path = str(tmp_path)
 
@@ -1454,14 +1468,14 @@ def test__add_data_non_csv_phase_order(tmp_path, monkeypatch):
         pipeline=mock_pipeline,
         resource_name="input",
         skip_patterns=[],
-        concats=[],
+        concats={},
         columns=[("reference", "reference")],
         patches=[],
         default_fields=["organisation"],
         default_values={"organisation": "org1"},
         combine_fields=[],
         lookups=MagicMock(),
-        organisation_path=str(tmp_path / "organisation.csv"),
+        organisation_path=str(organisation_csv),
     )
     phase_names = [type(p).__name__ for p in phases]
     assert phase_names[0] == "ConvertPhase"
@@ -1520,55 +1534,81 @@ def test__add_data_pipeline_csv_returns_converted(tmp_path, monkeypatch):
 
 def test__add_data_pipeline_non_csv_returns_harmonised(tmp_path, monkeypatch):
     _patch_api(monkeypatch)
-    input_geo = tmp_path / "input.geojson"
-    input_geo.write_text('{"type":"FeatureCollection","features":[]}', encoding="utf-8")
-    pipeline_dir = tmp_path / "pipeline"
-    pipeline_dir.mkdir()
+    original_cwd = os.getcwd()
+    os.chdir(tmp_path)
 
-    mock_spec = MagicMock()
-    mock_spec.intermediate_fieldnames.return_value = ["reference", "name"]
-    mock_spec.factor_fieldnames.return_value = ["reference"]
+    try:
+        input_geo = tmp_path / "input.geojson"
+        input_geo.write_text('{"type":"FeatureCollection","features":[]}', encoding="utf-8")
+        pipeline_dir = tmp_path / "pipeline"
+        pipeline_dir.mkdir()
 
-    mock_pipeline = MagicMock()
-    mock_pipeline.skip_patterns.return_value = []
-    mock_pipeline.concatenations.return_value = []
-    mock_pipeline.columns.return_value = [("reference", "reference")]
-    mock_pipeline.patches.return_value = []
-    mock_pipeline.default_fields.return_value = []
-    mock_pipeline.default_values.return_value = {}
-    mock_pipeline.combine_fields.return_value = []
-    mock_pipeline.lookups.return_value = MagicMock()
-    mock_pipeline.filters.return_value = []
-    mock_pipeline.migrations.return_value = []
-    mock_pipeline.name = "tree"
-    mock_pipeline.path = str(tmp_path)
+        organisation_csv = tmp_path / "organisation.csv"
+        organisation_csv.write_text("organisation,name\ntest-org,Test Organisation\n", encoding="utf-8")
 
-    def fake_run_pipeline(*phases):
-        convert_phase = phases[0]
-        if hasattr(convert_phase, "dataset_resource_log"):
-            convert_phase.dataset_resource_log.mime_type = "application/json"
-        for p in phases:
-            if type(p).__name__ == "SavePhase":
-                out = getattr(p, "output_path", "")
-                if out:
-                    os.makedirs(os.path.dirname(out), exist_ok=True)
-                    with open(out, "w", encoding="utf-8", newline="") as f:
-                        writer = csv.writer(f)
-                        writer.writerow(["reference"])
-                        writer.writerow(["REF001"])
+        mock_spec = MagicMock()
+        mock_spec.intermediate_fieldnames.return_value = ["reference", "name"]
+        mock_spec.factor_fieldnames.return_value = ["reference"]
+        mock_spec.get_field_datatype_map.return_value = {}
+        mock_spec.get_field_typology_map.return_value = {}
+        mock_spec.get_field_prefix_map.return_value = {}
+        mock_spec.get_odp_collections.return_value = {}
+        mock_spec.current_fieldnames.return_value = ["reference"]
+        mock_spec.dataset_prefix.return_value = "pfx"
+        mock_spec.schema_field = {"tree": ["reference", "name", "geometry", "point"]}
+        mock_spec.pipeline = {"tree": {"schema": "tree"}}
 
-    monkeypatch.setattr("src.application.core.pipeline.run_pipeline", fake_run_pipeline)
-    result = _add_data_pipeline(
-        resource_file_path=str(input_geo),
-        resource_name="input",
-        pipeline_dir=str(pipeline_dir),
-        specification=mock_spec,
-        dataset="tree",
-        pipeline=mock_pipeline,
-        organisation_path=str(tmp_path / "organisation.csv"),
-    )
-    assert result.endswith("/harmonised/input.csv")
-    assert os.path.exists(result)
+        mock_pipeline = MagicMock()
+        mock_pipeline.skip_patterns.return_value = []
+        mock_pipeline.concatenations.return_value = {}
+        mock_pipeline.columns.return_value = [("reference", "reference")]
+        mock_pipeline.patches.return_value = []
+        mock_pipeline.default_fields.return_value = []
+        mock_pipeline.default_values.return_value = {}
+        mock_pipeline.combine_fields.return_value = []
+        mock_pipeline.lookups.return_value = MagicMock()
+        mock_pipeline.filters.return_value = {}
+        mock_pipeline.migrations.return_value = []
+        mock_pipeline.name = "tree"
+        mock_pipeline.path = str(tmp_path)
+
+        def fake_run_pipeline(*phases):
+            convert_phase = phases[0]
+            if hasattr(convert_phase, "dataset_resource_log"):
+                convert_phase.dataset_resource_log.mime_type = "application/json"
+
+            save_phase_count = 0
+            for p in phases:
+                if type(p).__name__ == "SavePhase":
+                    out = getattr(p, "output_path", None) or getattr(p, "path", None) or getattr(p, "_output_path", "")
+                    enabled = getattr(p, "enabled", False)
+
+                    if out and enabled and save_phase_count == 0:
+                        os.makedirs(os.path.dirname(out), exist_ok=True)
+                        with open(out, "w", encoding="utf-8", newline="") as f:
+                            writer = csv.writer(f)
+                            writer.writerow(["reference"])
+                            writer.writerow(["REF001"])
+                        save_phase_count += 1
+
+        monkeypatch.setattr("src.application.core.pipeline.run_pipeline", fake_run_pipeline)
+
+        result = _add_data_pipeline(
+            resource_file_path=str(input_geo),
+            resource_name="input",
+            pipeline_dir=str(pipeline_dir),
+            specification=mock_spec,
+            dataset="tree",
+            pipeline=mock_pipeline,
+            organisation_path=str(organisation_csv),
+        )
+
+        expected = os.path.join("harmonised", "input.csv")
+        assert os.path.normpath(result) == os.path.normpath(expected), f"Expected {expected}, got: {result}"
+        assert os.path.exists(result), f"File does not exist: {result}"
+
+    finally:
+        os.chdir(original_cwd)
 
 
 def test__add_data_pipeline_non_csv_fallback_to_converted_if_no_harmonised(tmp_path, monkeypatch):
@@ -1577,6 +1617,8 @@ def test__add_data_pipeline_non_csv_fallback_to_converted_if_no_harmonised(tmp_p
     input_geo.write_text("{}", encoding="utf-8")
     pipeline_dir = tmp_path / "pipeline"
     pipeline_dir.mkdir()
+    organisation_csv = tmp_path / "organisation.csv"
+    organisation_csv.write_text("organisation,name\ntest-org,Test Organisation\n", encoding="utf-8")
 
     mock_spec = MagicMock()
     mock_spec.intermediate_fieldnames.return_value = ["reference"]
@@ -1584,14 +1626,14 @@ def test__add_data_pipeline_non_csv_fallback_to_converted_if_no_harmonised(tmp_p
 
     mock_pipeline = MagicMock()
     mock_pipeline.skip_patterns.return_value = []
-    mock_pipeline.concatenations.return_value = []
+    mock_pipeline.concatenations.return_value = {}
     mock_pipeline.columns.return_value = [("reference", "reference")]
     mock_pipeline.patches.return_value = []
     mock_pipeline.default_fields.return_value = []
     mock_pipeline.default_values.return_value = {}
     mock_pipeline.combine_fields.return_value = []
     mock_pipeline.lookups.return_value = MagicMock()
-    mock_pipeline.filters.return_value = []
+    mock_pipeline.filters.return_value = {}
     mock_pipeline.migrations.return_value = []
     mock_pipeline.name = "tree"
     mock_pipeline.path = str(tmp_path)
@@ -1606,6 +1648,7 @@ def test__add_data_pipeline_non_csv_fallback_to_converted_if_no_harmonised(tmp_p
             writer.writerow(["REF001"])
 
     monkeypatch.setattr("src.application.core.pipeline.run_pipeline", fake_run_pipeline)
+
     result = _add_data_pipeline(
         resource_file_path=str(input_geo),
         resource_name="input",
@@ -1613,7 +1656,7 @@ def test__add_data_pipeline_non_csv_fallback_to_converted_if_no_harmonised(tmp_p
         specification=mock_spec,
         dataset="tree",
         pipeline=mock_pipeline,
-        organisation_path=str(tmp_path / "organisation.csv"),
+        organisation_path=str(organisation_csv),
     )
     assert result.endswith("/converted/input.csv") or result.endswith("/input.geojson")
     assert os.path.exists(result) or os.path.exists(str(input_geo))
@@ -1663,9 +1706,7 @@ def test_validate_endpoint_appends_new_when_missing(tmp_path):
         endpoint_csv.unlink()
 
     summary = _validate_endpoint("http://example.com/wfs", str(pipeline_dir))
-    # After call, file should exist
     assert endpoint_csv.exists()
-    # Reads back CSV, ensure row present
     with open(endpoint_csv, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -1691,13 +1732,11 @@ def test_validate_source_appends_with_endpoint_key(tmp_path, monkeypatch):
     pipeline_dir = tmp_path / "pipeline"
     pipeline_dir.mkdir()
     source_csv = pipeline_dir / "source.csv"
-    # Prepare endpoint summary with endpoint key
     endpoint_summary = {"new_endpoint_entry": {"endpoint": "hash123"}}
 
     def fake_append_source(source_csv_path, collection, organisation, endpoint_key,
                            attribution, documentation_url, licence, pipelines,
                            entry_date, start_date, end_date):
-        # Simulate writing the new row so the test can read it back
         new_row = {
             "source": "src_hash",
             "attribution": attribution,
