@@ -115,20 +115,18 @@ def run_workflow(
         logger.exception(f"An error occurred: {e}")
 
     finally:
-        # Seperate clean up for logs as Collector addds date folder
-        clean_up_logs(request_id, directories.COLLECTION_DIR + "log")
         clean_up(
             request_id,
-            directories.COLLECTION_DIR + "resource",
+            os.path.join(directories.COLLECTION_DIR, "resource"),
             directories.COLLECTION_DIR,
             directories.CONVERTED_DIR,
-            directories.ISSUE_DIR + dataset,
+            os.path.join(directories.ISSUE_DIR, dataset),
             directories.ISSUE_DIR,
             directories.COLUMN_FIELD_DIR,
-            directories.TRANSFORMED_DIR + dataset,
+            os.path.join(directories.TRANSFORMED_DIR, dataset),
             directories.TRANSFORMED_DIR,
             directories.DATASET_RESOURCE_DIR,
-            directories.PIPELINE_DIR + dataset,
+            os.path.join(directories.PIPELINE_DIR, dataset),
             directories.PIPELINE_DIR,
         )
 
@@ -263,40 +261,6 @@ def add_extra_column_mappings(
 #         logger.error(f"An error occurred during cleanup: {e}")
 
 
-def clean_up_logs(request_id, log_base_dir):
-    """
-    Clean up log folders with structure: log/{request-id}/date/resource-hash
-
-    This function is due to Collector class automatically creating log folders with a different structure to the rest of the process.
-    """
-    try:
-        log_base = Path(log_base_dir)
-
-        # Find all files(resource hashes) under the request_id/date and remove.
-        request_pattern = f"{request_id}/**/*"
-        all_files = list(log_base.glob(request_pattern))
-        for item in all_files:
-            if item.is_file():
-                item.unlink()
-
-        # Find all date directories under request_id (YYYY-MM-DD format) and remove
-        date_pattern = f"{request_id}/????-??-??"
-        date_dirs = list(log_base.glob(date_pattern))
-        for date_dir in sorted(date_dirs, reverse=True):
-            if date_dir.exists() and not any(date_dir.iterdir()):
-                date_dir.rmdir()
-
-        # Remove request_id and log base directory
-        request_dir = log_base / str(request_id)
-        if request_dir.exists() and not any(request_dir.iterdir()):
-            request_dir.rmdir()
-        if log_base.exists() and not any(log_base.iterdir()):
-            log_base.rmdir()
-
-    except Exception as e:
-        logger.error(f"An error occurred during log cleanup: {e}")
-
-
 def clean_up(request_id, *directories):
     try:
         for directory in directories:
@@ -315,7 +279,9 @@ def clean_up(request_id, *directories):
             if os.path.exists(directory) and not os.listdir(directory):
                 os.rmdir(directory)
     except Exception as e:
-        logger.error(f"An error occurred during cleanup: {e}")
+        logger.error(
+            f"An error occurred during cleanup of {directory}: {e}", exc_info=True
+        )
 
 
 def csv_to_json(csv_file):

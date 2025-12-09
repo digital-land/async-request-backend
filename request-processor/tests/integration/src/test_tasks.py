@@ -128,7 +128,7 @@ def test_check_datafile(
             "exampleurl.csv",
             None,
             ('{"status": "404", "message": "Unable to process"}', None),
-            "FAILED",
+            "COMPLETE",
             False,
             None,
         ),
@@ -177,8 +177,6 @@ def test_check_datafile_url(
         "dataset": "article-4-direction-area",
         "url": url,
     }
-    if plugin:
-        params["plugin"] = plugin
 
     request = _create_request(
         schemas.CheckUrlParams(**params), schemas.RequestTypeEnum.check_url
@@ -195,16 +193,20 @@ def test_check_datafile_url(
     # Track calls to collector.fetch to verify plugin parameter
     fetch_calls = []
 
-    def mock_collector_fetch(self, url, plugin=None):
+    def mock_collector_fetch(self, url, plugin=None, **kwargs):
         fetch_calls.append({"url": url, "plugin": plugin})
-        if expected_status == "COMPLETE":
+
+        if test_name == "invalid_url":
+            return FetchStatus.FAILED, {"status": "404"}
+
+        if plugin == expected_plugin_call:
             resource_dir = self.resource_dir
             resource_dir.mkdir(parents=True, exist_ok=True)
             mock_file = resource_dir / "mock_resource_hash"
             mock_file.write_text("mock csv data")
-            return FetchStatus.OK
+            return FetchStatus.OK, {"plugin": plugin}
         else:
-            return FetchStatus.FAILED
+            return FetchStatus.FAILED, {}
 
     mocker.patch("digital_land.collect.Collector.fetch", mock_collector_fetch)
 
@@ -213,13 +215,20 @@ def test_check_datafile_url(
     )
 
     # Verify the plugin parameter was passed correctly
-    assert len(fetch_calls) == 1, f"Expected 1 fetch call, got {len(fetch_calls)}"
     assert (
-        fetch_calls[0]["url"] == url
-    ), f"Expected URL {url}, got {fetch_calls[0]['url']}"
+        len(fetch_calls) > 0
+    ), f"Expected at least one fetch call, got {len(fetch_calls)}"
+
+    # Find the call with the expected plugin
+    matching_calls = [
+        call for call in fetch_calls if call["plugin"] == expected_plugin_call
+    ]
     assert (
-        fetch_calls[0]["plugin"] == expected_plugin_call
-    ), f"Expected plugin {expected_plugin_call}, got {fetch_calls[0]['plugin']}"
+        len(matching_calls) > 0
+    ), f"Expected call with plugin {expected_plugin_call} not found in {fetch_calls}"
+    assert (
+        matching_calls[0]["url"] == url
+    ), f"Expected URL {url}, got {matching_calls[0]['url']}"
 
 
 def _wait_for_request_status(

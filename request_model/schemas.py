@@ -17,6 +17,7 @@ class PluginTypeEnum(str, Enum):
 
 class Params(BaseModel):
     type: RequestTypeEnum
+    organisationName: Optional[str] = None
     dataset: str
     collection: str
     column_mapping: Optional[Dict[str, str]] = None
@@ -32,8 +33,6 @@ class CheckFileParams(Params):
 class CheckUrlParams(Params):
     type: Literal[RequestTypeEnum.check_url] = RequestTypeEnum.check_url
     url: str
-    plugin: Optional[PluginTypeEnum] = None
-
 
 class AddDataParams(Params):
     type: Literal[RequestTypeEnum.add_data] = RequestTypeEnum.add_data
@@ -84,6 +83,7 @@ class ResponseError(BaseModel):
 class ResponseModel(BaseModel):
     data: Optional[Dict[str, Any]]
     error: Optional[Dict[str, Any]]
+    plugin: Optional[str] = None
 
 
 class Request(RequestBase):

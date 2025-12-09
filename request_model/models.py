@@ -31,6 +31,7 @@ class Response(Base):
     request_id = Column(String, ForeignKey("request.id"), index=True)
     data = Column(JSONB)
     error = Column(JSONB)
+    plugin = Column(String)
 
     request = relationship("Request", back_populates="response")
     details = relationship(
