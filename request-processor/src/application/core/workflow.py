@@ -7,7 +7,11 @@ import yaml
 from urllib.error import HTTPError
 from application.core.utils import detect_encoding, extract_dataset_field_rows
 from application.logging.logger import get_logger
-from application.core.pipeline import fetch_response_data, resource_from_path, fetch_add_data_response
+from application.core.pipeline import (
+    fetch_response_data,
+    resource_from_path,
+    fetch_add_data_response,
+)
 from application.configurations.config import source_url, CONFIG_URL
 from collections import defaultdict
 import json
@@ -413,7 +417,6 @@ def add_data_workflow(
     documentation_url,
     directories,
 ):
-
     pipeline_dir = os.path.join(directories.PIPELINE_DIR, collection, request_id)
     logger.info(f"pipeline_dir is : {pipeline_dir}")
     input_path = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
@@ -423,9 +426,17 @@ def add_data_workflow(
     fetch_csv = fetch_add_data_csvs(collection, pipeline_dir)
     logger.info(f"files fetched are : {fetch_csv}")
 
-    response_data = fetch_add_data_response(collection, dataset, organisation, pipeline_dir,
-                                            input_path, directories.SPECIFICATION_DIR,
-                                            directories.CACHE_DIR, url, documentation_url)
+    response_data = fetch_add_data_response(
+        collection,
+        dataset,
+        organisation,
+        pipeline_dir,
+        input_path,
+        directories.SPECIFICATION_DIR,
+        directories.CACHE_DIR,
+        url,
+        documentation_url,
+    )
     logger.info(f"add data response is : {response_data}")
 
     return response_data
@@ -433,7 +444,7 @@ def add_data_workflow(
 
 def fetch_add_data_csvs(collection, pipeline_dir):
     os.makedirs(pipeline_dir, exist_ok=True)
-    add_data_csvs = ["lookup.csv","endpoint.csv","source.csv"]
+    add_data_csvs = ["lookup.csv", "endpoint.csv", "source.csv"]
     fetched_files = []
     for csv_name in add_data_csvs:
         csv_path = os.path.join(pipeline_dir, csv_name)

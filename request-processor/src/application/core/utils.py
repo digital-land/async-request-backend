@@ -163,7 +163,8 @@ def append_endpoint(
                 "endpoint-url": endpoint_url,
                 "parameters": "",
                 "plugin": "",
-                "entry-date": _formatted_date(entry_date) or datetime.now().date().isoformat(),
+                "entry-date": _formatted_date(entry_date)
+                or datetime.now().date().isoformat(),
                 "start-date": _formatted_date(start_date),
                 "end-date": _formatted_date(end_date),
             }
@@ -227,7 +228,8 @@ def append_source(
                 "licence": licence,
                 "organisation": organisation,
                 "pipelines": pipelines,
-                "entry-date": _formatted_date(entry_date) or datetime.now().date().isoformat(),
+                "entry-date": _formatted_date(entry_date)
+                or datetime.now().date().isoformat(),
                 "start-date": _formatted_date(start_date),
                 "end-date": _formatted_date(end_date),
             }

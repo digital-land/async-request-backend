@@ -145,7 +145,9 @@ def handle_check_file(request_schema, request_data, tmp_dir):
 
 @celery.task(base=CheckDataUrlTask, name=CheckDataUrlTask.name)
 def check_dataurl(request: Dict, directories=None):
-    logger.info(f"Started check_dataurl task for request_id = {request.get('id', 'unknown')}")
+    logger.info(
+        f"Started check_dataurl task for request_id = {request.get('id', 'unknown')}"
+    )
     logger.info(f"Request payload: {json.dumps(request, default=str)}")
     request_schema = schemas.Request.model_validate(request)
     request_data = request_schema.params
@@ -246,6 +248,7 @@ def check_dataurl(request: Dict, directories=None):
         )
 
     return _get_request(request_schema.id)
+
 
 @celery.task(base=AddDataTask, name=AddDataTask.name)
 def add_data_task(request: Dict, directories=None):
@@ -412,11 +415,11 @@ def save_response_to_db(request_id, response_data):
             existing = _get_response(request_id)
             if not existing:
                 if (
-                        "column-field-log" in response_data
-                        and "error-summary" in response_data
-                        and "converted-csv" in response_data
-                        and "issue-log" in response_data
-                        and "transformed-csv" in response_data
+                    "column-field-log" in response_data
+                    and "error-summary" in response_data
+                    and "converted-csv" in response_data
+                    and "issue-log" in response_data
+                    and "transformed-csv" in response_data
                 ):
                     data = {
                         "column-field-log": response_data.get("column-field-log", {}),
@@ -469,8 +472,7 @@ def save_response_to_db(request_id, response_data):
 
                 elif "entity-summary" in response_data:
                     new_response = models.Response(
-                        request_id=request_id,
-                        data=response_data
+                        request_id=request_id, data=response_data
                     )
                     session.add(new_response)
                     session.commit()

@@ -32,7 +32,7 @@ from digital_land.pipeline import run_pipeline, Pipeline, Lookups
 from digital_land.commands import get_resource_unidentified_lookups
 from digital_land.check import duplicate_reference_check
 from digital_land.api import API
-from application.core.utils import append_endpoint,append_source
+from application.core.utils import append_endpoint, append_source
 from datetime import datetime
 from pathlib import Path
 
@@ -302,7 +302,17 @@ def assign_entries(
     lookups.save_csv()
 
 
-def fetch_add_data_response(collection, dataset, organisation, pipeline_dir, input_path, specification_dir, cache_dir, url, documentation_url):
+def fetch_add_data_response(
+    collection,
+    dataset,
+    organisation,
+    pipeline_dir,
+    input_path,
+    specification_dir,
+    cache_dir,
+    url,
+    documentation_url,
+):
     try:
         specification = Specification(specification_dir)
 
@@ -316,25 +326,25 @@ def fetch_add_data_response(collection, dataset, organisation, pipeline_dir, inp
 
         new_entities = []
         existing_entities = []
-        lookup_path = os.path.join(pipeline_dir, 'lookup.csv')
+        lookup_path = os.path.join(pipeline_dir, "lookup.csv")
 
         for idx, resource_file in enumerate(files_in_resource):
             resource_file_path = os.path.join(input_path, resource_file)
             logger.info(
-                f"Processing file {idx + 1}/{len(files_in_resource)}: {resource_file}")
+                f"Processing file {idx + 1}/{len(files_in_resource)}: {resource_file}"
+            )
             try:
                 unidentified_lookups = _add_data_read_entities(
-                    resource_file_path,
-                    dataset,
-                    organisation,
-                    specification
+                    resource_file_path, dataset, organisation, specification
                 )
 
                 if not unidentified_lookups:
                     logger.info(f"No references found in {resource_file}")
                     continue
 
-                new_lookups, existing_lookups = _check_existing_entities(unidentified_lookups, lookup_path)
+                new_lookups, existing_lookups = _check_existing_entities(
+                    unidentified_lookups, lookup_path
+                )
                 existing_entities.extend(existing_lookups)
 
                 if not new_lookups:
@@ -342,22 +352,22 @@ def fetch_add_data_response(collection, dataset, organisation, pipeline_dir, inp
                     continue
 
                 newly_assigned = _assign_entity_numbers(
-                    new_lookups,
-                    pipeline_dir,
-                    dataset,
-                    specification
+                    new_lookups, pipeline_dir, dataset, specification
                 )
 
                 new_entities.extend(newly_assigned)
                 logger.info(
-                    f"Assigned {len(newly_assigned)} new entities for {resource_file}")
+                    f"Assigned {len(newly_assigned)} new entities for {resource_file}"
+                )
 
             except Exception as err:
                 logger.error(f"Error processing {resource_file}: {err}")
                 logger.exception("Full traceback: ")
 
         new_entities_breakdown = _get_entities_breakdown(new_entities)
-        existing_entities_breakdown = _get_existing_entities_breakdown(existing_entities)
+        existing_entities_breakdown = _get_existing_entities_breakdown(
+            existing_entities
+        )
 
         endpoint_summary = _validate_endpoint(
             url,
@@ -369,20 +379,20 @@ def fetch_add_data_response(collection, dataset, organisation, pipeline_dir, inp
             collection,
             organisation,
             dataset,
-            endpoint_summary
+            endpoint_summary,
         )
 
         entity_summary = {
             "new-in-resource": len(new_entities),
             "existing-in-resource": len(existing_entities),
             "new-entities": new_entities_breakdown,
-            "existing-entities": existing_entities_breakdown
+            "existing-entities": existing_entities_breakdown,
         }
 
         response_data = {
             "entity-summary": entity_summary,
             "endpoint-summary": endpoint_summary,
-            "source-summary": source_summary
+            "source-summary": source_summary,
         }
 
         return response_data
@@ -394,204 +404,216 @@ def fetch_add_data_response(collection, dataset, organisation, pipeline_dir, inp
         logger.exception(f"Unexpected error: {e}")
         raise
 
+
 def _add_data_read_entities(resource_path, dataset, organisation, specification):
+    unidentified_lookups = []
+    dataset_prefix = specification.dataset_prefix(dataset)
 
-        unidentified_lookups = []
-        dataset_prefix = specification.dataset_prefix(dataset)
+    try:
+        with open(resource_path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
 
-        try:
-            with open(resource_path, 'r', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
+            for idx, row in enumerate(reader, start=1):
+                reference = row.get("reference", "").strip()
 
-                for idx, row in enumerate(reader, start=1):
-                    reference = row.get('reference', '').strip()
+                if not reference:
+                    logger.warning(f"Row {idx} has no reference, skipping")
+                    continue
 
-                    if not reference:
-                        logger.warning(f"Row {idx} has no reference, skipping")
-                        continue
+                lookup_entry = {
+                    "prefix": dataset_prefix,
+                    "organisation": organisation,
+                    "reference": reference,
+                    "resource": Path(resource_path).stem,
+                    "entity": "",
+                }
 
-                    lookup_entry = {
-                        'prefix': dataset_prefix,
-                        'organisation': organisation,
-                        'reference': reference,
-                        'resource': Path(resource_path).stem,
-                        'entity': ''
-                    }
+                unidentified_lookups.append(lookup_entry)
 
-                    unidentified_lookups.append(lookup_entry)
+        logger.info(f"Found {len(unidentified_lookups)} references")
 
-            logger.info(f"Found {len(unidentified_lookups)} references")
+    except Exception as e:
+        logger.error(f"Error reading resource: {e}")
+        raise
 
-        except Exception as e:
-            logger.error(f"Error reading resource: {e}")
-            raise
-
-        return unidentified_lookups
+    return unidentified_lookups
 
 
 def _check_existing_entities(unidentified_lookups, lookup_path):
-        """
-        Check which lookups already exist in lookup file
-        """
-        existing_lookup_map = {}
+    """
+    Check which lookups already exist in lookup file
+    """
+    existing_lookup_map = {}
 
-        if os.path.exists(lookup_path):
-            try:
-                with open(lookup_path, 'r', encoding='utf-8') as f:
-                    reader = csv.DictReader(f)
+    if os.path.exists(lookup_path):
+        try:
+            with open(lookup_path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
 
-                    for row in reader:
-                        prefix = row.get('prefix', '').strip()
-                        org = row.get('organisation', '').strip()
-                        ref = row.get('reference', '').strip()
-                        entity = row.get('entity', '').strip()
+                for row in reader:
+                    prefix = row.get("prefix", "").strip()
+                    org = row.get("organisation", "").strip()
+                    ref = row.get("reference", "").strip()
+                    entity = row.get("entity", "").strip()
 
-                        if prefix and org and ref and entity:
-                            key = f"{prefix},{org},{ref}"
-                            existing_lookup_map[key] = {
-                                "entity": entity,
-                                "reference": ref
-                            }
+                    if prefix and org and ref and entity:
+                        key = f"{prefix},{org},{ref}"
+                        existing_lookup_map[key] = {"entity": entity, "reference": ref}
 
-            except Exception as e:
-                logger.error(f"Error reading lookup file: {e}")
+        except Exception as e:
+            logger.error(f"Error reading lookup file: {e}")
+    else:
+        logger.info("lookup file does not exist yet")
+
+    new_lookups = []
+    existing_lookups = []
+    for lookup in unidentified_lookups:
+        key = f"{lookup['prefix']},{lookup['organisation']},{lookup['reference']}"
+
+        if key in existing_lookup_map:
+            existing_lookups.append(existing_lookup_map[key])
         else:
-            logger.info("lookup file does not exist yet")
+            new_lookups.append(lookup)
 
-        new_lookups = []
-        existing_lookups = []
-        for lookup in unidentified_lookups:
-            key = f"{lookup['prefix']},{lookup['organisation']},{lookup['reference']}"
+    logger.info(
+        f"Found {len(new_lookups)} new lookups and {len(existing_lookups)} existing lookups"
+    )
 
-            if key in existing_lookup_map:
-                existing_lookups.append(existing_lookup_map[key])
-            else:
-                new_lookups.append(lookup)
+    return new_lookups, existing_lookups
 
-        logger.info(
-            f"Found {len(new_lookups)} new lookups and {len(existing_lookups)} existing lookups")
-
-        return new_lookups, existing_lookups
 
 def _assign_entity_numbers(new_lookups, pipeline_dir, dataset, specification):
-        """
-        Assign entity numbers to new lookup entries and save to lookup file
-        """
+    """
+    Assign entity numbers to new lookup entries and save to lookup file
+    """
 
-        lookups = Lookups(pipeline_dir)
+    lookups = Lookups(pipeline_dir)
 
-        if not os.path.exists(lookups.lookups_path):
-            os.makedirs(os.path.dirname(lookups.lookups_path), exist_ok=True)
-            with open(lookups.lookups_path, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerow(['prefix', 'resource', 'organisation', 'reference', 'entity'])
+    if not os.path.exists(lookups.lookups_path):
+        os.makedirs(os.path.dirname(lookups.lookups_path), exist_ok=True)
+        with open(lookups.lookups_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                ["prefix", "resource", "organisation", "reference", "entity"]
+            )
 
-        lookups.load_csv()
+    lookups.load_csv()
 
-        for lookup in new_lookups:
-            lookups.add_entry(lookup)
+    for lookup in new_lookups:
+        lookups.add_entry(lookup)
 
-        max_entity_num = lookups.get_max_entity(dataset, specification)
-        logger.info(f"Max existing entity: {max_entity_num}")
+    max_entity_num = lookups.get_max_entity(dataset, specification)
+    logger.info(f"Max existing entity: {max_entity_num}")
 
-        lookups.entity_num_gen.state['current'] = max_entity_num
-        lookups.entity_num_gen.state['range_max'] = specification.get_dataset_entity_max(dataset)
-        lookups.entity_num_gen.state['range_min'] = specification.get_dataset_entity_min(dataset)
+    lookups.entity_num_gen.state["current"] = max_entity_num
+    lookups.entity_num_gen.state["range_max"] = specification.get_dataset_entity_max(
+        dataset
+    )
+    lookups.entity_num_gen.state["range_min"] = specification.get_dataset_entity_min(
+        dataset
+    )
 
-        logger.info(
-            f"Entity range: {lookups.entity_num_gen.state['range_min']} - {lookups.entity_num_gen.state['range_max']}")
+    logger.info(
+        f"Entity range: {lookups.entity_num_gen.state['range_min']} - {lookups.entity_num_gen.state['range_max']}"
+    )
 
-        newly_assigned = lookups.save_csv()
+    newly_assigned = lookups.save_csv()
 
-        return newly_assigned
+    return newly_assigned
+
 
 def _get_entities_breakdown(new_entities):
-        """
-        Convert newly assigned entities to the breakdown format for response.
-        """
-        logger.info(f"[get_entity_breakdown] Creating breakdown for {len(new_entities)} entities")
+    """
+    Convert newly assigned entities to the breakdown format for response.
+    """
+    logger.info(
+        f"[get_entity_breakdown] Creating breakdown for {len(new_entities)} entities"
+    )
 
-        breakdown = []
+    breakdown = []
 
-        for entity_entry in new_entities:
-            breakdown_entry = {
-                "entity": str(entity_entry.get('entity', '')),
-                "prefix": entity_entry.get('prefix', ''),
-                "end-date": "",
-                "endpoint": "",
-                "resource": entity_entry.get('resource', ''),
-                "reference": entity_entry.get('reference', ''),
-                "entry-date": "",
-                "start-date": "",
-                "entry-number": "",
-                "organisation": entity_entry.get('organisation', '')
-            }
-            breakdown.append(breakdown_entry)
+    for entity_entry in new_entities:
+        breakdown_entry = {
+            "entity": str(entity_entry.get("entity", "")),
+            "prefix": entity_entry.get("prefix", ""),
+            "end-date": "",
+            "endpoint": "",
+            "resource": entity_entry.get("resource", ""),
+            "reference": entity_entry.get("reference", ""),
+            "entry-date": "",
+            "start-date": "",
+            "entry-number": "",
+            "organisation": entity_entry.get("organisation", ""),
+        }
+        breakdown.append(breakdown_entry)
 
-        return breakdown
+    return breakdown
+
 
 def _get_existing_entities_breakdown(existing_entities):
-        """
-        Convert existing entities to the simplified format for response.
-        """
-        unique_entities = {}
-        for entity_entry in existing_entities:
-            entity = str(entity_entry.get('entity', '')).strip()
-            reference = str(entity_entry.get('reference', '')).strip()
+    """
+    Convert existing entities to the simplified format for response.
+    """
+    unique_entities = {}
+    for entity_entry in existing_entities:
+        entity = str(entity_entry.get("entity", "")).strip()
+        reference = str(entity_entry.get("reference", "")).strip()
 
-            if entity and reference:
-                key = f"{entity}|{reference}"
-                if key not in unique_entities:
-                    unique_entities[key] = {
-                        "entity": entity,
-                        "reference": reference
-                    }
+        if entity and reference:
+            key = f"{entity}|{reference}"
+            if key not in unique_entities:
+                unique_entities[key] = {"entity": entity, "reference": reference}
 
-        breakdown = list(unique_entities.values())
-        return breakdown
+    breakdown = list(unique_entities.values())
+    return breakdown
 
 
 def _validate_endpoint(url, pipeline_dir):
-
-    endpoint_csv_path = os.path.join(pipeline_dir, 'endpoint.csv')
+    endpoint_csv_path = os.path.join(pipeline_dir, "endpoint.csv")
     if not url:
         logger.info("No endpoint URL provided")
         return {}
 
     if not os.path.exists(endpoint_csv_path):
-
         os.makedirs(os.path.dirname(endpoint_csv_path), exist_ok=True)
-        with open(endpoint_csv_path, 'w', newline='', encoding='utf-8') as f:
+        with open(endpoint_csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(
-                ['endpoint', 'endpoint-url', 'parameters', 'plugin', 'entry-date', 'start-date', 'end-date'])
+                [
+                    "endpoint",
+                    "endpoint-url",
+                    "parameters",
+                    "plugin",
+                    "entry-date",
+                    "start-date",
+                    "end-date",
+                ]
+            )
 
     endpoint_exists = False
     existing_entry = None
 
     try:
-        with open(endpoint_csv_path, 'r', encoding='utf-8') as f:
+        with open(endpoint_csv_path, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                if row.get('endpoint-url', '').strip() == url.strip():
+                if row.get("endpoint-url", "").strip() == url.strip():
                     endpoint_exists = True
                     existing_entry = {
-                        "endpoint": row.get('endpoint', ''),
-                        "endpoint-url": row.get('endpoint-url', ''),
-                        "parameters": row.get('parameters', ''),
-                        "plugin": row.get('plugin', ''),
-                        "entry-date": row.get('entry-date', ''),
-                        "start-date": row.get('start-date', ''),
-                        "end-date": row.get('end-date', '')
+                        "endpoint": row.get("endpoint", ""),
+                        "endpoint-url": row.get("endpoint-url", ""),
+                        "parameters": row.get("parameters", ""),
+                        "plugin": row.get("plugin", ""),
+                        "entry-date": row.get("entry-date", ""),
+                        "start-date": row.get("start-date", ""),
+                        "end-date": row.get("end-date", ""),
                     }
                     logger.info("Endpoint URL found in endpoint.csv")
                     break
     except Exception as e:
         logger.error(f"Error reading endpoint.csv: {e}")
 
-    endpoint_summary = {
-        "endpoint_url_in_endpoint_csv": endpoint_exists
-    }
+    endpoint_summary = {"endpoint_url_in_endpoint_csv": endpoint_exists}
 
     if endpoint_exists and existing_entry:
         endpoint_summary["existing_endpoint_entry"] = existing_entry
@@ -605,7 +627,7 @@ def _validate_endpoint(url, pipeline_dir):
             endpoint_url=url,
             entry_date=entry_date,
             start_date=current_date,
-            end_date=""
+            end_date="",
         )
 
         if new_endpoint_row:
@@ -615,13 +637,14 @@ def _validate_endpoint(url, pipeline_dir):
     return endpoint_summary
 
 
-def _validate_source(documentation_url, pipeline_dir, collection, organisation, dataset, endpoint_summary):
-    source_csv_path = os.path.join(pipeline_dir, 'source.csv')
+def _validate_source(
+    documentation_url, pipeline_dir, collection, organisation, dataset, endpoint_summary
+):
+    source_csv_path = os.path.join(pipeline_dir, "source.csv")
 
-    endpoint_key = (
-        endpoint_summary.get("existing_endpoint_entry", {}).get("endpoint")
-        or endpoint_summary.get("new_endpoint_entry", {}).get("endpoint")
-    )
+    endpoint_key = endpoint_summary.get("existing_endpoint_entry", {}).get(
+        "endpoint"
+    ) or endpoint_summary.get("new_endpoint_entry", {}).get("endpoint")
     if not endpoint_key:
         logger.warning("No endpoint_key available from endpoint_summary")
         return {}
@@ -643,7 +666,7 @@ def _validate_source(documentation_url, pipeline_dir, collection, organisation, 
         pipelines=dataset,
         entry_date=entry_date,
         start_date=current_date,
-        end_date=""
+        end_date="",
     )
 
     if new_source_row:
@@ -654,21 +677,21 @@ def _validate_source(documentation_url, pipeline_dir, collection, organisation, 
 
     source_summary = {"documentation_url_in_source_csv": True}
     try:
-        with open(source_csv_path, 'r', encoding='utf-8') as f:
+        with open(source_csv_path, "r", encoding="utf-8") as f:
             for row in csv.DictReader(f):
-                if row.get('source', '').strip() == source_key_returned:
+                if row.get("source", "").strip() == source_key_returned:
                     source_summary["existing_source_entry"] = {
-                        "source": row.get('source', ''),
-                        "attribution": row.get('attribution', ''),
-                        "collection": row.get('collection', ''),
-                        "documentation-url": row.get('documentation-url', ''),
-                        "endpoint": row.get('endpoint', ''),
-                        "licence": row.get('licence', ''),
-                        "organisation": row.get('organisation', ''),
-                        "pipelines": row.get('pipelines', ''),
-                        "entry-date": row.get('entry-date', ''),
-                        "start-date": row.get('start-date', ''),
-                        "end-date": row.get('end-date', '')
+                        "source": row.get("source", ""),
+                        "attribution": row.get("attribution", ""),
+                        "collection": row.get("collection", ""),
+                        "documentation-url": row.get("documentation-url", ""),
+                        "endpoint": row.get("endpoint", ""),
+                        "licence": row.get("licence", ""),
+                        "organisation": row.get("organisation", ""),
+                        "pipelines": row.get("pipelines", ""),
+                        "entry-date": row.get("entry-date", ""),
+                        "start-date": row.get("start-date", ""),
+                        "end-date": row.get("end-date", ""),
                     }
                     break
     except Exception as e:

@@ -8,7 +8,7 @@ class CustomException(Exception):
 
     # Log['message'] is required, others are optional
     def __init__(self, log={}):
-        if "message" not in log or not log["message"]:
+        if not log.get("message"):
             raise ValueError("The 'message' field is required in the log dictionary.")
         self.message = log["message"]
 
