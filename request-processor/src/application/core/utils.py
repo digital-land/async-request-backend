@@ -253,14 +253,25 @@ def create_user_friendly_error_log(exception_detail):
     if exception_type in ["SSLError", "SSLCertVerificationError"]:
         user_message = "SSL certificate verification failed"
         user_message_detail = [
-            "We couldn't verify the SSL certificate for that link. While it may open in some browsers, our security checks require a complete certificate chain.",
-            "Please make sure the site is served over HTTPS and its SSL certificate is correctly installed.",
+            (
+                "We couldn't verify the SSL certificate for that link. "
+                "While it may open in some browsers, our security checks "
+                "require a complete certificate chain."
+            ),
+            (
+                "Please make sure the site is served over HTTPS and its "
+                "SSL certificate is correctly installed."
+            ),
         ]
     elif content_type and "text/html" in content_type:
         user_message = (
             "The selected file must be a CSV, GeoJSON, GML or GeoPackage file"
         )
-        user_message_detail = "The URL returned a webpage (HTML) instead of a data file. Please provide a direct link to the data file (for example: .csv, .geojson, .gml or .gpkg)."
+        user_message_detail = (
+            "The URL returned a webpage (HTML) instead of a data file. "
+            "Please provide a direct link to the data file "
+            "(for example: .csv, .geojson, .gml or .gpkg)."
+        )
     elif status_code == "403":
         user_message = "The URL must be accessible"
         user_message_detail = [
