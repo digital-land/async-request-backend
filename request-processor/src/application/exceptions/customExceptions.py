@@ -1,6 +1,29 @@
 from datetime import datetime
 
 
+def create_generic_error_log(
+    url, exception=None, status=None, plugin=None, extra_context=None
+):
+    """
+    Creates a generic error log dictionary for system errors during URL fetch operations.
+    """
+    error_log = {
+        "message": "There is a problem with our service, please try again later.",
+        "endpoint-url": url,
+        "status": status,
+        "exception": type(exception).__name__
+        if exception and not isinstance(exception, str)
+        else exception,
+    }
+
+    if plugin:
+        error_log["plugin"] = plugin
+    if extra_context:
+        error_log["extra_context"] = extra_context
+
+    return error_log
+
+
 class CustomException(Exception):
     """Exception raised when URL fetch function fails.
     Attributes: response

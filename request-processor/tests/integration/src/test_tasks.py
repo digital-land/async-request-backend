@@ -79,12 +79,11 @@ def test_check_datafile(
 
 
 @pytest.mark.parametrize(
-    "test_name, url, plugin, get_request_return_value, expected_status, mock_response, expected_plugin_call",
+    "test_name, url, get_request_return_value, expected_status, mock_response, expected_plugin_call",
     [
         (
             "valid_url_no_plugin",
             "exampleurl.csv",
-            None,
             (
                 None,
                 '{"type":"FeatureCollection","properties":{"exceededTransferLimit":true}, "features":[{"type":"Feature","id":1,"geometry":{"type":"Point", "coordinates":[-1.59153574212325,54.9392094142866]}, "properties": {"reference": "CA01","name": "Ashleworth Conservation Area"}}]}'.encode(  # noqa
@@ -98,7 +97,6 @@ def test_check_datafile(
         (
             "valid_url_with_arcgis_plugin",
             "https://example.com/arcgis/rest/services/MapServer",
-            "arcgis",
             (
                 None,
                 '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":"Test Feature"}}]}'.encode(
@@ -112,7 +110,6 @@ def test_check_datafile(
         (
             "valid_url_with_wfs_plugin",
             "https://example.com/wfs?service=WFS",
-            "wfs",
             (
                 None,
                 '<?xml version="1.0"?><wfs:FeatureCollection></wfs:FeatureCollection>'.encode(
@@ -126,7 +123,6 @@ def test_check_datafile(
         (
             "invalid_url",
             "exampleurl.csv",
-            None,
             ('{"status": "404", "message": "Unable to process"}', None),
             "COMPLETE",
             False,
@@ -145,7 +141,6 @@ def test_check_datafile_url(
     test_data_dir,
     test_name,
     url,
-    plugin,
     get_request_return_value,
     expected_status,
     mock_response,
@@ -165,7 +160,6 @@ def test_check_datafile_url(
         test_data_dir: Directory containing test data.
         test_name: Name of the test case.
         url: The URL to validate.
-        plugin: The plugin type to use (arcgis, wfs, or None).
         get_request_return_value: The return value of the mocked get_request function.
         expected_status: The expected status of the request.
         mock_response: determine if mock fetch_pipeline_csvs should be called.

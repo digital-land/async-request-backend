@@ -241,44 +241,40 @@ def append_source(
 def create_user_friendly_error_log(exception_detail):
     """
     Creates a user-friendly error log from CustomException detail, as the message will be displayed to end users.
+    Keeps all info from exception_detail and adds user-friendly message.
     """
-    logger.info(
-        f"Creating user friendly error log from exception detail: {exception_detail}"
-    )
     status_code = exception_detail.get("errCode")
+    exception_type = exception_detail.get("exceptionType")
+    content_type = exception_detail.get("contentType")
 
-    if exception_detail.get("exceptionType") in [
-        "SSLError",
-        "SSLCertVerificationError",
-    ]:
+    user_message = "An error occurred, please try again later."
+    user_message_detail = None
+
+    if exception_type in ["SSLError", "SSLCertVerificationError"]:
         user_message = "SSL certificate verification failed"
         user_message_detail = [
             "We couldn't verify the SSL certificate for that link. While it may open in some browsers, our security checks require a complete certificate chain.",
             "Please make sure the site is served over HTTPS and its SSL certificate is correctly installed.",
         ]
-    elif exception_detail.get("contentType") and "text/html" in exception_detail.get(
-        "contentType"
-    ):
+    elif content_type and "text/html" in content_type:
         user_message = (
             "The selected file must be a CSV, GeoJSON, GML or GeoPackage file"
         )
         user_message_detail = "The URL returned a webpage (HTML) instead of a data file. Please provide a direct link to the data file (for example: .csv, .geojson, .gml or .gpkg)."
-    elif status_code and status_code in ["403", "404"]:
-        if status_code == "403":
-            user_message = "The URL must be accessible"
-            user_message_detail = [
-                "You must host the URL on a server which does not block access due to set permissions. ",
-                "Contact your IT team for support if you need it, referencing a 'HTTP status code 403' error.",
-            ]
-        elif status_code == "404":
-            user_message = "The URL does not exist. Check the URL you've entered is correct (HTTP 404 error)"
-    # Fallback to generic message for unknown errors - or ones we don't want to expose details of.
-    else:
-        user_message = "An error occurred, please try again later."
+    elif status_code == "403":
+        user_message = "The URL must be accessible"
+        user_message_detail = [
+            "You must host the URL on a server which does not block access due to set permissions.",
+            "Contact your IT team for support if you need it, referencing a 'HTTP status code 403' error.",
+        ]
+    elif status_code == "404":
+        user_message = "The URL does not exist. Check the URL you've entered is correct (HTTP 404 error)"
 
-    result = {"message": user_message}
-    if "user_message_detail" in locals():
+    result = dict(exception_detail)
+    result["message"] = user_message
+    if user_message_detail is not None:
         result["user_message_detail"] = user_message_detail
+
     return result
 
 
