@@ -424,6 +424,7 @@ def save_response_to_db(request_id, response_data):
                     data = {
                         "column-field-log": response_data.get("column-field-log", {}),
                         "error-summary": response_data.get("error-summary", {}),
+                        "plugin": response_data.get("plugin", None),
                     }
                     # Create a new Response instance
                     new_response = models.Response(request_id=request_id, data=data)

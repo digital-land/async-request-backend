@@ -217,8 +217,7 @@ def _map_to_schema(request_model: models.Request) -> schemas.Request:
                 response_details.append(detail.detail)
         response = schemas.ResponseModel(
             data=request_model.response.data,
-            error=request_model.response.error,
-            plugin=request_model.response.plugin,
+            error=request_model.response.error
         )
 
     return schemas.Request(

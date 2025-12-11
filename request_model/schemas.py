@@ -83,7 +83,6 @@ class ResponseError(BaseModel):
 class ResponseModel(BaseModel):
     data: Optional[Dict[str, Any]]
     error: Optional[Dict[str, Any]]
-    plugin: Optional[str] = None
 
 
 class Request(RequestBase):

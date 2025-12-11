@@ -271,7 +271,7 @@ def create_user_friendly_error_log(exception_detail):
                 "Contact your IT team for support if you need it, referencing a 'HTTP status code 403' error.",
             ]
         elif status_code == "404":
-            user_message = "Resource not found, the URL does not exist or has been moved (HTTP 404)."
+            user_message = "The URL does not exist. Check the URL you\'ve entered is correct (HTTP 404 error)"
     # Fallback to generic message for unknown errors - or ones we don't want to expose details of.
     else:
         user_message = "An error occurred, please try again later."
