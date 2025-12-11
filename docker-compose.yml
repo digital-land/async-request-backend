@@ -79,4 +79,3 @@ services:
       replicas: 1
     volumes:
       - "./request-processor/docker_volume:/opt"
-      - "./request-processor/.venv/src/digital-land:/src/digital-land"
