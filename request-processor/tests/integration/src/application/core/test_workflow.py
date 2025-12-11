@@ -146,6 +146,7 @@ def test_run_workflow(
     assert "column-field-log" in response_data
     assert "error-summary" in response_data
     assert "transformed-csv" in response_data
+    assert "plugin" in response_data
 
     # Check converted csv is in the form we expect
     assert all("ref" in x for x in response_data["converted-csv"])
@@ -219,6 +220,7 @@ def test_run_workflow_geom_type_polygon(
     assert "column-field-log" in response_data
     assert "error-summary" in response_data
     assert "transformed-csv" in response_data
+    assert "plugin" in response_data
 
     # Check converted csv is in the form we expect
     assert all("ref" in x for x in response_data["converted-csv"])
@@ -325,6 +327,7 @@ def test_run_workflow_brownfield_land(
     assert "column-field-log" in response_data
     assert "error-summary" in response_data
     assert "transformed-csv" in response_data
+    assert "plugin" in response_data
 
     # Check converted csv is in the form we expect
     assert all("ref" in x for x in response_data["converted-csv"])
