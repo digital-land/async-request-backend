@@ -79,12 +79,11 @@ def test_check_datafile(
 
 
 @pytest.mark.parametrize(
-    "test_name, url, plugin, get_request_return_value, expected_status, mock_response, expected_plugin_call",
+    "test_name, url, get_request_return_value, expected_status, mock_response, expected_plugin_call",
     [
         (
             "valid_url_no_plugin",
             "exampleurl.csv",
-            None,
             (
                 None,
                 '{"type":"FeatureCollection","properties":{"exceededTransferLimit":true}, "features":[{"type":"Feature","id":1,"geometry":{"type":"Point", "coordinates":[-1.59153574212325,54.9392094142866]}, "properties": {"reference": "CA01","name": "Ashleworth Conservation Area"}}]}'.encode(  # noqa
@@ -98,7 +97,6 @@ def test_check_datafile(
         (
             "valid_url_with_arcgis_plugin",
             "https://example.com/arcgis/rest/services/MapServer",
-            "arcgis",
             (
                 None,
                 '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":"Test Feature"}}]}'.encode(
@@ -112,7 +110,6 @@ def test_check_datafile(
         (
             "valid_url_with_wfs_plugin",
             "https://example.com/wfs?service=WFS",
-            "wfs",
             (
                 None,
                 '<?xml version="1.0"?><wfs:FeatureCollection></wfs:FeatureCollection>'.encode(
@@ -126,9 +123,8 @@ def test_check_datafile(
         (
             "invalid_url",
             "exampleurl.csv",
-            None,
             ('{"status": "404", "message": "Unable to process"}', None),
-            "FAILED",
+            "COMPLETE",
             False,
             None,
         ),
@@ -145,7 +141,6 @@ def test_check_datafile_url(
     test_data_dir,
     test_name,
     url,
-    plugin,
     get_request_return_value,
     expected_status,
     mock_response,
@@ -165,7 +160,6 @@ def test_check_datafile_url(
         test_data_dir: Directory containing test data.
         test_name: Name of the test case.
         url: The URL to validate.
-        plugin: The plugin type to use (arcgis, wfs, or None).
         get_request_return_value: The return value of the mocked get_request function.
         expected_status: The expected status of the request.
         mock_response: determine if mock fetch_pipeline_csvs should be called.
@@ -177,8 +171,6 @@ def test_check_datafile_url(
         "dataset": "article-4-direction-area",
         "url": url,
     }
-    if plugin:
-        params["plugin"] = plugin
 
     request = _create_request(
         schemas.CheckUrlParams(**params), schemas.RequestTypeEnum.check_url
@@ -195,16 +187,20 @@ def test_check_datafile_url(
     # Track calls to collector.fetch to verify plugin parameter
     fetch_calls = []
 
-    def mock_collector_fetch(self, url, plugin=None):
+    def mock_collector_fetch(self, url, plugin=None, **kwargs):
         fetch_calls.append({"url": url, "plugin": plugin})
-        if expected_status == "COMPLETE":
+
+        if test_name == "invalid_url":
+            return FetchStatus.FAILED, {"status": "404"}
+
+        if plugin == expected_plugin_call:
             resource_dir = self.resource_dir
             resource_dir.mkdir(parents=True, exist_ok=True)
             mock_file = resource_dir / "mock_resource_hash"
             mock_file.write_text("mock csv data")
-            return FetchStatus.OK
+            return FetchStatus.OK, {"plugin": plugin}
         else:
-            return FetchStatus.FAILED
+            return FetchStatus.FAILED, {}
 
     mocker.patch("digital_land.collect.Collector.fetch", mock_collector_fetch)
 
@@ -213,13 +209,20 @@ def test_check_datafile_url(
     )
 
     # Verify the plugin parameter was passed correctly
-    assert len(fetch_calls) == 1, f"Expected 1 fetch call, got {len(fetch_calls)}"
     assert (
-        fetch_calls[0]["url"] == url
-    ), f"Expected URL {url}, got {fetch_calls[0]['url']}"
+        len(fetch_calls) > 0
+    ), f"Expected at least one fetch call, got {len(fetch_calls)}"
+
+    # Find the call with the expected plugin
+    matching_calls = [
+        call for call in fetch_calls if call["plugin"] == expected_plugin_call
+    ]
     assert (
-        fetch_calls[0]["plugin"] == expected_plugin_call
-    ), f"Expected plugin {expected_plugin_call}, got {fetch_calls[0]['plugin']}"
+        len(matching_calls) > 0
+    ), f"Expected call with plugin {expected_plugin_call} not found in {fetch_calls}"
+    assert (
+        matching_calls[0]["url"] == url
+    ), f"Expected URL {url}, got {matching_calls[0]['url']}"
 
 
 def _wait_for_request_status(

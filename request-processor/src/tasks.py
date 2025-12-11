@@ -19,13 +19,42 @@ import json
 from application.core import workflow
 from application.configurations.config import Directories
 import application.core.utils as utils
-from application.exceptions.customExceptions import CustomException
+from application.exceptions.customExceptions import (
+    CustomException,
+    create_generic_error_log,
+)
 from pathlib import Path
 from digital_land.collect import Collector, FetchStatus
 
 logger = get_task_logger(__name__)
 # Threshold for s3_transfer_manager to automatically use multipart download
 max_file_size_mb = 30
+
+
+# Remove resource directories created by Collector, necessary if exception occurs, workflow will not clean up
+def clean_up_request_files(request_id):
+    resource_dir = os.path.join(Directories.COLLECTION_DIR, "resource", request_id)
+    try:
+        if os.path.exists(resource_dir):
+            for root, dirs, files in os.walk(resource_dir, topdown=False):
+                for name in files:
+                    os.remove(os.path.join(root, name))
+                for name in dirs:
+                    os.rmdir(os.path.join(root, name))
+            os.rmdir(resource_dir)
+
+            # Clean up parent directories if empty
+            resource_parent_dir = os.path.dirname(resource_dir)
+            if os.path.exists(resource_parent_dir) and not os.listdir(
+                resource_parent_dir
+            ):
+                os.rmdir(resource_parent_dir)
+                collection_dir = os.path.dirname(resource_parent_dir)
+                if os.path.exists(collection_dir) and not os.listdir(collection_dir):
+                    os.rmdir(collection_dir)
+
+    except Exception as e:
+        logger.error(f"Failed to clean up resource directory {resource_dir}: {e}")
 
 
 @celery.task(base=CheckDataFileTask, name=CheckDataFileTask.name)
@@ -113,7 +142,9 @@ def handle_check_file(request_schema, request_data, tmp_dir):
 
 @celery.task(base=CheckDataUrlTask, name=CheckDataUrlTask.name)
 def check_dataurl(request: Dict, directories=None):
-    logger.info(f"Started check_dataurl task for request_id = {request.get('id', 'unknown')}")
+    logger.info(
+        f"Started check_dataurl task for request_id = {request.get('id', 'unknown')}"
+    )
     logger.info(f"Request payload: {json.dumps(request, default=str)}")
     request_schema = schemas.Request.model_validate(request)
     request_data = request_schema.params
@@ -130,41 +161,40 @@ def check_dataurl(request: Dict, directories=None):
         for key, value in data_dict.items():
             setattr(directories, key, value)
 
-    file_name = None
-    resource_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_schema.id)
-    log_dir = os.path.join(directories.COLLECTION_DIR, "log", request_schema.id)
+    resource_dir = os.path.join(
+        directories.COLLECTION_DIR, "resource", request_schema.id
+    )
 
+    file_name = None
+
+    # IMPORTANT: 'message' set in error_log to be user friendly = Map known exception types to user-friendly messages
     try:
-        file_name, fetch_log = _fetch_resource(
-            directories.COLLECTION_DIR,
-            resource_dir,
-            log_dir,
-            request_data.url,
-            getattr(request_data, "plugin", None)
-        )
+        file_name, fetch_log = _fetch_resource(resource_dir, request_data.url)
         logger.info(f"Fetched resource: file_name={file_name}")
 
     except CustomException as e:
-        logger.error(f"CustomException during _fetch_resource: {e.detail}")
-        error_log = {
-            "message": e.detail.get("errMsg", "An error occurred"),
-            "status": e.detail.get("errCode", "ERROR"),
-            "exception_type": e.detail.get("errType", type(e).__name__)
-        }
+        logger.error(f"URL FETCH Error during _fetch_resource: {e}")
+        # Track in Sentry for monitoring (not as error)
+        _capture_sentry_event(
+            e.detail,
+            request_schema.id,
+        )
+        error_log = utils.create_user_friendly_error_log(e.detail)
         save_response_to_db(request_schema.id, error_log)
-        raise
+
+        return _get_request(request_schema.id)
 
     except Exception as e:
-        logger.error(f"Unexpected error during _fetch_resource: {e}")
-        logger.exception("Full traceback:")
-        msg = getattr(e, "detail", {}).get("errMsg") or getattr(e, "detail", {}).get("message") or str(e) or "Unknown error occured"
-        error_log = {
-            "message": f"Failed to fetch resource: {msg}",
-            "status": "ERROR",
-            "exception_type": type(e).__name__
-        }
+        logger.error(f"Error during _fetch_resource: {e}")
+        error_log = create_generic_error_log(
+            url=request_data.url, exception=e, status=getattr(e, "status", None)
+        )
+        _capture_sentry_event(
+            error_log,
+            request_schema.id,
+        )
         save_response_to_db(request_schema.id, error_log)
-        raise CustomException(error_log)
+        return _get_request(request_schema.id)
 
     if file_name:
         try:
@@ -178,28 +208,40 @@ def check_dataurl(request: Dict, directories=None):
                 getattr(request_data, "column_mapping", {}),
                 directories,
             )
+            if "plugin" in fetch_log:
+                response["plugin"] = fetch_log["plugin"]
             save_response_to_db(request_schema.id, response)
         except Exception as e:
             logger.error(f"Workflow failed: {e}")
-            logger.exception("Full traceback:")
-            error_log = {
-                "message": f"Workflow failed: {str(e)}",
-                "status": "ERROR",
-                "exception_type": type(e).__name__
-            }
+            plugin = fetch_log.get("plugin") if "plugin" in fetch_log else None
+            error_log = create_generic_error_log(
+                url=request_data.url,
+                exception=e,
+                status=getattr(e, "status", None),
+                plugin=plugin,
+                extra_context={"workflow_stage": "run_workflow"},
+            )
+            _capture_sentry_event(
+                error_log,
+                request_schema.id,
+            )
             save_response_to_db(request_schema.id, error_log)
-            raise CustomException(error_log)
     else:
         logger.error("File could not be fetched from collector")
-        error_log = {
-            "message": "File could not be fetched from collector",
-            "status": "ERROR",
-            "exception_type": "FileMissing"
-        }
+        error_log = create_generic_error_log(
+            url=request_data.url,
+            exception="UnknownCollectionError",
+            status=None,
+            extra_context={"error_type": "unknown_collection_error"},
+        )
+        _capture_sentry_event(
+            error_log,
+            request_schema.id,
+        )
         save_response_to_db(request_schema.id, error_log)
-        raise CustomException(error_log)
 
     return _get_request(request_schema.id)
+
 
 @celery.task(base=AddDataTask, name=AddDataTask.name)
 def add_data_task(request: Dict, directories=None):
@@ -217,16 +259,13 @@ def add_data_task(request: Dict, directories=None):
             for key, value in data_dict.items():
                 setattr(directories, key, value)
 
-        resource_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_schema.id)
-        log_dir = os.path.join(directories.COLLECTION_DIR, "log", request_schema.id)
-        file_name, log = _fetch_resource(
-            directories.COLLECTION_DIR,
-            resource_dir,
-            log_dir,
-            request_data.url,
-            getattr(request_data, "plugin", None)
+        resource_dir = os.path.join(
+            directories.COLLECTION_DIR, "resource", request_schema.id
         )
-        logger.info(f"file name from fetch resource is : {file_name} and the log from fetch resource is {log}")
+        file_name, log = _fetch_resource(resource_dir, request_data.url)
+        logger.info(
+            f"file name from fetch resource is : {file_name} and the log from fetch resource is {log}"
+        )
         if file_name:
             response = workflow.add_data_workflow(
                 file_name,
@@ -238,6 +277,8 @@ def add_data_task(request: Dict, directories=None):
                 request_data.documentation_url,
                 directories,
             )
+            if "plugin" in log:
+                response["plugin"] = log["plugin"]
             logger.info(f"response is : {response}")
             save_response_to_db(request_schema.id, response)
         else:
@@ -258,6 +299,7 @@ def after_task_success(sender, result, **kwargs):
     request_id = sender.request.args[0]["id"]
     logger.debug(f"Set status to PROCESSING for request {request_id}")
     _update_request_status(request_id, "COMPLETE")
+    clean_up_request_files(request_id)
 
 
 # TODO: Look into retry mechanism with Celery
@@ -268,6 +310,7 @@ def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
     request_id = args[0]["id"]
     logger.debug(f"Set status to FAILED for request {request_id}")
     _update_request_status(request_id, "FAILED")
+    clean_up_request_files(request_id)
 
 
 @celeryd_init.connect
@@ -300,6 +343,41 @@ def _get_request(request_id):
     return result
 
 
+# Built with a desire to have context about Check URL errors, even ones that are handled.
+def _capture_sentry_event(
+    error_log,
+    request_id,
+    task_name="CheckURL",
+):
+    """
+    Capture error logs in Sentry for CheckURL task.
+
+    Args:
+        error_log: A dict containing error details
+        request_id: The request ID for context
+        task_name: Task name (defaults to "CheckURL")
+    """
+    with sentry_sdk.push_scope() as scope:
+        context = {"id": request_id}
+        if isinstance(error_log, dict):
+            if "endpoint-url" in error_log:
+                context["url"] = error_log["endpoint-url"]
+            # Add all error_log fields as extra data
+            for key, value in error_log.items():
+                scope.set_extra(key, str(value))
+
+        scope.set_context("request", context)
+        scope.set_tag("task", task_name)
+
+        # Get message from error_log
+        message = (
+            error_log.get("message", "Error occurred")
+            if isinstance(error_log, dict)
+            else str(error_log)
+        )
+        sentry_sdk.capture_message(message, level="warning")
+
+
 def _get_response(request_id):
     db_session = database.session_maker()
     with db_session() as session:
@@ -315,15 +393,16 @@ def save_response_to_db(request_id, response_data):
             existing = _get_response(request_id)
             if not existing:
                 if (
-                        "column-field-log" in response_data
-                        and "error-summary" in response_data
-                        and "converted-csv" in response_data
-                        and "issue-log" in response_data
-                        and "transformed-csv" in response_data
+                    "column-field-log" in response_data
+                    and "error-summary" in response_data
+                    and "converted-csv" in response_data
+                    and "issue-log" in response_data
+                    and "transformed-csv" in response_data
                 ):
                     data = {
                         "column-field-log": response_data.get("column-field-log", {}),
                         "error-summary": response_data.get("error-summary", {}),
+                        "plugin": response_data.get("plugin", None),
                     }
                     # Create a new Response instance
                     new_response = models.Response(request_id=request_id, data=data)
@@ -372,8 +451,7 @@ def save_response_to_db(request_id, response_data):
 
                 elif "entity-summary" in response_data:
                     new_response = models.Response(
-                        request_id=request_id,
-                        data=response_data
+                        request_id=request_id, data=response_data
                     )
                     session.add(new_response)
                     session.commit()
@@ -390,54 +468,44 @@ def save_response_to_db(request_id, response_data):
                     session.add(new_response)
                     session.commit()
             else:
-                logger.exception(
-                    "response already exists in DB for request: ", request_id
-                )
+                logger.info(f"Response already exists in DB for request: {request_id}")
         except Exception as e:
             session.rollback()
             raise e
 
 
-def _fetch_resource(collection_dir, resource_dir, log_dir, url, plugin=None):
+def _fetch_resource(resource_dir, url):
     """
-    Fetches resource files using Collector,
+    Fetches resource files using Collector, trying different plugins.
     Raises CustomException and logs error if fetch fails.
     """
-
-    # Ensure tmp_dir exists, create it if it doesn't
     Path(resource_dir).mkdir(parents=True, exist_ok=True)
-    # With Collector from digital-land/collect, edit to use correct directory path without changing Collector class
-    collector = Collector(collection_dir=Path(collection_dir))
-    # Override the resource_dir to match our tmp_dir structure
-    collector.resource_dir = Path(resource_dir)  # Use the same directory as tmp_dir
-    collector.log_dir = Path(log_dir)
-    # TBD: Can test infering plugin from URL, then if fails retry normal method without plugin?
-    # if 'FeatureServer' in request_data.url or 'MapServer' in request_data.url:
-    #     request_data.plugin = "arcgis"
+    collector = Collector(resource_dir=Path(resource_dir))
+    plugins = [None, "arcgis", "wfs"]
+    content_type = None
 
-    status = collector.fetch(url, plugin=plugin)
-    logger.info(f"Collector Fetch status: {status}")
+    for plugin in plugins:
+        fetch_status, log = collector.fetch(url, plugin=plugin, refill_todays_logs=True)
+        log["fetch-status"] = fetch_status.name
+        if plugin is None:
+            content_type = log.get("response-headers", {}).get("content-type")
+        if fetch_status == FetchStatus.OK:
+            log["plugin"] = plugin
+            try:
+                file_name = next(reversed(list(collector.resource_dir.iterdir()))).name
+                return file_name, log
+            except StopIteration:
+                raise CustomException(
+                    {
+                        "message": "No endpoint files found after successful fetch.",
+                        **log,
+                    }
+                )
+        elif log.get("exception") or log.get("status", "").startswith("4"):
+            break
 
-    # The resource is saved in collector.resource_dir with hash as filename
-    resource_files = list(collector.resource_dir.iterdir())
-
-    log = {}
-
-    if status == FetchStatus.OK:
-        if resource_files and len(resource_files) == 1:
-            logger.info(f"Resource Files Path from collector: {resource_files}")
-            file_name = resource_files[-1].name  # Get the hash filename
-            logger.info(f"File Hash From Collector: {file_name}")
-
-        else:
-            log["message"] = "No endpoint files found after successful fetch."
-            log["status"] = str(status)
-            log["exception_type"] = "URL check failed"
-            raise CustomException(log)
-    else:
-        log["status"] = str(status)
-        log["message"] = "Fetch operation failed"
-        log["exception_type"] = "URL check failed"
-        logger.warning(f"URL check failed with fetch status: {status}")
-        raise CustomException(log)
-    return file_name, log
+    # All fetch attempts failed - include content-type if available
+    error_detail = {"message": "All fetch attempts failed", **log}
+    if content_type:
+        error_detail["content-type"] = content_type
+    raise CustomException(error_detail)

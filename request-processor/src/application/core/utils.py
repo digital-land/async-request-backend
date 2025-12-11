@@ -163,7 +163,8 @@ def append_endpoint(
                 "endpoint-url": endpoint_url,
                 "parameters": "",
                 "plugin": "",
-                "entry-date": _formatted_date(entry_date) or datetime.now().date().isoformat(),
+                "entry-date": _formatted_date(entry_date)
+                or datetime.now().date().isoformat(),
                 "start-date": _formatted_date(start_date),
                 "end-date": _formatted_date(end_date),
             }
@@ -227,7 +228,8 @@ def append_source(
                 "licence": licence,
                 "organisation": organisation,
                 "pipelines": pipelines,
-                "entry-date": _formatted_date(entry_date) or datetime.now().date().isoformat(),
+                "entry-date": _formatted_date(entry_date)
+                or datetime.now().date().isoformat(),
                 "start-date": _formatted_date(start_date),
                 "end-date": _formatted_date(end_date),
             }
@@ -236,13 +238,64 @@ def append_source(
     return source_key, new_row
 
 
+def create_user_friendly_error_log(exception_detail):
+    """
+    Creates a user-friendly error log from CustomException detail, as the message will be displayed to end users.
+    Keeps all info from exception_detail and adds user-friendly message.
+    """
+    status_code = exception_detail.get("errCode")
+    exception_type = exception_detail.get("exceptionType")
+    content_type = exception_detail.get("contentType")
+
+    user_message = "An error occurred, please try again later."
+    user_message_detail = None
+
+    if exception_type in ["SSLError", "SSLCertVerificationError"]:
+        user_message = "SSL certificate verification failed"
+        user_message_detail = [
+            (
+                "We couldn't verify the SSL certificate for that link. "
+                "While it may open in some browsers, our security checks "
+                "require a complete certificate chain."
+            ),
+            (
+                "Please make sure the site is served over HTTPS and its "
+                "SSL certificate is correctly installed."
+            ),
+        ]
+    elif content_type and "text/html" in content_type:
+        user_message = (
+            "The selected file must be a CSV, GeoJSON, GML or GeoPackage file"
+        )
+        user_message_detail = (
+            "The URL returned a webpage (HTML) instead of a data file. "
+            "Please provide a direct link to the data file "
+            "(for example: .csv, .geojson, .gml or .gpkg)."
+        )
+    elif status_code == "403":
+        user_message = "The URL must be accessible"
+        user_message_detail = [
+            "You must host the URL on a server which does not block access due to set permissions.",
+            "Contact your IT team for support if you need it, referencing a 'HTTP status code 403' error.",
+        ]
+    elif status_code == "404":
+        user_message = "The URL does not exist. Check the URL you've entered is correct (HTTP 404 error)"
+
+    result = dict(exception_detail)
+    result["message"] = user_message
+    if user_message_detail is not None:
+        result["user_message_detail"] = user_message_detail
+
+    return result
+
+
 def _formatted_date(date_value):
     if not date_value:
         return ""
     if isinstance(date_value, datetime):
         return date_value.date().isoformat()
     if isinstance(date_value, str):
-        if len(date_value) == 10 and date_value[4] == '-' and date_value[7] == '-':
+        if len(date_value) == 10 and date_value[4] == "-" and date_value[7] == "-":
             return date_value
         if "T" in date_value:
             return date_value.split("T")[0]

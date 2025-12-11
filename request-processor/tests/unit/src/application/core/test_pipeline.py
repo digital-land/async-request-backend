@@ -10,7 +10,7 @@ from src.application.core.pipeline import (
     _get_entities_breakdown,
     _get_existing_entities_breakdown,
     _validate_endpoint,
-    _validate_source
+    _validate_source,
 )
 
 
@@ -40,20 +40,38 @@ def test_fetch_add_data_response_success(monkeypatch, tmp_path):
     mock_lookups_instance.lookups_path = str(pipeline_dir / "lookup.csv")
     mock_lookups_instance.get_max_entity.return_value = 1000000
     mock_lookups_instance.save_csv.return_value = [
-        {"prefix": "test-prefix", "organisation": "test-org", "reference": "REF001", "entity": "1000001",
-         "resource": "test"},
-        {"prefix": "test-prefix", "organisation": "test-org", "reference": "REF002", "entity": "1000002",
-         "resource": "test"}
+        {
+            "prefix": "test-prefix",
+            "organisation": "test-org",
+            "reference": "REF001",
+            "entity": "1000001",
+            "resource": "test",
+        },
+        {
+            "prefix": "test-prefix",
+            "organisation": "test-org",
+            "reference": "REF002",
+            "entity": "1000002",
+            "resource": "test",
+        },
     ]
     mock_lookups_instance.entity_num_gen = MagicMock()
     mock_lookups_instance.entity_num_gen.state = {}
 
-    monkeypatch.setattr("src.application.core.pipeline.Specification", lambda x: mock_spec)
-    monkeypatch.setattr("src.application.core.pipeline.Lookups", lambda x: mock_lookups_instance)
-    monkeypatch.setattr("src.application.core.pipeline._validate_endpoint",
-                        lambda url, dir: {"endpoint_url_in_endpoint_csv": True})
-    monkeypatch.setattr("src.application.core.pipeline._validate_source",
-                        lambda *a, **k: {"documentation_url_in_source_csv": True})
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Specification", lambda x: mock_spec
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Lookups", lambda x: mock_lookups_instance
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline._validate_endpoint",
+        lambda url, dir: {"endpoint_url_in_endpoint_csv": True},
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline._validate_source",
+        lambda *a, **k: {"documentation_url_in_source_csv": True},
+    )
 
     result = fetch_add_data_response(
         collection=collection,
@@ -64,7 +82,7 @@ def test_fetch_add_data_response_success(monkeypatch, tmp_path):
         specification_dir=str(specification_dir),
         cache_dir=str(cache_dir),
         url=url,
-        documentation_url=documentation_url
+        documentation_url=documentation_url,
     )
 
     assert "entity-summary" in result
@@ -88,11 +106,17 @@ def test_fetch_add_data_response_no_files(monkeypatch, tmp_path):
     pipeline_dir.mkdir(parents=True)
 
     mock_spec = MagicMock()
-    monkeypatch.setattr("src.application.core.pipeline.Specification", lambda x: mock_spec)
-    monkeypatch.setattr("src.application.core.pipeline._validate_endpoint",
-                        lambda url, dir: {"endpoint_url_in_endpoint_csv": True})
-    monkeypatch.setattr("src.application.core.pipeline._validate_source",
-                        lambda *a, **k: {"documentation_url_in_source_csv": True})
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Specification", lambda x: mock_spec
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline._validate_endpoint",
+        lambda url, dir: {"endpoint_url_in_endpoint_csv": True},
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline._validate_source",
+        lambda *a, **k: {"documentation_url_in_source_csv": True},
+    )
 
     result = fetch_add_data_response(
         collection=collection,
@@ -103,7 +127,7 @@ def test_fetch_add_data_response_no_files(monkeypatch, tmp_path):
         specification_dir=str(specification_dir),
         cache_dir=str(cache_dir),
         url=url,
-        documentation_url=documentation_url
+        documentation_url=documentation_url,
     )
 
     assert "entity-summary" in result
@@ -126,7 +150,9 @@ def test_fetch_add_data_response_file_not_found(monkeypatch, tmp_path):
     pipeline_dir.mkdir(parents=True)
 
     mock_spec = MagicMock()
-    monkeypatch.setattr("src.application.core.pipeline.Specification", lambda x: mock_spec)
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Specification", lambda x: mock_spec
+    )
 
     with pytest.raises(FileNotFoundError):
         fetch_add_data_response(
@@ -138,7 +164,7 @@ def test_fetch_add_data_response_file_not_found(monkeypatch, tmp_path):
             specification_dir=str(specification_dir),
             cache_dir=str(cache_dir),
             url=url,
-            documentation_url=documentation_url
+            documentation_url=documentation_url,
         )
 
 
@@ -176,18 +202,38 @@ def test_fetch_add_data_response_with_existing_entities(monkeypatch, tmp_path):
     mock_lookups_instance.lookups_path = str(lookup_file)
     mock_lookups_instance.get_max_entity.return_value = 1000001
     mock_lookups_instance.save_csv.return_value = [
-        {"prefix": "test-prefix", "organisation": "test-org", "reference": "REF002", "entity": "1000002",
-         "resource": "test"},
-        {"prefix": "test-prefix", "organisation": "test-org", "reference": "REF003", "entity": "1000003",
-         "resource": "test"}
+        {
+            "prefix": "test-prefix",
+            "organisation": "test-org",
+            "reference": "REF002",
+            "entity": "1000002",
+            "resource": "test",
+        },
+        {
+            "prefix": "test-prefix",
+            "organisation": "test-org",
+            "reference": "REF003",
+            "entity": "1000003",
+            "resource": "test",
+        },
     ]
     mock_lookups_instance.entity_num_gen = MagicMock()
     mock_lookups_instance.entity_num_gen.state = {}
 
-    monkeypatch.setattr("src.application.core.pipeline.Specification", lambda x: mock_spec)
-    monkeypatch.setattr("src.application.core.pipeline.Lookups", lambda x: mock_lookups_instance)
-    monkeypatch.setattr("src.application.core.pipeline._validate_endpoint", lambda url, dir: {"endpoint_url_in_endpoint_csv": True})
-    monkeypatch.setattr("src.application.core.pipeline._validate_source", lambda *a, **k: {"documentation_url_in_source_csv": True})
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Specification", lambda x: mock_spec
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Lookups", lambda x: mock_lookups_instance
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline._validate_endpoint",
+        lambda url, dir: {"endpoint_url_in_endpoint_csv": True},
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline._validate_source",
+        lambda *a, **k: {"documentation_url_in_source_csv": True},
+    )
 
     result = fetch_add_data_response(
         collection=collection,
@@ -198,7 +244,7 @@ def test_fetch_add_data_response_with_existing_entities(monkeypatch, tmp_path):
         specification_dir=str(specification_dir),
         cache_dir=str(cache_dir),
         url=url,
-        documentation_url=documentation_url
+        documentation_url=documentation_url,
     )
 
     assert "entity-summary" in result
@@ -228,14 +274,24 @@ def test_fetch_add_data_response_handles_processing_error(monkeypatch, tmp_path)
     mock_spec = MagicMock()
     mock_spec.dataset_prefix.return_value = "test-prefix"
 
-    monkeypatch.setattr("src.application.core.pipeline.Specification", lambda x: mock_spec)
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Specification", lambda x: mock_spec
+    )
 
     def raise_exception(*args, **kwargs):
         raise Exception("Processing error")
 
-    monkeypatch.setattr("src.application.core.pipeline._add_data_read_entities", raise_exception)
-    monkeypatch.setattr("src.application.core.pipeline._validate_endpoint", lambda url, dir: {"endpoint_url_in_endpoint_csv": True})
-    monkeypatch.setattr("src.application.core.pipeline._validate_source", lambda *a, **k: {"documentation_url_in_source_csv": True})
+    monkeypatch.setattr(
+        "src.application.core.pipeline._add_data_read_entities", raise_exception
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline._validate_endpoint",
+        lambda url, dir: {"endpoint_url_in_endpoint_csv": True},
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline._validate_source",
+        lambda *a, **k: {"documentation_url_in_source_csv": True},
+    )
 
     result = fetch_add_data_response(
         collection=collection,
@@ -246,7 +302,7 @@ def test_fetch_add_data_response_handles_processing_error(monkeypatch, tmp_path)
         specification_dir=str(specification_dir),
         cache_dir=str(cache_dir),
         url=url,
-        documentation_url=documentation_url
+        documentation_url=documentation_url,
     )
 
     assert "entity-summary" in result
@@ -262,10 +318,7 @@ def test_add_data_read_entities_success(tmp_path):
     mock_spec.dataset_prefix.return_value = "test-prefix"
 
     result = _add_data_read_entities(
-        str(resource_file),
-        "test-dataset",
-        "test-org",
-        mock_spec
+        str(resource_file), "test-dataset", "test-org", mock_spec
     )
 
     assert len(result) == 2
@@ -284,10 +337,7 @@ def test_add_data_read_entities_skip_empty_reference(tmp_path):
     mock_spec.dataset_prefix.return_value = "test-prefix"
 
     result = _add_data_read_entities(
-        str(resource_file),
-        "test-dataset",
-        "test-org",
-        mock_spec
+        str(resource_file), "test-dataset", "test-org", mock_spec
     )
 
     assert len(result) == 2
@@ -301,10 +351,7 @@ def test_add_data_read_entities_file_error():
 
     with pytest.raises(Exception):
         _add_data_read_entities(
-            "/nonexistent/file.csv",
-            "test-dataset",
-            "test-org",
-            mock_spec
+            "/nonexistent/file.csv", "test-dataset", "test-org", mock_spec
         )
 
 
@@ -312,15 +359,14 @@ def test_check_existing_entities_all_new(tmp_path):
     """Test when all lookups are new"""
     unidentified_lookups = [
         {"prefix": "p1", "organisation": "org1", "reference": "REF001", "entity": ""},
-        {"prefix": "p1", "organisation": "org1", "reference": "REF002", "entity": ""}
+        {"prefix": "p1", "organisation": "org1", "reference": "REF002", "entity": ""},
     ]
 
     lookup_file = tmp_path / "lookup.csv"
     lookup_file.write_text("prefix,organisation,reference,entity\n")
 
     new_lookups, existing_lookups = _check_existing_entities(
-        unidentified_lookups,
-        str(lookup_file)
+        unidentified_lookups, str(lookup_file)
     )
 
     assert len(new_lookups) == 2
@@ -331,18 +377,16 @@ def test_check_existing_entities_some_existing(tmp_path):
     """Test when some lookups already exist"""
     unidentified_lookups = [
         {"prefix": "p1", "organisation": "org1", "reference": "REF001", "entity": ""},
-        {"prefix": "p1", "organisation": "org1", "reference": "REF002", "entity": ""}
+        {"prefix": "p1", "organisation": "org1", "reference": "REF002", "entity": ""},
     ]
 
     lookup_file = tmp_path / "lookup.csv"
     lookup_file.write_text(
-        "prefix,organisation,reference,entity\n"
-        "p1,org1,REF001,1000001\n"
+        "prefix,organisation,reference,entity\n" "p1,org1,REF001,1000001\n"
     )
 
     new_lookups, existing_lookups = _check_existing_entities(
-        unidentified_lookups,
-        str(lookup_file)
+        unidentified_lookups, str(lookup_file)
     )
 
     assert len(new_lookups) == 1
@@ -358,13 +402,11 @@ def test_check_existing_entities_no_lookup_file():
     ]
 
     new_lookups, existing_lookups = _check_existing_entities(
-        unidentified_lookups,
-        "/nonexistent/lookup.csv"
+        unidentified_lookups, "/nonexistent/lookup.csv"
     )
 
     assert len(new_lookups) == 1
     assert len(existing_lookups) == 0
-
 
 
 def test_assign_entity_numbers_creates_lookup_file(monkeypatch, tmp_path):
@@ -373,14 +415,26 @@ def test_assign_entity_numbers_creates_lookup_file(monkeypatch, tmp_path):
     pipeline_dir.mkdir()
 
     new_lookups = [
-        {"prefix": "p1", "organisation": "org1", "reference": "REF001", "resource": "res1", "entity": ""}
+        {
+            "prefix": "p1",
+            "organisation": "org1",
+            "reference": "REF001",
+            "resource": "res1",
+            "entity": "",
+        }
     ]
 
     mock_lookups = MagicMock()
     mock_lookups.lookups_path = str(pipeline_dir / "lookup.csv")
     mock_lookups.get_max_entity.return_value = 1000000
     mock_lookups.save_csv.return_value = [
-        {"prefix": "p1", "organisation": "org1", "reference": "REF001", "entity": "1000001", "resource": "res1"}
+        {
+            "prefix": "p1",
+            "organisation": "org1",
+            "reference": "REF001",
+            "entity": "1000001",
+            "resource": "res1",
+        }
     ]
     mock_lookups.entity_num_gen = MagicMock()
     mock_lookups.entity_num_gen.state = {}
@@ -392,10 +446,7 @@ def test_assign_entity_numbers_creates_lookup_file(monkeypatch, tmp_path):
     monkeypatch.setattr("src.application.core.pipeline.Lookups", lambda x: mock_lookups)
 
     result = _assign_entity_numbers(
-        new_lookups,
-        str(pipeline_dir),
-        "test-dataset",
-        mock_spec
+        new_lookups, str(pipeline_dir), "test-dataset", mock_spec
     )
 
     assert len(result) == 1
@@ -413,14 +464,25 @@ def test_assign_entity_numbers_updates_existing_file(monkeypatch, tmp_path):
     lookup_file.write_text("prefix,resource,organisation,reference,entity\n")
 
     new_lookups = [
-        {"prefix": "p1", "organisation": "org1", "reference": "REF001", "resource": "res1"}
+        {
+            "prefix": "p1",
+            "organisation": "org1",
+            "reference": "REF001",
+            "resource": "res1",
+        }
     ]
 
     mock_lookups = MagicMock()
     mock_lookups.lookups_path = str(lookup_file)
     mock_lookups.get_max_entity.return_value = 1000005
     mock_lookups.save_csv.return_value = [
-        {"prefix": "p1", "organisation": "org1", "reference": "REF001", "entity": "1000006", "resource": "res1"}
+        {
+            "prefix": "p1",
+            "organisation": "org1",
+            "reference": "REF001",
+            "entity": "1000006",
+            "resource": "res1",
+        }
     ]
     mock_lookups.entity_num_gen = MagicMock()
     mock_lookups.entity_num_gen.state = {}
@@ -432,14 +494,11 @@ def test_assign_entity_numbers_updates_existing_file(monkeypatch, tmp_path):
     monkeypatch.setattr("src.application.core.pipeline.Lookups", lambda x: mock_lookups)
 
     result = _assign_entity_numbers(
-        new_lookups,
-        str(pipeline_dir),
-        "test-dataset",
-        mock_spec
+        new_lookups, str(pipeline_dir), "test-dataset", mock_spec
     )
 
     assert len(result) == 1
-    assert mock_lookups.entity_num_gen.state['current'] == 1000005
+    assert mock_lookups.entity_num_gen.state["current"] == 1000005
 
 
 def test_get_entities_breakdown_success():
@@ -450,15 +509,15 @@ def test_get_entities_breakdown_success():
             "prefix": "p1",
             "organisation": "org1",
             "reference": "REF001",
-            "resource": "res1"
+            "resource": "res1",
         },
         {
             "entity": "1000002",
             "prefix": "p1",
             "organisation": "org1",
             "reference": "REF002",
-            "resource": "res1"
-        }
+            "resource": "res1",
+        },
     ]
 
     result = _get_entities_breakdown(new_entities)
@@ -480,9 +539,7 @@ def test_get_entities_breakdown_empty_list():
 
 def test_get_entities_breakdown_missing_fields():
     """Test handling entities with missing fields"""
-    new_entities = [
-        {"entity": "1000001"}
-    ]
+    new_entities = [{"entity": "1000001"}]
 
     result = _get_entities_breakdown(new_entities)
 
@@ -496,7 +553,7 @@ def test_get_existing_entities_breakdown_success():
     """Test converting existing entities to simplified format"""
     existing_entities = [
         {"entity": "1000001", "reference": "REF001"},
-        {"entity": "1000002", "reference": "REF002"}
+        {"entity": "1000002", "reference": "REF002"},
     ]
 
     result = _get_existing_entities_breakdown(existing_entities)
@@ -513,7 +570,7 @@ def test_get_existing_entities_breakdown_removes_duplicates():
     existing_entities = [
         {"entity": "1000001", "reference": "REF001"},
         {"entity": "1000001", "reference": "REF001"},
-        {"entity": "1000002", "reference": "REF002"}
+        {"entity": "1000002", "reference": "REF002"},
     ]
 
     result = _get_existing_entities_breakdown(existing_entities)
@@ -533,7 +590,7 @@ def test_get_existing_entities_breakdown_filters_empty_values():
         {"entity": "1000001", "reference": "REF001"},
         {"entity": "", "reference": "REF002"},
         {"entity": "1000003", "reference": ""},
-        {"entity": "1000004", "reference": "REF004"}
+        {"entity": "1000004", "reference": "REF004"},
     ]
 
     result = _get_existing_entities_breakdown(existing_entities)
@@ -550,7 +607,9 @@ def test_validate_endpoint_creates_file(monkeypatch, tmp_path):
     url = "http://example.com/endpoint"
     endpoint_csv_path = pipeline_dir / "endpoint.csv"
 
-    def fake_append_endpoint(endpoint_csv_path, endpoint_url, entry_date, start_date, end_date):
+    def fake_append_endpoint(
+        endpoint_csv_path, endpoint_url, entry_date, start_date, end_date
+    ):
         return "endpoint_hash", {
             "endpoint": "endpoint_hash",
             "endpoint-url": endpoint_url,
@@ -558,10 +617,12 @@ def test_validate_endpoint_creates_file(monkeypatch, tmp_path):
             "plugin": "",
             "entry-date": entry_date,
             "start-date": start_date,
-            "end-date": end_date
+            "end-date": end_date,
         }
 
-    monkeypatch.setattr("src.application.core.pipeline.append_endpoint", fake_append_endpoint)
+    monkeypatch.setattr(
+        "src.application.core.pipeline.append_endpoint", fake_append_endpoint
+    )
 
     assert not endpoint_csv_path.exists()
 
@@ -569,10 +630,18 @@ def test_validate_endpoint_creates_file(monkeypatch, tmp_path):
 
     assert endpoint_csv_path.exists()
 
-    with open(endpoint_csv_path, 'r', encoding='utf-8') as f:
+    with open(endpoint_csv_path, "r", encoding="utf-8") as f:
         reader = csv.reader(f)
         headers = next(reader)
-        assert headers == ['endpoint', 'endpoint-url', 'parameters', 'plugin', 'entry-date', 'start-date', 'end-date']
+        assert headers == [
+            "endpoint",
+            "endpoint-url",
+            "parameters",
+            "plugin",
+            "entry-date",
+            "start-date",
+            "end-date",
+        ]
 
 
 def test_validate_endpoint_appends(monkeypatch, tmp_path):
@@ -583,20 +652,34 @@ def test_validate_endpoint_appends(monkeypatch, tmp_path):
     endpoint_csv_path = pipeline_dir / "endpoint.csv"
 
     with open(endpoint_csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=['endpoint', 'endpoint-url', 'parameters', 'plugin', 'entry-date',
-                                               'start-date', 'end-date'])
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "endpoint",
+                "endpoint-url",
+                "parameters",
+                "plugin",
+                "entry-date",
+                "start-date",
+                "end-date",
+            ],
+        )
         writer.writeheader()
-        writer.writerow({
-            "endpoint": "existing_hash",
-            "endpoint-url": "http://example.com/existing",
-            "parameters": "",
-            "plugin": "",
-            "entry-date": "2024-01-01T00:00:00",
-            "start-date": "2024-01-01",
-            "end-date": ""
-        })
+        writer.writerow(
+            {
+                "endpoint": "existing_hash",
+                "endpoint-url": "http://example.com/existing",
+                "parameters": "",
+                "plugin": "",
+                "entry-date": "2024-01-01T00:00:00",
+                "start-date": "2024-01-01",
+                "end-date": "",
+            }
+        )
 
-    def fake_append_endpoint(endpoint_csv_path, endpoint_url, entry_date, start_date, end_date):
+    def fake_append_endpoint(
+        endpoint_csv_path, endpoint_url, entry_date, start_date, end_date
+    ):
         return "new_endpoint_hash", {
             "endpoint": "new_endpoint_hash",
             "endpoint-url": endpoint_url,
@@ -604,10 +687,12 @@ def test_validate_endpoint_appends(monkeypatch, tmp_path):
             "plugin": "",
             "entry-date": entry_date,
             "start-date": start_date,
-            "end-date": end_date
+            "end-date": end_date,
         }
 
-    monkeypatch.setattr("src.application.core.pipeline.append_endpoint", fake_append_endpoint)
+    monkeypatch.setattr(
+        "src.application.core.pipeline.append_endpoint", fake_append_endpoint
+    )
 
     result = _validate_endpoint(url, str(pipeline_dir))
 
@@ -618,25 +703,40 @@ def test_validate_endpoint_appends(monkeypatch, tmp_path):
 
 
 def test_validate_endpoint_finds_existing(monkeypatch, tmp_path):
-
     pipeline_dir = tmp_path / "pipeline"
     pipeline_dir.mkdir()
     url = "http://example.com/endpoint"
     endpoint_csv_path = pipeline_dir / "endpoint.csv"
     with open(endpoint_csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=['endpoint', 'endpoint-url', 'parameters', 'plugin', 'entry-date', 'start-date', 'end-date'])
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "endpoint",
+                "endpoint-url",
+                "parameters",
+                "plugin",
+                "entry-date",
+                "start-date",
+                "end-date",
+            ],
+        )
         writer.writeheader()
-        writer.writerow({
-            "endpoint": "endpoint_hash",
-            "endpoint-url": url,
-            "parameters": "",
-            "plugin": "",
-            "entry-date": "2024-01-01",
-            "start-date": "2024-01-01",
-            "end-date": ""
-        })
+        writer.writerow(
+            {
+                "endpoint": "endpoint_hash",
+                "endpoint-url": url,
+                "parameters": "",
+                "plugin": "",
+                "entry-date": "2024-01-01",
+                "start-date": "2024-01-01",
+                "end-date": "",
+            }
+        )
 
-    monkeypatch.setattr("src.application.core.pipeline.append_endpoint", lambda *a, **kw: (_ for _ in ()).throw(Exception("Should not be called")))
+    monkeypatch.setattr(
+        "src.application.core.pipeline.append_endpoint",
+        lambda *a, **kw: (_ for _ in ()).throw(Exception("Should not be called")),
+    )
 
     result = _validate_endpoint(url, str(pipeline_dir))
     assert result["endpoint_url_in_endpoint_csv"] is True
@@ -661,9 +761,11 @@ def test_validate_endpoint_csv_read_error(monkeypatch, tmp_path):
     url = "http://example.com/endpoint"
 
     endpoint_csv_path = pipeline_dir / "endpoint.csv"
-    endpoint_csv_path.write_bytes(b'\x00\x00\x00')
+    endpoint_csv_path.write_bytes(b"\x00\x00\x00")
 
-    def fake_append_endpoint(endpoint_csv_path, endpoint_url, entry_date, start_date, end_date):
+    def fake_append_endpoint(
+        endpoint_csv_path, endpoint_url, entry_date, start_date, end_date
+    ):
         return "endpoint_hash", {
             "endpoint": "endpoint_hash",
             "endpoint-url": endpoint_url,
@@ -671,10 +773,12 @@ def test_validate_endpoint_csv_read_error(monkeypatch, tmp_path):
             "plugin": "",
             "entry-date": entry_date,
             "start-date": start_date,
-            "end-date": end_date
+            "end-date": end_date,
         }
 
-    monkeypatch.setattr("src.application.core.pipeline.append_endpoint", fake_append_endpoint)
+    monkeypatch.setattr(
+        "src.application.core.pipeline.append_endpoint", fake_append_endpoint
+    )
 
     result = _validate_endpoint(url, str(pipeline_dir))
 
@@ -694,14 +798,22 @@ def test_validate_source_creates_new_source(monkeypatch, tmp_path):
 
     endpoint_summary = {
         "endpoint_url_in_endpoint_csv": True,
-        "existing_endpoint_entry": {
-            "endpoint": "endpoint_hash_123"
-        }
+        "existing_endpoint_entry": {"endpoint": "endpoint_hash_123"},
     }
 
-    def fake_append_source(source_csv_path, collection, organisation, endpoint_key,
-                           attribution, documentation_url, licence, pipelines,
-                           entry_date, start_date, end_date):
+    def fake_append_source(
+        source_csv_path,
+        collection,
+        organisation,
+        endpoint_key,
+        attribution,
+        documentation_url,
+        licence,
+        pipelines,
+        entry_date,
+        start_date,
+        end_date,
+    ):
         return "source_hash_456", {
             "source": "source_hash_456",
             "attribution": attribution,
@@ -713,10 +825,12 @@ def test_validate_source_creates_new_source(monkeypatch, tmp_path):
             "pipelines": pipelines,
             "entry-date": entry_date,
             "start-date": start_date,
-            "end-date": end_date
+            "end-date": end_date,
         }
 
-    monkeypatch.setattr("src.application.core.pipeline.append_source", fake_append_source)
+    monkeypatch.setattr(
+        "src.application.core.pipeline.append_source", fake_append_source
+    )
 
     result = _validate_source(
         documentation_url,
@@ -724,7 +838,7 @@ def test_validate_source_creates_new_source(monkeypatch, tmp_path):
         collection,
         organisation,
         dataset,
-        endpoint_summary
+        endpoint_summary,
     )
 
     assert result["documentation_url_in_source_csv"] is False
@@ -748,35 +862,49 @@ def test_validate_source_finds_existing_source(monkeypatch, tmp_path):
 
     endpoint_summary = {
         "endpoint_url_in_endpoint_csv": True,
-        "existing_endpoint_entry": {
-            "endpoint": "endpoint_hash_123"
-        }
+        "existing_endpoint_entry": {"endpoint": "endpoint_hash_123"},
     }
 
-    with open(source_csv_path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=['source', 'attribution', 'collection',
-                                               'documentation-url', 'endpoint', 'licence',
-                                               'organisation', 'pipelines', 'entry-date',
-                                               'start-date', 'end-date'])
+    with open(source_csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "source",
+                "attribution",
+                "collection",
+                "documentation-url",
+                "endpoint",
+                "licence",
+                "organisation",
+                "pipelines",
+                "entry-date",
+                "start-date",
+                "end-date",
+            ],
+        )
         writer.writeheader()
-        writer.writerow({
-            "source": "existing_source_hash",
-            "attribution": "",
-            "collection": collection,
-            "documentation-url": documentation_url,
-            "endpoint": "endpoint_hash_123",
-            "licence": "",
-            "organisation": organisation,
-            "pipelines": dataset,
-            "entry-date": "2024-01-01T00:00:00",
-            "start-date": "2024-01-01",
-            "end-date": ""
-        })
+        writer.writerow(
+            {
+                "source": "existing_source_hash",
+                "attribution": "",
+                "collection": collection,
+                "documentation-url": documentation_url,
+                "endpoint": "endpoint_hash_123",
+                "licence": "",
+                "organisation": organisation,
+                "pipelines": dataset,
+                "entry-date": "2024-01-01T00:00:00",
+                "start-date": "2024-01-01",
+                "end-date": "",
+            }
+        )
 
     def fake_append_source(*args, **kwargs):
         return "existing_source_hash", None
 
-    monkeypatch.setattr("src.application.core.pipeline.append_source", fake_append_source)
+    monkeypatch.setattr(
+        "src.application.core.pipeline.append_source", fake_append_source
+    )
 
     result = _validate_source(
         documentation_url,
@@ -784,7 +912,7 @@ def test_validate_source_finds_existing_source(monkeypatch, tmp_path):
         collection,
         organisation,
         dataset,
-        endpoint_summary
+        endpoint_summary,
     )
 
     assert result["documentation_url_in_source_csv"] is True
@@ -811,7 +939,7 @@ def test_validate_source_no_endpoint_key(tmp_path):
         collection,
         organisation,
         dataset,
-        endpoint_summary
+        endpoint_summary,
     )
 
     assert result == {}
@@ -829,14 +957,22 @@ def test_validate_source_empty_documentation_url(monkeypatch, tmp_path):
 
     endpoint_summary = {
         "endpoint_url_in_endpoint_csv": True,
-        "existing_endpoint_entry": {
-            "endpoint": "endpoint_hash_123"
-        }
+        "existing_endpoint_entry": {"endpoint": "endpoint_hash_123"},
     }
 
-    def fake_append_source(source_csv_path, collection, organisation, endpoint_key,
-                           attribution, documentation_url, licence, pipelines,
-                           entry_date, start_date, end_date):
+    def fake_append_source(
+        source_csv_path,
+        collection,
+        organisation,
+        endpoint_key,
+        attribution,
+        documentation_url,
+        licence,
+        pipelines,
+        entry_date,
+        start_date,
+        end_date,
+    ):
         return "source_hash_456", {
             "source": "source_hash_456",
             "attribution": attribution,
@@ -848,10 +984,12 @@ def test_validate_source_empty_documentation_url(monkeypatch, tmp_path):
             "pipelines": pipelines,
             "entry-date": entry_date,
             "start-date": start_date,
-            "end-date": end_date
+            "end-date": end_date,
         }
 
-    monkeypatch.setattr("src.application.core.pipeline.append_source", fake_append_source)
+    monkeypatch.setattr(
+        "src.application.core.pipeline.append_source", fake_append_source
+    )
 
     result = _validate_source(
         documentation_url,
@@ -859,7 +997,7 @@ def test_validate_source_empty_documentation_url(monkeypatch, tmp_path):
         collection,
         organisation,
         dataset,
-        endpoint_summary
+        endpoint_summary,
     )
 
     assert "documentation_url_in_source_csv" in result
@@ -878,16 +1016,24 @@ def test_validate_source_uses_new_endpoint_entry(monkeypatch, tmp_path):
 
     endpoint_summary = {
         "endpoint_url_in_endpoint_csv": False,
-        "new_endpoint_entry": {
-            "endpoint": "new_endpoint_hash_789"
-        }
+        "new_endpoint_entry": {"endpoint": "new_endpoint_hash_789"},
     }
 
     captured_endpoint_key = None
 
-    def fake_append_source(source_csv_path, collection, organisation, endpoint_key,
-                           attribution, documentation_url, licence, pipelines,
-                           entry_date, start_date, end_date):
+    def fake_append_source(
+        source_csv_path,
+        collection,
+        organisation,
+        endpoint_key,
+        attribution,
+        documentation_url,
+        licence,
+        pipelines,
+        entry_date,
+        start_date,
+        end_date,
+    ):
         nonlocal captured_endpoint_key
         captured_endpoint_key = endpoint_key
         return "source_hash_456", {
@@ -901,10 +1047,12 @@ def test_validate_source_uses_new_endpoint_entry(monkeypatch, tmp_path):
             "pipelines": pipelines,
             "entry-date": entry_date,
             "start-date": start_date,
-            "end-date": end_date
+            "end-date": end_date,
         }
 
-    monkeypatch.setattr("src.application.core.pipeline.append_source", fake_append_source)
+    monkeypatch.setattr(
+        "src.application.core.pipeline.append_source", fake_append_source
+    )
 
     result = _validate_source(
         documentation_url,
@@ -912,7 +1060,7 @@ def test_validate_source_uses_new_endpoint_entry(monkeypatch, tmp_path):
         collection,
         organisation,
         dataset,
-        endpoint_summary
+        endpoint_summary,
     )
 
     assert captured_endpoint_key == "new_endpoint_hash_789"
@@ -932,17 +1080,17 @@ def test_validate_source_handles_csv_read_error(monkeypatch, tmp_path):
 
     endpoint_summary = {
         "endpoint_url_in_endpoint_csv": True,
-        "existing_endpoint_entry": {
-            "endpoint": "endpoint_hash_123"
-        }
+        "existing_endpoint_entry": {"endpoint": "endpoint_hash_123"},
     }
 
-    source_csv_path.write_bytes(b'\x00\x00\x00')
+    source_csv_path.write_bytes(b"\x00\x00\x00")
 
     def fake_append_source(*args, **kwargs):
         return "existing_source_hash", None
 
-    monkeypatch.setattr("src.application.core.pipeline.append_source", fake_append_source)
+    monkeypatch.setattr(
+        "src.application.core.pipeline.append_source", fake_append_source
+    )
 
     result = _validate_source(
         documentation_url,
@@ -950,7 +1098,7 @@ def test_validate_source_handles_csv_read_error(monkeypatch, tmp_path):
         collection,
         organisation,
         dataset,
-        endpoint_summary
+        endpoint_summary,
     )
 
     assert "documentation_url_in_source_csv" in result

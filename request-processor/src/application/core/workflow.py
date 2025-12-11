@@ -7,7 +7,11 @@ import yaml
 from urllib.error import HTTPError
 from application.core.utils import detect_encoding, extract_dataset_field_rows
 from application.logging.logger import get_logger
-from application.core.pipeline import fetch_response_data, resource_from_path, fetch_add_data_response
+from application.core.pipeline import (
+    fetch_response_data,
+    resource_from_path,
+    fetch_add_data_response,
+)
 from application.configurations.config import source_url, CONFIG_URL
 from collections import defaultdict
 import json
@@ -115,20 +119,18 @@ def run_workflow(
         logger.exception(f"An error occurred: {e}")
 
     finally:
-        # Seperate clean up for logs as Collector addds date folder
-        clean_up_logs(request_id, directories.COLLECTION_DIR + "log")
         clean_up(
             request_id,
-            directories.COLLECTION_DIR + "resource",
+            os.path.join(directories.COLLECTION_DIR, "resource"),
             directories.COLLECTION_DIR,
             directories.CONVERTED_DIR,
-            directories.ISSUE_DIR + dataset,
+            os.path.join(directories.ISSUE_DIR, dataset),
             directories.ISSUE_DIR,
             directories.COLUMN_FIELD_DIR,
-            directories.TRANSFORMED_DIR + dataset,
+            os.path.join(directories.TRANSFORMED_DIR, dataset),
             directories.TRANSFORMED_DIR,
             directories.DATASET_RESOURCE_DIR,
-            directories.PIPELINE_DIR + dataset,
+            os.path.join(directories.PIPELINE_DIR, dataset),
             directories.PIPELINE_DIR,
         )
 
@@ -263,40 +265,6 @@ def add_extra_column_mappings(
 #         logger.error(f"An error occurred during cleanup: {e}")
 
 
-def clean_up_logs(request_id, log_base_dir):
-    """
-    Clean up log folders with structure: log/{request-id}/date/resource-hash
-
-    This function is due to Collector class automatically creating log folders with a different structure to the rest of the process.
-    """
-    try:
-        log_base = Path(log_base_dir)
-
-        # Find all files(resource hashes) under the request_id/date and remove.
-        request_pattern = f"{request_id}/**/*"
-        all_files = list(log_base.glob(request_pattern))
-        for item in all_files:
-            if item.is_file():
-                item.unlink()
-
-        # Find all date directories under request_id (YYYY-MM-DD format) and remove
-        date_pattern = f"{request_id}/????-??-??"
-        date_dirs = list(log_base.glob(date_pattern))
-        for date_dir in sorted(date_dirs, reverse=True):
-            if date_dir.exists() and not any(date_dir.iterdir()):
-                date_dir.rmdir()
-
-        # Remove request_id and log base directory
-        request_dir = log_base / str(request_id)
-        if request_dir.exists() and not any(request_dir.iterdir()):
-            request_dir.rmdir()
-        if log_base.exists() and not any(log_base.iterdir()):
-            log_base.rmdir()
-
-    except Exception as e:
-        logger.error(f"An error occurred during log cleanup: {e}")
-
-
 def clean_up(request_id, *directories):
     try:
         for directory in directories:
@@ -315,7 +283,9 @@ def clean_up(request_id, *directories):
             if os.path.exists(directory) and not os.listdir(directory):
                 os.rmdir(directory)
     except Exception as e:
-        logger.error(f"An error occurred during cleanup: {e}")
+        logger.error(
+            f"An error occurred during cleanup of {directory}: {e}", exc_info=True
+        )
 
 
 def csv_to_json(csv_file):
@@ -447,7 +417,6 @@ def add_data_workflow(
     documentation_url,
     directories,
 ):
-
     pipeline_dir = os.path.join(directories.PIPELINE_DIR, collection, request_id)
     logger.info(f"pipeline_dir is : {pipeline_dir}")
     input_path = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
@@ -457,9 +426,17 @@ def add_data_workflow(
     fetch_csv = fetch_add_data_csvs(collection, pipeline_dir)
     logger.info(f"files fetched are : {fetch_csv}")
 
-    response_data = fetch_add_data_response(collection, dataset, organisation, pipeline_dir,
-                                            input_path, directories.SPECIFICATION_DIR,
-                                            directories.CACHE_DIR, url, documentation_url)
+    response_data = fetch_add_data_response(
+        collection,
+        dataset,
+        organisation,
+        pipeline_dir,
+        input_path,
+        directories.SPECIFICATION_DIR,
+        directories.CACHE_DIR,
+        url,
+        documentation_url,
+    )
     logger.info(f"add data response is : {response_data}")
 
     return response_data
@@ -467,7 +444,7 @@ def add_data_workflow(
 
 def fetch_add_data_csvs(collection, pipeline_dir):
     os.makedirs(pipeline_dir, exist_ok=True)
-    add_data_csvs = ["lookup.csv","endpoint.csv","source.csv"]
+    add_data_csvs = ["lookup.csv", "endpoint.csv", "source.csv"]
     fetched_files = []
     for csv_name in add_data_csvs:
         csv_path = os.path.join(pipeline_dir, csv_name)

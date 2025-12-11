@@ -85,34 +85,6 @@ def test_read_response_details_jsonpath_filters(
     assert response.headers["X-Pagination-Limit"] == str(expected_pglimit)
 
 
-def test_create_request_invalid_plugin(
-    db,
-    helpers,
-):
-    """Tests creating a request with an invalid plugin."""
-    invalid_request_data = {
-        "params": {
-            "type": "check_url",
-            "dataset": "article-4-direction-area",
-            "collection": "article-4-direction",
-            "url": "https://example.com/arcgis/rest/services/MapServer",
-            "plugin": "arcis",  # Invalid plugin name
-        }
-    }
-    response = client.post("/requests", json=invalid_request_data)
-
-    assert response.status_code == 422
-    error_detail = response.json()
-
-    assert "detail" in error_detail
-    assert len(error_detail["detail"]) > 0
-    error = error_detail["detail"][0]
-    assert error["type"] == "enum"
-    assert "plugin" in error["loc"]
-    assert "Input should be 'arcgis' or 'wfs'" in error["msg"]
-    assert error["input"] == "arcis"
-
-
 @pytest.fixture(scope="module")
 def create_test_request():
     test_request_model = models.Request(
