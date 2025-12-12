@@ -66,11 +66,11 @@ jobs:
 
       - run: docker build --build-arg DEPLOY_TIME="$(date +%Y-%m-%dT%H:%M:%S)" --build-arg GIT_COMMIT="${{ steps.vars.outputs.sha_short }}" -t $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} -f request-api/Dockerfile .
 
-      - run: docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:${GITHUB_REF_NAME}
+      - run: docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:main
 
       - run: docker push $DOCKER_REPO:${{ steps.vars.outputs.sha_short }}
 
-      - run: docker push $DOCKER_REPO:${GITHUB_REF_NAME}
+      - run: docker push $DOCKER_REPO:main
 
       - uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -119,11 +119,11 @@ jobs:
 
       - run: docker build --build-arg DEPLOY_TIME="$(date +%Y-%m-%dT%H:%M:%S)" --build-arg GIT_COMMIT="${{ steps.vars.outputs.sha_short }}" -t $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} -f request-processor/Dockerfile .
 
-      - run: docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:${GITHUB_REF_NAME}
+      - run: docker tag $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} $DOCKER_REPO:main
 
       - run: docker push $DOCKER_REPO:${{ steps.vars.outputs.sha_short }}
 
-      - run: docker push $DOCKER_REPO:${GITHUB_REF_NAME}
+      - run: docker push $DOCKER_REPO:main
 
       - uses: aws-actions/configure-aws-credentials@v1
         with:
