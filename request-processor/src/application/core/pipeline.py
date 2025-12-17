@@ -424,7 +424,7 @@ def _add_data_read_entities(resource_path, dataset, organisation, specification)
                     "prefix": dataset_prefix,
                     "organisation": organisation,
                     "reference": reference,
-                    "resource": Path(resource_path).stem,
+                    "resource": "",
                     "entity": "",
                 }
 
