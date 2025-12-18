@@ -1243,14 +1243,12 @@ def test_add_data_pipeline_returns_harmonised_path(monkeypatch, tmp_path):
     organisation_path = tmp_path / "organisation.csv"
     organisation_path.write_text("organisation,name\ntest-org,Test")
 
-    # Create harmonised file that the function will find
-    harmonised_dir = pipeline_dir / "harmonised"
-    harmonised_dir.mkdir(exist_ok=True)
-    harmonised_path = harmonised_dir / "test.csv"
-    harmonised_path.write_text("entity,reference\n1000001,REF001")
-
+    harmonised_path = "harmonised/test.csv"
+    
     def mock_run_pipeline(*args):
-        pass
+        os.makedirs(os.path.dirname(harmonised_path), exist_ok=True)
+        with open(harmonised_path, "w") as f:
+            f.write("entity,reference\n1000001,REF001")
 
     monkeypatch.setattr(
         "src.application.core.pipeline.run_pipeline", mock_run_pipeline
@@ -1262,19 +1260,26 @@ def test_add_data_pipeline_returns_harmonised_path(monkeypatch, tmp_path):
         "src.application.core.pipeline.Organisation", MagicMock()
     )
 
-    result = _add_data_pipeline(
-        resource_file_path=str(resource_file_path),
-        resource_name=resource_name,
-        pipeline_dir=str(pipeline_dir),
-        specification=mock_spec,
-        dataset="test-dataset",
-        pipeline=mock_pipeline,
-        organisation_path=str(organisation_path),
-    )
-    
-    assert result is not None
-    assert "harmonised" in result
-    assert result.endswith("test.csv")
+    # Change to tmp_path so relative paths work correctly
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        
+        result = _add_data_pipeline(
+            resource_file_path=str(resource_file_path),
+            resource_name=resource_name,
+            pipeline_dir=str(pipeline_dir),
+            specification=mock_spec,
+            dataset="test-dataset",
+            pipeline=mock_pipeline,
+            organisation_path=str(organisation_path),
+        )
+        
+        assert result is not None
+        assert "harmonised" in result
+        assert result.endswith("test.csv")
+    finally:
+        os.chdir(original_cwd)
 
 def test_add_data_phases_returns_correct_phase_list(tmp_path):
     """Test _add_data_phases returns proper list of pipeline phases"""
