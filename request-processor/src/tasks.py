@@ -480,39 +480,32 @@ def _fetch_resource(resource_dir, url):
     Raises CustomException and logs error if fetch fails.
     """
     Path(resource_dir).mkdir(parents=True, exist_ok=True)
-    collection_dir = Path(resource_dir).parent.parent
-    collector = Collector(collection_dir)
-    collector.resource_dir = Path(resource_dir)
+    collector = Collector(resource_dir=Path(resource_dir))
     plugins = [None, "arcgis", "wfs"]
-    last_status = None
+    content_type = None
 
     for plugin in plugins:
-        # collector.fetch() returns only FetchStatus
-        fetch_status = collector.fetch(url, plugin=plugin)
-        last_status = fetch_status
-
+        fetch_status, log = collector.fetch(url, plugin=plugin, refill_todays_logs=True)
+        log["fetch-status"] = fetch_status.name
+        if plugin is None:
+            content_type = log.get("response-headers", {}).get("content-type")
         if fetch_status == FetchStatus.OK:
+            log["plugin"] = plugin
             try:
                 file_name = next(reversed(list(collector.resource_dir.iterdir()))).name
-                log = {"fetch-status": fetch_status.name}
-                if plugin:
-                    log["plugin"] = plugin
                 return file_name, log
             except StopIteration:
                 raise CustomException(
                     {
                         "message": "No endpoint files found after successful fetch.",
-                        "fetch-status": fetch_status.name,
+                        **log,
                     }
                 )
-        # If failed, try next plugin
-        elif fetch_status == FetchStatus.FAILED:
-            continue
+        elif log.get("exception") or log.get("status", "").startswith("4"):
+            break
 
-    # All fetch attempts failed
-    error_detail = {
-        "message": "All fetch attempts failed",
-        "fetch-status": last_status.name if last_status else "UNKNOWN",
-        "endpoint-url": url,
-    }
+    # All fetch attempts failed - include content-type if available
+    error_detail = {"message": "All fetch attempts failed", **log}
+    if content_type:
+        error_detail["content-type"] = content_type
     raise CustomException(error_detail)
