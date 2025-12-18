@@ -6119,4 +6119,17 @@
         "start_date": "2001-11-15",
         "end_date": null
     }
+    {
+    "reference": "5120",
+    "name": "Victoria Park/Granville Road",
+    "document_url": "https://www.leicester.gov.uk/media/abcd1234/n4-5120.pdf",
+    "documentation_url": "https://data.leicester.gov.uk/explore/dataset/tree_preservation_order/table/?refine.reference=5120",
+    "notes": "Covers mature oak and beech trees along the park boundary",
+    "made_date": "2005-06-20",
+    "confirmed_date": "2005-09-01",
+    "entry_date": "2005-06-20",
+    "start_date": "2005-06-20",
+    "end_date": null
+}
+
 ]
