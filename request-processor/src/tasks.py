@@ -487,15 +487,8 @@ def _fetch_resource(resource_dir, url):
     last_status = None
 
     for plugin in plugins:
-        # collector.fetch() may return a tuple (FetchStatus, resource_hash) or just FetchStatus
-        fetch_result = collector.fetch(url, plugin=plugin)
-        
-        # Handle both tuple and single FetchStatus return types
-        if isinstance(fetch_result, tuple):
-            fetch_status = fetch_result[0]
-        else:
-            fetch_status = fetch_result
-            
+        # collector.fetch() returns only FetchStatus
+        fetch_status = collector.fetch(url, plugin=plugin)
         last_status = fetch_status
 
         if fetch_status == FetchStatus.OK:
@@ -512,9 +505,11 @@ def _fetch_resource(resource_dir, url):
                         "fetch-status": fetch_status.name,
                     }
                 )
+        # If failed, try next plugin
         elif fetch_status == FetchStatus.FAILED:
             continue
 
+    # All fetch attempts failed
     error_detail = {
         "message": "All fetch attempts failed",
         "fetch-status": last_status.name if last_status else "UNKNOWN",
