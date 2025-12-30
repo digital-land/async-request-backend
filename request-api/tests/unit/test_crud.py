@@ -1,6 +1,5 @@
 from unittest.mock import MagicMock
 
-import pytest
 from sqlalchemy.exc import ProgrammingError
 
 import crud
