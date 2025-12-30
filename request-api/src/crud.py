@@ -1,9 +1,13 @@
+import logging
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import ProgrammingError, DataError
 
 from pagination_model import PaginatedResult, PaginationParams
 from request_model import models
 from request_model import schemas
+
+logger = logging.getLogger(__name__)
 
 
 def get_request(db: Session, request_id: int):
@@ -26,12 +30,20 @@ def get_response_details(
             func.jsonb_path_match(models.ResponseDetails.detail, jsonpath)
         )
 
-    response_details = (
-        base_query.offset(pagination_params.offset).limit(pagination_params.limit).all()
-    )
+    try:
+        response_details = (
+            base_query.offset(pagination_params.offset).limit(pagination_params.limit).all()
+        )
+        total_results = base_query.count()
+    except (ProgrammingError, DataError) as e:
+        # jsonb_path_math can raise errors if the jsonpath is invalid
+        logger.warning("Invalid JSONPath expression '%s': %s", jsonpath, str(e))
+        response_details = []
+        total_results = 0
+    
     return PaginatedResult(
         params=pagination_params,
-        total_results_available=base_query.count(),
+        total_results_available=total_results,
         data=response_details,
     )
 
