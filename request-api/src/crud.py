@@ -32,7 +32,9 @@ def get_response_details(
 
     try:
         response_details = (
-            base_query.offset(pagination_params.offset).limit(pagination_params.limit).all()
+            base_query.offset(pagination_params.offset)
+            .limit(pagination_params.limit)
+            .all()
         )
         total_results = base_query.count()
     except (ProgrammingError, DataError) as e:
@@ -40,7 +42,7 @@ def get_response_details(
         logger.warning("Invalid JSONPath expression '%s': %s", jsonpath, str(e))
         response_details = []
         total_results = 0
-    
+
     return PaginatedResult(
         params=pagination_params,
         total_results_available=total_results,
