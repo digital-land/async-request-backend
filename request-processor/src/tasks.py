@@ -173,7 +173,6 @@ def check_dataurl(request: Dict, directories=None):
         logger.info(f"Fetched resource: file_name={file_name}")
 
     except CustomException as e:
-        logger.error(f"URL FETCH Error during _fetch_resource: {e}")
         # Track in Sentry for monitoring (not as error)
         _capture_sentry_event(
             e.detail,
@@ -227,7 +226,7 @@ def check_dataurl(request: Dict, directories=None):
             )
             save_response_to_db(request_schema.id, error_log)
     else:
-        logger.error("File could not be fetched from collector")
+        logger.info("File could not be fetched from collector")
         error_log = create_generic_error_log(
             url=request_data.url,
             exception="UnknownCollectionError",
