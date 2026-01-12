@@ -1,0 +1,57 @@
+{
+    "version": "0.2.0",
+    "python": "${workspaceFolder}/request-processor/.venv/bin/python",
+    "configurations": [
+        {
+            "name": "Debug Request Processor - Manual Task Trigger",
+            "type": "python",
+            "request": "launch",
+            "python": "${workspaceFolder}/request-processor/.venv/bin/python",
+            "program": "${workspaceFolder}/debug_trigger.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/request-processor/src:${workspaceFolder}/request-processor/.venv/src/digital-land:${workspaceFolder}/request_model:${workspaceFolder}/task_interface",
+                "DATABASE_URL": "postgresql://postgres:password@localhost:54320/request_database",
+                "CELERY_BROKER_URL": "redis://localhost:6379/0",
+                "AWS_ENDPOINT_URL": "http://localhost:4566",
+                "AWS_DEFAULT_REGION": "eu-west-2",
+                "AWS_ACCESS_KEY_ID": "example",
+                "AWS_SECRET_ACCESS_KEY": "example",
+                "REQUEST_FILES_BUCKET_NAME": "dluhc-data-platform-request-files-local",
+                "SENTRY_ENABLED": "false"
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Debug Request Processor - Celery Worker",
+            "type": "python",
+            "request": "launch",
+            "python": "${workspaceFolder}/request-processor/.venv/bin/python",
+            "program": "-m",
+            "args": [
+                "celery",
+                "-A",
+                "src.tasks",
+                "worker",
+                "--loglevel=debug",
+                "--concurrency=1"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/request-processor/src:${workspaceFolder}/request-processor/.venv/src/digital-land:${workspaceFolder}/request_model:${workspaceFolder}/task_interface",
+                "DATABASE_URL": "postgresql://postgres:password@localhost:54320/request_database",
+                "CELERY_BROKER_URL": "redis://localhost:6379/0",
+                "AWS_ENDPOINT_URL": "http://localhost:4566",
+                "AWS_DEFAULT_REGION": "eu-west-2",
+                "AWS_ACCESS_KEY_ID": "example",
+                "AWS_SECRET_ACCESS_KEY": "example",
+                "REQUEST_FILES_BUCKET_NAME": "dluhc-data-platform-request-files-local",
+                "SENTRY_ENABLED": "false"
+            },
+            "cwd": "${workspaceFolder}/request-processor"
+        }
+    ]
+}
