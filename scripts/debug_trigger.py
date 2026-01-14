@@ -13,9 +13,15 @@ import json
 import datetime
 from pathlib import Path
 
+# Import request-processor DB helpers now that paths/cwd are set
+import crud
+import database
+import request_model.models as request_models
+
 # Set up paths
-workspace_root = Path(__file__).parent
+workspace_root = Path(__file__).parent.parent
 request_processor_src = workspace_root / "request-processor" / "src"
+request_processor_root = workspace_root / "request-processor"
 request_model = workspace_root / "request_model"
 task_interface = workspace_root / "task_interface"
 
@@ -23,8 +29,41 @@ sys.path.insert(0, str(request_processor_src))
 sys.path.insert(0, str(request_model))
 sys.path.insert(0, str(task_interface))
 
-# Change to request-processor directory so relative imports work
-os.chdir(request_processor_src.parent)
+# Change to request-processor so relative paths (e.g. specification/, var/) resolve correctly
+os.chdir(request_processor_root)
+
+def ensure_request_exists(request_payload: dict) -> None:
+    """Upsert a row into the request table so the processor can write responses.
+
+    When calling tasks directly (not via Celery), the normal request-api flow that
+    creates the Request row does not run.
+    """
+
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError(
+            "DATABASE_URL is not set. Start the stack (or export DATABASE_URL) before running debug_trigger."
+        )
+
+    request_id = request_payload["id"]
+    db_session = database.session_maker()
+    with db_session() as session:
+        existing = crud.get_request(session, request_id)
+        if existing:
+            existing.status = request_payload.get("status", existing.status)
+            existing.type = request_payload.get("type", existing.type)
+            existing.params = request_payload.get("params", existing.params)
+        else:
+            session.add(
+                request_models.Request(
+                    id=request_id,
+                    status=request_payload.get("status", "PENDING"),
+                    type=request_payload.get("type"),
+                    params=request_payload.get("params"),
+                )
+            )
+        session.commit()
+
 
 # Now import the task (request-processor/src is on sys.path)
 from tasks import check_dataurl
@@ -76,6 +115,7 @@ print("Set breakpoint at line 99 in pipeline.py and resume execution.")
 print("=" * 80 + "\n")
 
 try:
+    ensure_request_exists(request_payload)
     # Call the task synchronously without Celery
     result = check_dataurl(request_payload, directories=json.dumps(directories_override))
     print("\n" + "=" * 80)

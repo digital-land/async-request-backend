@@ -1,56 +1,29 @@
-# Debug Setup Guide for Request Processor
+# Debug Setup Guide for Request Processor Checking of URL
 
 ### Prerequisites
 
-You need these services running locally (outside Docker):
-- PostgreSQL (or use Docker version with port 5432 exposed)
+You need these services running:
+- PostgreSQL (or use Docker version with port 54320 exposed)
 - Redis (for Celery broker) - or use Docker version with port 6379 exposed
 - LocalStack (for S3/SQS) - or use Docker version with port 4566 exposed
+- **Do Not** have the request-processor running.
 
-### Keep Docker Services Running (Recommended)
-
-Keep your Docker Compose stack running:
+Keep your Docker Compose stack running with:
 ```bash
 docker compose up -d localstack request-db redis
 ```
 
-Then you can use VS Code's debugger with the local Python environment.
+- Make sure to have .venv installed locally for request-processor, such that the launch.json is correctly pointing to it
 
-### Start Debugging
+### Start Debugging of CheckURL
 
-Click **"Run"** in VS Code Debug (the play icon) or press `F5`.
+Click **"Run"** in VS Code Debug
 
 The script will:
 1. Invoke the `check_dataurl` task directly (no Celery broker needed)
-2. Pass your POST request body payload
+2. Pass your POST request body payload <-- make sure to set the request_body variable to data you want to test in debug_trigger.py
 3. Pause at breakpoints you've set
-4. Display results when complete
 
-## What Services Are Needed for What
-
-| Service | Purpose | Docker Port | Local Port |
-|---------|---------|-------------|------------|
-| PostgreSQL | Store request/response data | 54320 | 5432 |
-| Redis | Celery message broker | 6379 | 6379 |
-| LocalStack | Mock AWS S3/SQS | 4566 | 4566 |
-
----
-
-## Using the Debug Script Standalone
-
-You can also run the debug script without VS Code's debugger:
-
-```bash
-cd /Users/matthewpoole1/DigitalLand/async-request-backend
-python debug_trigger.py
-```
-
-This will:
-1. Invoke the task synchronously
-2. Print the result or any errors
-3. NOT pause at breakpoints (unless you attach a debugger)
-
----
 
 ## Environment Variables
 

@@ -7,11 +7,11 @@
             "type": "python",
             "request": "launch",
             "python": "${workspaceFolder}/request-processor/.venv/bin/python",
-            "program": "${workspaceFolder}/debug_trigger.py",
+            "program": "${workspaceFolder}/scripts/debug_trigger.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/request-processor/src:${workspaceFolder}/request-processor/.venv/src/digital-land:${workspaceFolder}/request_model:${workspaceFolder}/task_interface",
+                "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/request-processor:${workspaceFolder}/request-processor/.venv/src/digital-land",
                 "DATABASE_URL": "postgresql://postgres:password@localhost:54320/request_database",
                 "CELERY_BROKER_URL": "redis://localhost:6379/0",
                 "AWS_ENDPOINT_URL": "http://localhost:4566",
@@ -22,7 +22,7 @@
                 "SENTRY_ENABLED": "false"
             },
             "args": [],
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}/request-processor"
         },
         {
             "name": "Debug Request Processor - Celery Worker",
@@ -41,7 +41,7 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/request-processor/src:${workspaceFolder}/request-processor/.venv/src/digital-land:${workspaceFolder}/request_model:${workspaceFolder}/task_interface",
+                "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/request-processor:${workspaceFolder}/request-processor/.venv/src/digital-land",
                 "DATABASE_URL": "postgresql://postgres:password@localhost:54320/request_database",
                 "CELERY_BROKER_URL": "redis://localhost:6379/0",
                 "AWS_ENDPOINT_URL": "http://localhost:4566",

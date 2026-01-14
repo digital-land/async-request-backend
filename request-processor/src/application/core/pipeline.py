@@ -91,9 +91,9 @@ def fetch_response_data(
             issue_log.add_severity_column(os.path.join(specification_dir, "issue-type.csv"))
             issue_log.save(os.path.join(issue_dir, dataset, request_id, resource + ".csv"))
             pipeline.save_logs(
-                column_field_dir=os.path.join(column_field_dir, dataset, request_id),
-                dataset_resource_dir=os.path.join(
-                    dataset_resource_dir, dataset, request_id
+                column_field_path=os.path.join(column_field_dir, dataset, request_id, resource + ".csv"),
+                dataset_resource_path=os.path.join(
+                    dataset_resource_dir, dataset, request_id, resource + ".csv"
                 ),
             )
         except Exception as err:

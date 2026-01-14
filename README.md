@@ -103,3 +103,7 @@ To include new dependencies, update the requirements.in file with the desired pa
     ```
 
 This ensures that your project accurately reflects its dependencies, including any transitive dependencies required by the newly added packages.
+
+## Debug
+
+Because this is a monorepo, debugging can be challenging. The primary approach is to review the logs for each sub‑repository through Docker. However, if you need to perform breakpoint debugging, a debug configuration is available under the .vscode/ folder, currently only set up for the request-processor service.
