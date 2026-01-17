@@ -6,12 +6,14 @@ from src.application.core.workflow import (
     fetch_pipeline_csvs,
     add_data_workflow,
     fetch_add_data_csvs,
+    run_workflow,
 )
 import csv
 import os
 from pathlib import Path
 import urllib
 from urllib.error import HTTPError
+import yaml
 
 
 @pytest.mark.parametrize(
@@ -484,3 +486,264 @@ def test_fetch_add_data_csvs_handles_http_error(monkeypatch, tmp_path):
 
     assert os.path.exists(pipeline_dir_str)
     assert files == []
+
+
+def test_run_workflow_success(monkeypatch, tmp_path):
+    """Test successful execution of run_workflow"""
+    file_name = "test.csv"
+    request_id = "req-001"
+    collection = "test-collection"
+    dataset = "test-dataset"
+    organisation = "test-org"
+    geom_type = ""
+    column_mapping = {}
+    
+    class DummyDirectories:
+        COLLECTION_DIR = str(tmp_path / "collection")
+        PIPELINE_DIR = str(tmp_path / "pipeline")
+        SPECIFICATION_DIR = str(tmp_path / "specification")
+        CONVERTED_DIR = str(tmp_path / "converted")
+        ISSUE_DIR = str(tmp_path / "issue")
+        COLUMN_FIELD_DIR = str(tmp_path / "column_field")
+        TRANSFORMED_DIR = str(tmp_path / "transformed")
+        DATASET_RESOURCE_DIR = str(tmp_path / "dataset_resource")
+        CACHE_DIR = str(tmp_path / "cache")
+    
+    directories = DummyDirectories()
+    
+    resource_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
+    os.makedirs(resource_dir, exist_ok=True)
+    
+    test_file = os.path.join(resource_dir, file_name)
+    with open(test_file, "w") as f:
+        f.write("reference,name\nREF001,Test1\n")
+    
+    converted_dir = os.path.join(directories.CONVERTED_DIR, request_id)
+    os.makedirs(converted_dir, exist_ok=True)
+    with open(os.path.join(converted_dir, "test.csv"), "w") as f:
+        f.write("reference,name\nREF001,Test1\n")
+    
+    issue_dir = os.path.join(directories.ISSUE_DIR, dataset, request_id)
+    os.makedirs(issue_dir, exist_ok=True)
+    with open(os.path.join(issue_dir, "test.csv"), "w") as f:
+        f.write("dataset,resource,line-number,entry-number,field,issue-type,value,severity,description,responsibility\n")
+    
+    column_field_dir = os.path.join(directories.COLUMN_FIELD_DIR, dataset, request_id)
+    os.makedirs(column_field_dir, exist_ok=True)
+    with open(os.path.join(column_field_dir, "test.csv"), "w") as f:
+        f.write("dataset,resource,column,field\n")
+    
+    transformed_dir = os.path.join(directories.TRANSFORMED_DIR, dataset, request_id)
+    os.makedirs(transformed_dir, exist_ok=True)
+    with open(os.path.join(transformed_dir, "test.csv"), "w") as f:
+        f.write("entity,reference\n1000001,REF001\n")
+    
+    required_fields_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        "../../../../src/application/configs/mandatory_fields.yaml",
+    )
+    os.makedirs(os.path.dirname(required_fields_path), exist_ok=True)
+    with open(required_fields_path, "w") as f:
+        yaml.dump({"test-dataset": ["reference"]}, f)
+    
+    monkeypatch.setattr(
+        "src.application.core.workflow.fetch_pipeline_csvs",
+        lambda *args, **kwargs: []
+    )
+    monkeypatch.setattr(
+        "src.application.core.workflow.fetch_response_data",
+        lambda *args, **kwargs: None
+    )
+    
+    result = run_workflow(
+        file_name,
+        request_id,
+        collection,
+        dataset,
+        organisation,
+        geom_type,
+        column_mapping,
+        directories,
+    )
+    
+    assert "converted-csv" in result
+    assert "issue-log" in result
+    assert "column-field-log" in result
+    assert "error-summary" in result
+    assert "transformed-csv" in result
+    assert len(result["converted-csv"]) == 1
+    assert result["converted-csv"][0]["reference"] == "REF001"
+
+
+def test_run_workflow_uses_collection_file_when_converted_missing(monkeypatch, tmp_path):
+    """Test run_workflow uses collection file when converted CSV doesn't exist (lines 86-90)"""
+    file_name = "test.csv"
+    request_id = "req-002"
+    collection = "test-collection"
+    dataset = "test-dataset"
+    organisation = "test-org"
+    geom_type = ""
+    column_mapping = {}
+    
+    class DummyDirectories:
+        COLLECTION_DIR = str(tmp_path / "collection")
+        PIPELINE_DIR = str(tmp_path / "pipeline")
+        SPECIFICATION_DIR = str(tmp_path / "specification")
+        CONVERTED_DIR = str(tmp_path / "converted")
+        ISSUE_DIR = str(tmp_path / "issue")
+        COLUMN_FIELD_DIR = str(tmp_path / "column_field")
+        TRANSFORMED_DIR = str(tmp_path / "transformed")
+        DATASET_RESOURCE_DIR = str(tmp_path / "dataset_resource")
+        CACHE_DIR = str(tmp_path / "cache")
+    
+    directories = DummyDirectories()
+    
+    resource_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
+    os.makedirs(resource_dir, exist_ok=True)
+    
+    test_file = os.path.join(resource_dir, file_name)
+    with open(test_file, "w") as f:
+        f.write("reference,name\nREF002,Test2\n")
+    
+
+    issue_dir = os.path.join(directories.ISSUE_DIR, dataset, request_id)
+    os.makedirs(issue_dir, exist_ok=True)
+    with open(os.path.join(issue_dir, "test.csv"), "w") as f:
+        f.write("dataset,resource,line-number,entry-number,field,issue-type,value,severity,description,responsibility\n")
+    
+    column_field_dir = os.path.join(directories.COLUMN_FIELD_DIR, dataset, request_id)
+    os.makedirs(column_field_dir, exist_ok=True)
+    with open(os.path.join(column_field_dir, "test.csv"), "w") as f:
+        f.write("dataset,resource,column,field\n")
+    
+    transformed_dir = os.path.join(directories.TRANSFORMED_DIR, dataset, request_id)
+    os.makedirs(transformed_dir, exist_ok=True)
+    with open(os.path.join(transformed_dir, "test.csv"), "w") as f:
+        f.write("entity,reference\n1000002,REF002\n")
+    
+    required_fields_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        "../../../../src/application/configs/mandatory_fields.yaml",
+    )
+    os.makedirs(os.path.dirname(required_fields_path), exist_ok=True)
+    with open(required_fields_path, "w") as f:
+        yaml.dump({"test-dataset": ["reference"]}, f)
+    
+    monkeypatch.setattr(
+        "src.application.core.workflow.fetch_pipeline_csvs",
+        lambda *args, **kwargs: []
+    )
+    monkeypatch.setattr(
+        "src.application.core.workflow.fetch_response_data",
+        lambda *args, **kwargs: None
+    )
+    
+    result = run_workflow(
+        file_name,
+        request_id,
+        collection,
+        dataset,
+        organisation,
+        geom_type,
+        column_mapping,
+        directories,
+    )
+    
+    assert "converted-csv" in result
+    assert isinstance(result["converted-csv"], list)
+
+
+def test_run_workflow_handles_exception(monkeypatch, tmp_path):
+    """Test run_workflow handles exceptions gracefully (line 119)"""
+    file_name = "test.csv"
+    request_id = "req-003"
+    collection = "test-collection"
+    dataset = "test-dataset"
+    organisation = "test-org"
+    geom_type = ""
+    column_mapping = {}
+    
+    class DummyDirectories:
+        COLLECTION_DIR = str(tmp_path / "collection")
+        PIPELINE_DIR = str(tmp_path / "pipeline")
+        SPECIFICATION_DIR = str(tmp_path / "specification")
+        CONVERTED_DIR = str(tmp_path / "converted")
+        ISSUE_DIR = str(tmp_path / "issue")
+        COLUMN_FIELD_DIR = str(tmp_path / "column_field")
+        TRANSFORMED_DIR = str(tmp_path / "transformed")
+        DATASET_RESOURCE_DIR = str(tmp_path / "dataset_resource")
+        CACHE_DIR = str(tmp_path / "cache")
+    
+    directories = DummyDirectories()
+    
+
+    resource_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
+    os.makedirs(resource_dir, exist_ok=True)
+    test_file = os.path.join(resource_dir, file_name)
+    with open(test_file, "w") as f:
+        f.write("reference\nREF003\n")
+    
+    def raise_exception(*args, **kwargs):
+        raise RuntimeError("Simulated pipeline error")
+    
+    monkeypatch.setattr(
+        "src.application.core.workflow.fetch_pipeline_csvs",
+        raise_exception
+    )
+    
+    result = run_workflow(
+        file_name,
+        request_id,
+        collection,
+        dataset,
+        organisation,
+        geom_type,
+        column_mapping,
+        directories,
+    )
+    
+    assert result == {}
+
+
+def test_fetch_pipeline_csvs_with_column_mapping_exception(monkeypatch, tmp_path):
+    """Test fetch_pipeline_csvs handles exception in add_extra_column_mappings (lines 197-198)"""
+    collection = "test-collection"
+    dataset = "test-dataset"
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+    geom_type = ""
+    column_mapping = {"col1": "field1"}
+    resource = "test"
+    specification_dir = str(tmp_path / "specification")
+    
+    column_csv = pipeline_dir / "column.csv"
+    column_csv.write_text("dataset,resource,column,field\n")
+    
+    monkeypatch.setattr(
+        "src.application.core.workflow.CONFIG_URL", "http://example.com/config/"
+    )
+    
+    def mock_urlretrieve(url, path):
+        with open(path, "w") as f:
+            f.write("dataset,resource,column,field\n")
+    
+    def raise_exception(*args, **kwargs):
+        raise ValueError("Mapping error")
+    
+    monkeypatch.setattr("urllib.request.urlretrieve", mock_urlretrieve)
+    monkeypatch.setattr(
+        "src.application.core.workflow.add_extra_column_mappings",
+        raise_exception
+    )
+    
+    result = fetch_pipeline_csvs(
+        collection,
+        dataset,
+        str(pipeline_dir),
+        geom_type,
+        column_mapping,
+        resource,
+        specification_dir,
+    )
+    
+    assert result == {}
