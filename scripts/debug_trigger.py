@@ -13,11 +13,6 @@ import json
 import datetime
 from pathlib import Path
 
-# Import request-processor DB helpers now that paths/cwd are set
-import crud
-import database
-import request_model.models as request_models
-
 # Set up paths
 workspace_root = Path(__file__).parent.parent
 request_processor_src = workspace_root / "request-processor" / "src"
@@ -28,6 +23,11 @@ task_interface = workspace_root / "task_interface"
 sys.path.insert(0, str(request_processor_src))
 sys.path.insert(0, str(request_model))
 sys.path.insert(0, str(task_interface))
+
+# Import request-processor DB helpers now that paths/cwd are set
+import crud
+import database
+import request_model.models as request_models
 
 # Change to request-processor so relative paths (e.g. specification/, var/) resolve correctly
 os.chdir(request_processor_root)
@@ -95,11 +95,12 @@ request_payload = {
     "response": None,
     "params": {
         "type": "check_url",
-        "dataset": "article-4-direction-area",
+        "organisationName": "London Borough of Hackney",
+        "dataset": "article-4-direction",
         "collection": "article-4-direction",
         "column_mapping": None,
         "geom_type": None,
-        "url": "https://mapping.canterbury.gov.uk/arcgis/rest/services/External/Planning_Constraints_New/MapServer/6/query?where=1%3D1&text=&objectIds=&time=&geometry=&geometryType=esriGeometryPolygon&inSR=&spatialRel=esriSpatialRelIntersects&relationParam=&outFields=*&returnGeometry=true&returnTrueCurves=false&maxAllowableOffset=&geometryPrecision=&outSR=&returnIdsOnly=false&returnCountOnly=false&orderByFields=&groupByFieldsForStatistics=&outStatistics=&returnZ=false&returnM=false&gdbVersion=&returnDistinctValues=false&resultOffset=&resultRecordCount=&queryByDistance=&returnExtentsOnly=false&datumTransformation=&parameterValues=&rangeValues=&f=geojson"
+        "url": "https://map2.hackney.gov.uk/geoserver/ows?service=WFS&version=2.0&request=GetFeature&outputFormat=application/json&SrsName=EPSG:4326&typeName=planning:lldc_hackney_conservation_area"
     }
 }
 
