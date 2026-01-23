@@ -412,37 +412,54 @@ def add_data_workflow(
     request_id,
     collection,
     dataset,
-    organisation,
+    organisation_provider,
     url,
     documentation_url,
     directories,
 ):
+    """
+    Setup directories and download required CSVs to manage add-data pipeline, then invoke fetch_add_data_response.
+    
+    Args:
+        file_name (str): Collection resource file name
+        request_id (str): Unique request identifier
+        collection (str): Collection name (e.g. 'article-4-direction')
+        dataset (str): Dataset name (e.g. 'article-4-direction-area')
+        organisation_provider (str): Organisation code providing the data
+        url (str): Endpoint URL to fetch data from
+        documentation_url (str): Documentation URL for the dataset
+        directories (Directories): Directories object with required paths
+    """
+
     pipeline_dir = os.path.join(directories.PIPELINE_DIR, collection, request_id)
-    logger.info(f"pipeline_dir is : {pipeline_dir}")
-    input_path = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
-    file_path = os.path.join(input_path, file_name)
-    resource = resource_from_path(file_path)
-    logger.info(f"resource is : {resource}")
-    fetch_csv = fetch_add_data_csvs(collection, pipeline_dir)
-    logger.info(f"files fetched are : {fetch_csv}")
+    input_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
+    output_path = os.path.join(directories.TRANSFORMED_DIR, request_id, file_name)
+    if not os.path.exists(output_path):
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    fetch_add_data_csvs(collection, pipeline_dir)
 
     response_data = fetch_add_data_response(
-        collection,
-        dataset,
-        organisation,
-        pipeline_dir,
-        input_path,
-        directories.SPECIFICATION_DIR,
-        directories.CACHE_DIR,
-        url,
-        documentation_url,
+        collection=collection,
+        dataset=dataset,
+        organisation_provider=organisation_provider,
+        pipeline_dir=pipeline_dir,
+        input_dir=input_dir,
+        output_path=output_path,
+        specification_dir=directories.SPECIFICATION_DIR,
+        cache_dir=directories.CACHE_DIR,
+        url=url,
+        documentation_url=documentation_url,
     )
-    logger.info(f"add data response is : {response_data}")
+    logger.info(f"add data response is for id {request_id} : {response_data}")
+
+    # TODO: Clean up directories if needed
 
     return response_data
 
 
 def fetch_add_data_csvs(collection, pipeline_dir):
+    """Download add-data pipeline CSVs (lookup, endpoint, source) into pipeline_dir and ensure organisation """
     os.makedirs(pipeline_dir, exist_ok=True)
     add_data_csvs = ["lookup.csv", "endpoint.csv", "source.csv"]
     fetched_files = []

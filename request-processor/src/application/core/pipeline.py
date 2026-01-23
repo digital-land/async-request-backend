@@ -3,6 +3,8 @@ import csv
 from application.logging.logger import get_logger
 from digital_land.specification import Specification
 from digital_land.organisation import Organisation
+from digital_land.api import API
+from collections import defaultdict
 
 from digital_land.pipeline import Pipeline, Lookups
 from digital_land.commands import get_resource_unidentified_lookups
@@ -110,7 +112,7 @@ def default_output_path(command, input_path):
 
 
 def assign_entries(
-    resource_path, dataset, organisation, pipeline_dir, specification, cache_dir
+    resource_path, dataset, organisation, pipeline_dir, specification, cache_dir, endpoints=None
 ):
     pipeline = Pipeline(pipeline_dir, dataset)
     resource_lookups = get_resource_unidentified_lookups(
@@ -120,6 +122,7 @@ def assign_entries(
         pipeline=pipeline,
         specification=specification,
         org_csv_path=f"{cache_dir}/organisation.csv",
+        endpoints=endpoints,
     )
 
     unassigned_entries = []
@@ -135,9 +138,13 @@ def assign_entries(
             )
 
     lookups.load_csv()
+    
+    # Track which entries are new by checking before adding
+    new_entries_added = []
     for new_lookup in unassigned_entries:
         for idx, entry in enumerate(new_lookup):
             lookups.add_entry(entry[0])
+            new_entries_added.append(entry[0])
 
     # save edited csvs
     max_entity_num = lookups.get_max_entity(pipeline.name, specification)
@@ -149,66 +156,97 @@ def assign_entries(
         dataset
     )
 
-    lookups.save_csv()
+    newly_assigned = lookups.save_csv()
+    
+    # Filter to return only the entries we just added
+    if newly_assigned:
+        new_lookups = [
+            lookup for lookup in newly_assigned
+            if any(
+                lookup.get("reference") == entry.get("reference") 
+                and lookup.get("organisation") == entry.get("organisation")
+                for entry in new_entries_added
+            )
+        ]
+        return new_lookups
+    
+    return []
 
 
 def fetch_add_data_response(
     collection,
     dataset,
-    organisation,
+    organisation_provider,
     pipeline_dir,
-    input_path,
+    input_dir,
+    output_path,
     specification_dir,
     cache_dir,
     url,
     documentation_url,
 ):
-    try:
+    try:            
         specification = Specification(specification_dir)
+        pipeline = Pipeline(pipeline_dir, dataset, specification=specification)
+        organisation = Organisation(os.path.join(cache_dir, "organisation.csv"), Path(pipeline.path))
+        api = API(specification=specification)
 
-        if not os.path.exists(input_path):
-            error_msg = f"Input path does not exist: {input_path}"
-            logger.error(f"ERROR: {error_msg}")
-            raise FileNotFoundError(error_msg)
+        # TODO: Need to load config class
+        valid_category_values = api.get_valid_category_values(dataset, pipeline)   
 
-        files_in_resource = os.listdir(input_path)
-        logger.info(f"Total files: {len(files_in_resource)}")
+        files_in_resource = os.listdir(input_dir)
 
-        new_entities = []
         existing_entities = []
-        lookup_path = os.path.join(pipeline_dir, "lookup.csv")
+        new_entities = []
 
         for idx, resource_file in enumerate(files_in_resource):
-            resource_file_path = os.path.join(input_path, resource_file)
+            resource_file_path = os.path.join(input_dir, resource_file)
             logger.info(
                 f"Processing file {idx + 1}/{len(files_in_resource)}: {resource_file}"
             )
             try:
-                unidentified_lookups = _add_data_read_entities(
-                    resource_file_path, dataset, organisation, specification
+                # Try add data with pipeline transform to see if no entities found
+                issues_log = pipeline.transform(
+                    input_path=resource_file_path,
+                    output_path=output_path,
+                    organisation=organisation,
+                    organisations=[organisation_provider],
+                    resource=resource_from_path(resource_file_path),
+                    valid_category_values = valid_category_values,
+                    disable_lookups=False,
                 )
 
-                if not unidentified_lookups:
-                    logger.info(f"No references found in {resource_file}")
-                    continue
-
-                new_lookups, existing_lookups = _check_existing_entities(
-                    unidentified_lookups, lookup_path
-                )
-                existing_entities.extend(existing_lookups)
-
-                if not new_lookups:
-                    logger.info(f"All lookups already exist for {resource_file}")
-                    continue
-
-                newly_assigned = _assign_entity_numbers(
-                    new_lookups, pipeline_dir, dataset, specification
+                existing_entities.extend(
+                    _map_existing_entities_from_transformed_csv(output_path, pipeline_dir)
                 )
 
-                new_entities.extend(newly_assigned)
-                logger.info(
-                    f"Assigned {len(newly_assigned)} new entities for {resource_file}"
+                # Check if there are unknown entity issues in the log
+                unknown_issue_types = {'unknown entity', 'unknown entity - missing reference'}
+                has_unknown = any(
+                    row.get('issue-type') in unknown_issue_types
+                    for row in issues_log.rows
+                    if isinstance(row, dict)
                 )
+
+                if has_unknown:
+                    new_lookups = assign_entries(
+                        resource_path=resource_file_path,
+                        dataset=dataset,
+                        organisation=organisation_provider,
+                        pipeline_dir=pipeline_dir,
+                        specification=specification,
+                        cache_dir=cache_dir,
+                        endpoints=[url] if url else None,
+                    )
+                    logger.info(
+                        f"Found {len(new_lookups)} unidentified lookups in {resource_file}"
+                    )
+                    new_entities.extend(new_lookups)
+                else:
+                    logger.info(f"No unidentified lookups found in {resource_file}")
+
+                
+                # TODO: Re-run to see if no unidentified lookups remain
 
             except Exception as err:
                 logger.error(f"Error processing {resource_file}: {err}")
@@ -227,7 +265,7 @@ def fetch_add_data_response(
             documentation_url,
             pipeline_dir,
             collection,
-            organisation,
+            organisation_provider,
             dataset,
             endpoint_summary,
         )
@@ -253,123 +291,6 @@ def fetch_add_data_response(
     except Exception as e:
         logger.exception(f"Unexpected error: {e}")
         raise
-
-
-def _add_data_read_entities(resource_path, dataset, organisation, specification):
-    unidentified_lookups = []
-    dataset_prefix = specification.dataset_prefix(dataset)
-
-    try:
-        with open(resource_path, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-
-            for idx, row in enumerate(reader, start=1):
-                reference = row.get("reference", "").strip()
-
-                if not reference:
-                    logger.warning(f"Row {idx} has no reference, skipping")
-                    continue
-
-                lookup_entry = {
-                    "prefix": dataset_prefix,
-                    "organisation": organisation,
-                    "reference": reference,
-                    "resource": Path(resource_path).stem,
-                    "entity": "",
-                }
-
-                unidentified_lookups.append(lookup_entry)
-
-        logger.info(f"Found {len(unidentified_lookups)} references")
-
-    except Exception as e:
-        logger.error(f"Error reading resource: {e}")
-        raise
-
-    return unidentified_lookups
-
-
-def _check_existing_entities(unidentified_lookups, lookup_path):
-    """
-    Check which lookups already exist in lookup file
-    """
-    existing_lookup_map = {}
-
-    if os.path.exists(lookup_path):
-        try:
-            with open(lookup_path, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-
-                for row in reader:
-                    prefix = row.get("prefix", "").strip()
-                    org = row.get("organisation", "").strip()
-                    ref = row.get("reference", "").strip()
-                    entity = row.get("entity", "").strip()
-
-                    if prefix and org and ref and entity:
-                        key = f"{prefix},{org},{ref}"
-                        existing_lookup_map[key] = {"entity": entity, "reference": ref}
-
-        except Exception as e:
-            logger.error(f"Error reading lookup file: {e}")
-    else:
-        logger.info("lookup file does not exist yet")
-
-    new_lookups = []
-    existing_lookups = []
-    for lookup in unidentified_lookups:
-        key = f"{lookup['prefix']},{lookup['organisation']},{lookup['reference']}"
-
-        if key in existing_lookup_map:
-            existing_lookups.append(existing_lookup_map[key])
-        else:
-            new_lookups.append(lookup)
-
-    logger.info(
-        f"Found {len(new_lookups)} new lookups and {len(existing_lookups)} existing lookups"
-    )
-
-    return new_lookups, existing_lookups
-
-
-def _assign_entity_numbers(new_lookups, pipeline_dir, dataset, specification):
-    """
-    Assign entity numbers to new lookup entries and save to lookup file
-    """
-
-    lookups = Lookups(pipeline_dir)
-
-    if not os.path.exists(lookups.lookups_path):
-        os.makedirs(os.path.dirname(lookups.lookups_path), exist_ok=True)
-        with open(lookups.lookups_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(
-                ["prefix", "resource", "organisation", "reference", "entity"]
-            )
-
-    lookups.load_csv()
-
-    for lookup in new_lookups:
-        lookups.add_entry(lookup)
-
-    max_entity_num = lookups.get_max_entity(dataset, specification)
-    logger.info(f"Max existing entity: {max_entity_num}")
-
-    lookups.entity_num_gen.state["current"] = max_entity_num
-    lookups.entity_num_gen.state["range_max"] = specification.get_dataset_entity_max(
-        dataset
-    )
-    lookups.entity_num_gen.state["range_min"] = specification.get_dataset_entity_min(
-        dataset
-    )
-
-    logger.info(
-        f"Entity range: {lookups.entity_num_gen.state['range_min']} - {lookups.entity_num_gen.state['range_max']}"
-    )
-
-    newly_assigned = lookups.save_csv()
-
-    return newly_assigned
 
 
 def _get_entities_breakdown(new_entities):
@@ -416,6 +337,59 @@ def _get_existing_entities_breakdown(existing_entities):
 
     breakdown = list(unique_entities.values())
     return breakdown
+
+
+def _map_existing_entities_from_transformed_csv(transformed_csv_path, pipeline_dir):
+    """Extract unique entities from transformed CSV and lookup their details in lookup.csv."""
+
+    mapped_entities = []
+    
+    if not os.path.exists(transformed_csv_path):
+        logger.warning(f"Transformed CSV not found: {transformed_csv_path}")
+        return mapped_entities
+
+    # Extract unique entity values from transformed CSV
+    unique_entities = set()
+    try:
+        with open(transformed_csv_path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                entity_val = row.get("entity", "").strip()
+                if entity_val:  # Skip empty entities
+                    unique_entities.add(entity_val)
+    except Exception as e:
+        logger.error(f"Error reading transformed CSV: {e}")
+        return mapped_entities
+
+    if not unique_entities:
+        return mapped_entities
+
+    # Load lookup.csv to get entity details
+    lookup_path = os.path.join(pipeline_dir, "lookup.csv")
+    if not os.path.exists(lookup_path):
+        logger.warning(f"Lookup CSV not found: {lookup_path}")
+        return mapped_entities
+
+    entity_lookup_map = {}
+    with open(lookup_path, "r", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            entity_lookup_map[str(row.get("entity", ""))] = row
+
+    # Map entities to their full details
+    for entity_id in unique_entities:
+        row = entity_lookup_map.get(entity_id, {})
+        if row:  # Only add if found in lookup
+            mapped_entities.append(
+                {
+                    "entity": entity_id,
+                    "reference": row.get("reference", ""),
+                    "prefix": row.get("prefix", ""),
+                    "resource": row.get("resource", ""),
+                    "organisation": row.get("organisation", ""),
+                }
+            )
+
+    return mapped_entities
 
 
 def _validate_endpoint(url, pipeline_dir):
