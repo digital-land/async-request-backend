@@ -4,11 +4,9 @@ from application.logging.logger import get_logger
 from digital_land.specification import Specification
 from digital_land.organisation import Organisation
 from digital_land.api import API
-from collections import defaultdict
 
 from digital_land.pipeline import Pipeline, Lookups
 from digital_land.commands import get_resource_unidentified_lookups
-from digital_land.api import API
 from application.core.utils import append_endpoint, append_source
 from datetime import datetime
 from pathlib import Path
@@ -83,17 +81,27 @@ def fetch_response_data(
                 output_path=os.path.join(
                     transformed_dir, dataset, request_id, f"{resource}.csv"
                 ),
-                organisation=Organisation(os.path.join(cache_dir, "organisation.csv"), Path(pipeline.path)),
+                organisation=Organisation(
+                    os.path.join(cache_dir, "organisation.csv"), Path(pipeline.path)
+                ),
                 resource=resource,
-                valid_category_values = api.get_valid_category_values(dataset, pipeline),
-                converted_path=os.path.join(converted_dir, request_id, f"{resource}.csv"),
+                valid_category_values=api.get_valid_category_values(dataset, pipeline),
+                converted_path=os.path.join(
+                    converted_dir, request_id, f"{resource}.csv"
+                ),
                 disable_lookups=True,
             )
             # Issue log needs severity column added, so manually added and saved here
-            issue_log.add_severity_column(os.path.join(specification_dir, "issue-type.csv"))
-            issue_log.save(os.path.join(issue_dir, dataset, request_id, resource + ".csv"))
+            issue_log.add_severity_column(
+                os.path.join(specification_dir, "issue-type.csv")
+            )
+            issue_log.save(
+                os.path.join(issue_dir, dataset, request_id, resource + ".csv")
+            )
             pipeline.save_logs(
-                column_field_path=os.path.join(column_field_dir, dataset, request_id, resource + ".csv"),
+                column_field_path=os.path.join(
+                    column_field_dir, dataset, request_id, resource + ".csv"
+                ),
                 dataset_resource_path=os.path.join(
                     dataset_resource_dir, dataset, request_id, resource + ".csv"
                 ),
@@ -112,7 +120,13 @@ def default_output_path(command, input_path):
 
 
 def assign_entries(
-    resource_path, dataset, organisation, pipeline_dir, specification, cache_dir, endpoints=None
+    resource_path,
+    dataset,
+    organisation,
+    pipeline_dir,
+    specification,
+    cache_dir,
+    endpoints=None,
 ):
     pipeline = Pipeline(pipeline_dir, dataset)
     resource_lookups = get_resource_unidentified_lookups(
@@ -138,7 +152,7 @@ def assign_entries(
             )
 
     lookups.load_csv()
-    
+
     # Track which entries are new by checking before adding
     new_entries_added = []
     for new_lookup in unassigned_entries:
@@ -157,19 +171,20 @@ def assign_entries(
     )
 
     newly_assigned = lookups.save_csv()
-    
+
     # Filter to return only the entries we just added
     if newly_assigned:
         new_lookups = [
-            lookup for lookup in newly_assigned
+            lookup
+            for lookup in newly_assigned
             if any(
-                lookup.get("reference") == entry.get("reference") 
+                lookup.get("reference") == entry.get("reference")
                 and lookup.get("organisation") == entry.get("organisation")
                 for entry in new_entries_added
             )
         ]
         return new_lookups
-    
+
     return []
 
 
@@ -185,15 +200,17 @@ def fetch_add_data_response(
     url,
     documentation_url,
 ):
-    try:            
+    try:
         specification = Specification(specification_dir)
         pipeline = Pipeline(pipeline_dir, dataset, specification=specification)
-        organisation = Organisation(os.path.join(cache_dir, "organisation.csv"), Path(pipeline.path))
+        organisation = Organisation(
+            os.path.join(cache_dir, "organisation.csv"), Path(pipeline.path)
+        )
         api = API(specification=specification)
 
         # TODO: Need to load config class for correct transform?
         # TODO: Handling of column mapping?
-        valid_category_values = api.get_valid_category_values(dataset, pipeline)   
+        valid_category_values = api.get_valid_category_values(dataset, pipeline)
 
         files_in_resource = os.listdir(input_dir)
 
@@ -213,18 +230,21 @@ def fetch_add_data_response(
                     organisation=organisation,
                     organisations=[organisation_provider],
                     resource=resource_from_path(resource_file_path),
-                    valid_category_values = valid_category_values,
+                    valid_category_values=valid_category_values,
                     disable_lookups=False,
                 )
 
                 existing_entities.extend(
-                    _map_existing_entities_from_transformed_csv(output_path, pipeline_dir)
+                    _map_transformed_entities(output_path, pipeline_dir)
                 )
 
                 # Check if there are unknown entity issues in the log
-                unknown_issue_types = {'unknown entity', 'unknown entity - missing reference'}
+                unknown_issue_types = {
+                    "unknown entity",
+                    "unknown entity - missing reference",
+                }
                 has_unknown = any(
-                    row.get('issue-type') in unknown_issue_types
+                    row.get("issue-type") in unknown_issue_types
                     for row in issues_log.rows
                     if isinstance(row, dict)
                 )
@@ -246,8 +266,7 @@ def fetch_add_data_response(
                 else:
                     logger.info(f"No unidentified lookups found in {resource_file}")
 
-                
-                # TODO: Re-run to see if no unidentified lookups remain and if so create an error summary for add data command
+                # TODO: Re-run to see if no unidentified remain, if so new add data error summary
 
             except Exception as err:
                 logger.error(f"Error processing {resource_file}: {err}")
@@ -340,11 +359,11 @@ def _get_existing_entities_breakdown(existing_entities):
     return breakdown
 
 
-def _map_existing_entities_from_transformed_csv(transformed_csv_path, pipeline_dir):
+def _map_transformed_entities(transformed_csv_path, pipeline_dir):  # noqa: C901
     """Extract unique entities from transformed CSV and lookup their details in lookup.csv."""
 
     mapped_entities = []
-    
+
     if not os.path.exists(transformed_csv_path):
         logger.warning(f"Transformed CSV not found: {transformed_csv_path}")
         return mapped_entities

@@ -61,12 +61,8 @@ def test_fetch_add_data_response_success(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "src.application.core.pipeline.Lookups", lambda x: mock_lookups_instance
     )
-    monkeypatch.setattr(
-        "src.application.core.pipeline.Pipeline", MagicMock()
-    )
-    monkeypatch.setattr(
-        "src.application.core.pipeline.Organisation", MagicMock()
-    )
+    monkeypatch.setattr("src.application.core.pipeline.Pipeline", MagicMock())
+    monkeypatch.setattr("src.application.core.pipeline.Organisation", MagicMock())
     monkeypatch.setattr(
         "src.application.core.pipeline._validate_endpoint",
         lambda url, dir: {"endpoint_url_in_endpoint_csv": True},
@@ -113,12 +109,8 @@ def test_fetch_add_data_response_no_files(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "src.application.core.pipeline.Specification", lambda x: mock_spec
     )
-    monkeypatch.setattr(
-        "src.application.core.pipeline.Pipeline", MagicMock()
-    )
-    monkeypatch.setattr(
-        "src.application.core.pipeline.Organisation", MagicMock()
-    )
+    monkeypatch.setattr("src.application.core.pipeline.Pipeline", MagicMock())
+    monkeypatch.setattr("src.application.core.pipeline.Organisation", MagicMock())
     monkeypatch.setattr(
         "src.application.core.pipeline._validate_endpoint",
         lambda url, dir: {"endpoint_url_in_endpoint_csv": True},
@@ -164,12 +156,8 @@ def test_fetch_add_data_response_file_not_found(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "src.application.core.pipeline.Specification", lambda x: mock_spec
     )
-    monkeypatch.setattr(
-        "src.application.core.pipeline.Pipeline", MagicMock()
-    )
-    monkeypatch.setattr(
-        "src.application.core.pipeline.Organisation", MagicMock()
-    )
+    monkeypatch.setattr("src.application.core.pipeline.Pipeline", MagicMock())
+    monkeypatch.setattr("src.application.core.pipeline.Organisation", MagicMock())
 
     with pytest.raises(FileNotFoundError):
         fetch_add_data_response(
@@ -211,12 +199,8 @@ def test_fetch_add_data_response_handles_processing_error(monkeypatch, tmp_path)
     monkeypatch.setattr(
         "src.application.core.pipeline.Specification", lambda x: mock_spec
     )
-    monkeypatch.setattr(
-        "src.application.core.pipeline.Pipeline", MagicMock()
-    )
-    monkeypatch.setattr(
-        "src.application.core.pipeline.Organisation", MagicMock()
-    )
+    monkeypatch.setattr("src.application.core.pipeline.Pipeline", MagicMock())
+    monkeypatch.setattr("src.application.core.pipeline.Organisation", MagicMock())
 
     def raise_exception(*args, **kwargs):
         raise Exception("Processing error")

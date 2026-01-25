@@ -419,7 +419,7 @@ def add_data_workflow(
 ):
     """
     Setup directories and download required CSVs to manage add-data pipeline, then invoke fetch_add_data_response, also clean up.
-    
+
     Args:
         file_name (str): Collection resource file name
         request_id (str): Unique request identifier
@@ -436,7 +436,7 @@ def add_data_workflow(
         output_path = os.path.join(directories.TRANSFORMED_DIR, request_id, file_name)
         if not os.path.exists(output_path):
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        
+
         # TODO: Can this use fetch_pipeline_csvs function instead?, do seem to need main config source (GitHub) for real time data
         fetch_add_data_csvs(collection, pipeline_dir)
 
@@ -473,7 +473,7 @@ def add_data_workflow(
 
 
 def fetch_add_data_csvs(collection, pipeline_dir):
-    """Download add-data pipeline CSVs (lookup, endpoint, source) into pipeline_dir and ensure organisation """
+    """Download add-data pipeline CSVs (lookup, endpoint, source) into pipeline_dir and ensure organisation"""
     os.makedirs(pipeline_dir, exist_ok=True)
     add_data_csvs = ["lookup.csv", "endpoint.csv", "source.csv"]
     fetched_files = []
