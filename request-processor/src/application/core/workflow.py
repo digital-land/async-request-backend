@@ -31,9 +31,9 @@ def run_workflow(
     directories,
 ):
     additional_concats = None
+    response_data = {}
 
     try:
-        response_data = {}
         # pipeline directory structure & download
         pipeline_dir = os.path.join(directories.PIPELINE_DIR, dataset, request_id)
 

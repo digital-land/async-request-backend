@@ -50,9 +50,10 @@ def fetch_response_data(
                 pipeline_dir=pipeline_dir,
                 specification=specification,
                 cache_dir=cache_dir,
+                endpoints=[],
             )
     except Exception as err:
-        logger.error("An exception occured during assign_entries process: ", str(err))
+        logger.error("An exception occured during assign_entries process: %s", str(err))
 
     # Create directories if they don't exist
     for directory in [
