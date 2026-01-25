@@ -321,6 +321,7 @@ def test_add_data_workflow(monkeypatch):
     class DummyDirectories:
         PIPELINE_DIR = "/tmp/pipeline"
         COLLECTION_DIR = "/tmp/collection"
+        TRANSFORMED_DIR = "/tmp/transformed"
         SPECIFICATION_DIR = "/tmp/specification"
         CACHE_DIR = "/tmp/cache"
 
@@ -366,6 +367,7 @@ def test_add_data_workflow_calls(monkeypatch):
     class DummyDirectories:
         PIPELINE_DIR = "/tmp/pipeline"
         COLLECTION_DIR = "/tmp/collection"
+        TRANSFORMED_DIR = "/tmp/transformed"
         SPECIFICATION_DIR = "/tmp/specification"
         CACHE_DIR = "/tmp/cache"
 
@@ -373,33 +375,36 @@ def test_add_data_workflow_calls(monkeypatch):
 
     called = {}
 
-    def fake_resource_from_path(path):
-        called["resource_from_path"] = path
-        return "resource-hash"
-
     def fake_fetch_add_data_csvs(col, pdir):
         called["fetch_add_data_csvs"] = (col, pdir)
         return ["/tmp/pipeline/lookup.csv"]
 
     def fake_fetch_add_data_response(
-        col, ds, org, pdir, ipath, spec_dir, cache_dir, e_url, d_url
+        collection,
+        dataset,
+        organisation_provider,
+        pipeline_dir,
+        input_dir,
+        output_path,
+        specification_dir,
+        cache_dir,
+        url,
+        documentation_url,
     ):
         called["fetch_add_data_response"] = {
-            "collection": col,
-            "dataset": ds,
-            "organisation": org,
-            "pipeline_dir": pdir,
-            "input_path": ipath,
-            "specification_dir": spec_dir,
+            "collection": collection,
+            "dataset": dataset,
+            "organisation": organisation_provider,
+            "pipeline_dir": pipeline_dir,
+            "input_dir": input_dir,
+            "output_path": output_path,
+            "specification_dir": specification_dir,
             "cache_dir": cache_dir,
-            "url": e_url,
-            "documentation_url": d_url,
+            "url": url,
+            "documentation_url": documentation_url,
         }
         return {"result": "ok"}
 
-    monkeypatch.setattr(
-        "src.application.core.workflow.resource_from_path", fake_resource_from_path
-    )
     monkeypatch.setattr(
         "src.application.core.workflow.fetch_add_data_csvs", fake_fetch_add_data_csvs
     )
@@ -422,17 +427,19 @@ def test_add_data_workflow_calls(monkeypatch):
     expected_pipeline_dir = os.path.join(
         directories.PIPELINE_DIR, collection, request_id
     )
-    expected_input_path = os.path.join(
+    expected_input_dir = os.path.join(
         directories.COLLECTION_DIR, "resource", request_id
     )
-    expected_file_path = os.path.join(expected_input_path, file_name)
+    expected_output_path = os.path.join(
+        directories.TRANSFORMED_DIR, request_id, file_name
+    )
 
-    assert called["resource_from_path"] == expected_file_path
     assert called["fetch_add_data_csvs"] == (collection, expected_pipeline_dir)
     assert called["fetch_add_data_response"]["dataset"] == dataset
     assert called["fetch_add_data_response"]["organisation"] == organisation
     assert called["fetch_add_data_response"]["pipeline_dir"] == expected_pipeline_dir
-    assert called["fetch_add_data_response"]["input_path"] == expected_input_path
+    assert called["fetch_add_data_response"]["input_dir"] == expected_input_dir
+    assert called["fetch_add_data_response"]["output_path"] == expected_output_path
     assert (
         called["fetch_add_data_response"]["specification_dir"]
         == directories.SPECIFICATION_DIR

@@ -191,7 +191,8 @@ def fetch_add_data_response(
         organisation = Organisation(os.path.join(cache_dir, "organisation.csv"), Path(pipeline.path))
         api = API(specification=specification)
 
-        # TODO: Need to load config class
+        # TODO: Need to load config class for correct transform?
+        # TODO: Handling of column mapping?
         valid_category_values = api.get_valid_category_values(dataset, pipeline)   
 
         files_in_resource = os.listdir(input_dir)
@@ -246,7 +247,7 @@ def fetch_add_data_response(
                     logger.info(f"No unidentified lookups found in {resource_file}")
 
                 
-                # TODO: Re-run to see if no unidentified lookups remain
+                # TODO: Re-run to see if no unidentified lookups remain and if so create an error summary for add data command
 
             except Exception as err:
                 logger.error(f"Error processing {resource_file}: {err}")

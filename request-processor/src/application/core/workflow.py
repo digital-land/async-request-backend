@@ -418,7 +418,7 @@ def add_data_workflow(
     directories,
 ):
     """
-    Setup directories and download required CSVs to manage add-data pipeline, then invoke fetch_add_data_response.
+    Setup directories and download required CSVs to manage add-data pipeline, then invoke fetch_add_data_response, also clean up.
     
     Args:
         file_name (str): Collection resource file name
@@ -430,30 +430,44 @@ def add_data_workflow(
         documentation_url (str): Documentation URL for the dataset
         directories (Directories): Directories object with required paths
     """
+    try:
+        pipeline_dir = os.path.join(directories.PIPELINE_DIR, collection, request_id)
+        input_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
+        output_path = os.path.join(directories.TRANSFORMED_DIR, request_id, file_name)
+        if not os.path.exists(output_path):
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        # TODO: Can this use fetch_pipeline_csvs function instead?, do seem to need main config source (GitHub) for real time data
+        fetch_add_data_csvs(collection, pipeline_dir)
 
-    pipeline_dir = os.path.join(directories.PIPELINE_DIR, collection, request_id)
-    input_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
-    output_path = os.path.join(directories.TRANSFORMED_DIR, request_id, file_name)
-    if not os.path.exists(output_path):
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    
-    fetch_add_data_csvs(collection, pipeline_dir)
+        response_data = fetch_add_data_response(
+            collection=collection,
+            dataset=dataset,
+            organisation_provider=organisation_provider,
+            pipeline_dir=pipeline_dir,
+            input_dir=input_dir,
+            output_path=output_path,
+            specification_dir=directories.SPECIFICATION_DIR,
+            cache_dir=directories.CACHE_DIR,
+            url=url,
+            documentation_url=documentation_url,
+        )
+        logger.info(f"add data response is for id {request_id} : {response_data}")
 
-    response_data = fetch_add_data_response(
-        collection=collection,
-        dataset=dataset,
-        organisation_provider=organisation_provider,
-        pipeline_dir=pipeline_dir,
-        input_dir=input_dir,
-        output_path=output_path,
-        specification_dir=directories.SPECIFICATION_DIR,
-        cache_dir=directories.CACHE_DIR,
-        url=url,
-        documentation_url=documentation_url,
-    )
-    logger.info(f"add data response is for id {request_id} : {response_data}")
+    except Exception as e:
+        logger.exception(f"An error occurred in add_data_workflow")
+        response_data = None
 
-    # TODO: Clean up directories if needed
+    finally:
+        clean_up(
+            request_id,
+            os.path.join(directories.COLLECTION_DIR, "resource", request_id),
+            directories.COLLECTION_DIR,
+            os.path.join(directories.TRANSFORMED_DIR, request_id),
+            directories.TRANSFORMED_DIR,
+            os.path.join(directories.PIPELINE_DIR, collection),
+            directories.PIPELINE_DIR,
+        )
 
     return response_data
 
