@@ -433,18 +433,21 @@ def add_data_workflow(
     try:
         pipeline_dir = os.path.join(directories.PIPELINE_DIR, collection, request_id)
         input_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
+        collection_dir = os.path.join(directories.COLLECTION_DIR, request_id)
         output_path = os.path.join(directories.TRANSFORMED_DIR, request_id, file_name)
         if not os.path.exists(output_path):
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-        # TODO: Can this use fetch_pipeline_csvs function instead?, do seem to need main config source (GitHub) for real time data
-        fetch_add_data_csvs(collection, pipeline_dir)
+        # Loads csvs for Pipeline and Config
+        fetch_add_data_pipeline_csvs(collection, pipeline_dir)
+        fetch_add_data_collection_csvs(collection, collection_dir)
 
         response_data = fetch_add_data_response(
             collection=collection,
             dataset=dataset,
             organisation_provider=organisation_provider,
             pipeline_dir=pipeline_dir,
+            collection_dir=collection_dir,
             input_dir=input_dir,
             output_path=output_path,
             specification_dir=directories.SPECIFICATION_DIR,
@@ -454,6 +457,9 @@ def add_data_workflow(
         )
         logger.info(f"add data response is for id {request_id} : {response_data}")
 
+        # TODO: Add additioanl data to response_data such as column mapping?
+        # TODO: Error summary? like in run_workflow map issue data to messages, if it exists create issue summary to bloc adding.
+
     except Exception as e:
         logger.exception(f"An error occurred in add_data_workflow")
         response_data = None
@@ -462,6 +468,7 @@ def add_data_workflow(
         clean_up(
             request_id,
             os.path.join(directories.COLLECTION_DIR, "resource", request_id),
+            os.path.join(directories.COLLECTION_DIR, request_id),
             directories.COLLECTION_DIR,
             os.path.join(directories.TRANSFORMED_DIR, request_id),
             directories.TRANSFORMED_DIR,
@@ -472,20 +479,44 @@ def add_data_workflow(
     return response_data
 
 
-def fetch_add_data_csvs(collection, pipeline_dir):
-    """Download add-data pipeline CSVs (lookup, endpoint, source) into pipeline_dir and ensure organisation"""
+def fetch_add_data_pipeline_csvs(collection, pipeline_dir):
+    """Download pipeline CSVs into pipeline_dir"""
     os.makedirs(pipeline_dir, exist_ok=True)
-    add_data_csvs = ["lookup.csv", "endpoint.csv", "source.csv"]
-    fetched_files = []
-    for csv_name in add_data_csvs:
+    pipeline_csvs = [
+        "column.csv",
+        "combine.csv",
+        "concat.csv",
+        "convert.csv",
+        "default-value.csv",
+        "default.csv",
+        "entity-organisation.csv",
+        "expect.csv",
+        "filter.csv",
+        "lookup.csv",
+        "old-entity.csv",
+        "patch.csv",
+        "skip.csv",
+        "transform.csv",
+    ]
+    for csv_name in pipeline_csvs:
         csv_path = os.path.join(pipeline_dir, csv_name)
-        if csv_name == "lookup.csv":
-            url = f"{CONFIG_URL}pipeline/{collection}/{csv_name}"
-        else:
-            url = f"{CONFIG_URL}collection/{collection}/{csv_name}"
+        url = f"{CONFIG_URL}pipeline/{collection}/{csv_name}"
         try:
             urllib.request.urlretrieve(url, csv_path)
             logger.info(f"Downloaded {csv_name} from {url} to {csv_path}")
         except HTTPError as e:
             logger.warning(f"Failed to retrieve {csv_name}: {e}.")
-    return fetched_files
+
+
+def fetch_add_data_collection_csvs(collection, config_dir):
+    """Download config CSVs (endpoint.csv, source.csv) into config_dir"""
+    os.makedirs(config_dir, exist_ok=True)
+    config_csvs = ["endpoint.csv", "source.csv"]
+    for csv_name in config_csvs:
+        csv_path = os.path.join(config_dir, csv_name)
+        url = f"{CONFIG_URL}collection/{collection}/{csv_name}"
+        try:
+            urllib.request.urlretrieve(url, csv_path)
+            logger.info(f"Downloaded {csv_name} from {url} to {csv_path}")
+        except HTTPError as e:
+            logger.warning(f"Failed to retrieve {csv_name}: {e}.")

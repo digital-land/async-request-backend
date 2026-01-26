@@ -194,6 +194,7 @@ def fetch_add_data_response(
     dataset,
     organisation_provider,
     pipeline_dir,
+    collection_dir,
     input_dir,
     output_path,
     specification_dir,
@@ -209,8 +210,6 @@ def fetch_add_data_response(
         )
         api = API(specification=specification)
 
-        # TODO: Need to load config class for correct transform?
-        # TODO: Handling of column mapping?
         valid_category_values = api.get_valid_category_values(dataset, pipeline)
 
         files_in_resource = os.listdir(input_dir)
@@ -233,6 +232,7 @@ def fetch_add_data_response(
                     resource=resource_from_path(resource_file_path),
                     valid_category_values=valid_category_values,
                     disable_lookups=False,
+                    endpoints=[url],
                 )
 
                 existing_entities.extend(
@@ -280,11 +280,11 @@ def fetch_add_data_response(
 
         endpoint_summary = _validate_endpoint(
             url,
-            pipeline_dir,
+            collection_dir,
         )
         source_summary = _validate_source(
             documentation_url,
-            pipeline_dir,
+            collection_dir,
             collection,
             organisation_provider,
             dataset,
@@ -413,8 +413,8 @@ def _map_transformed_entities(transformed_csv_path, pipeline_dir):  # noqa: C901
     return mapped_entities
 
 
-def _validate_endpoint(url, pipeline_dir):
-    endpoint_csv_path = os.path.join(pipeline_dir, "endpoint.csv")
+def _validate_endpoint(url, config_dir):
+    endpoint_csv_path = os.path.join(config_dir, "endpoint.csv")
     if not url:
         logger.info("No endpoint URL provided")
         return {}
@@ -483,9 +483,9 @@ def _validate_endpoint(url, pipeline_dir):
 
 
 def _validate_source(
-    documentation_url, pipeline_dir, collection, organisation, dataset, endpoint_summary
+    documentation_url, config_dir, collection, organisation, dataset, endpoint_summary
 ):
-    source_csv_path = os.path.join(pipeline_dir, "source.csv")
+    source_csv_path = os.path.join(config_dir, "source.csv")
 
     endpoint_key = endpoint_summary.get("existing_endpoint_entry", {}).get(
         "endpoint"
