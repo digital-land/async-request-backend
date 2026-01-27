@@ -398,6 +398,9 @@ def test_add_data_workflow_calls(monkeypatch):
         cache_dir,
         url,
         documentation_url,
+        licence=None,
+        start_date=None,
+        plugin=None,
     ):
         called["fetch_add_data_response"] = {
             "collection": collection,
@@ -411,6 +414,9 @@ def test_add_data_workflow_calls(monkeypatch):
             "cache_dir": cache_dir,
             "url": url,
             "documentation_url": documentation_url,
+            "licence": licence,
+            "start_date": start_date,
+            "plugin": plugin,
         }
         return {"result": "ok"}
 

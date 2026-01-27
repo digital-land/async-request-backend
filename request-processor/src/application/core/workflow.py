@@ -416,6 +416,9 @@ def add_data_workflow(
     url,
     documentation_url,
     directories,
+    licence=None,
+    start_date=None,
+    plugin=None,
 ):
     """
     Setup directories and download required CSVs to manage add-data pipeline, then invoke fetch_add_data_response, also clean up.
@@ -454,6 +457,9 @@ def add_data_workflow(
             cache_dir=directories.CACHE_DIR,
             url=url,
             documentation_url=documentation_url,
+            licence=licence,
+            start_date=start_date,
+            plugin=plugin,
         )
         logger.info(f"add data response is for id {request_id} : {response_data}")
 

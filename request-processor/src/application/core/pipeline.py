@@ -201,6 +201,9 @@ def fetch_add_data_response(
     cache_dir,
     url,
     documentation_url,
+    licence=None,
+    start_date=None,
+    plugin=None,
 ):
     try:
         specification = Specification(specification_dir)
@@ -278,9 +281,12 @@ def fetch_add_data_response(
             existing_entities
         )
 
+        # TODO: creation of endpoint and source summary should be in workflow.py
         endpoint_summary = _validate_endpoint(
             url,
             collection_dir,
+            plugin,
+            start_date=start_date,
         )
         source_summary = _validate_source(
             documentation_url,
@@ -289,6 +295,8 @@ def fetch_add_data_response(
             organisation_provider,
             dataset,
             endpoint_summary,
+            start_date=start_date,
+            licence=licence,
         )
 
         entity_summary = {
@@ -413,7 +421,7 @@ def _map_transformed_entities(transformed_csv_path, pipeline_dir):  # noqa: C901
     return mapped_entities
 
 
-def _validate_endpoint(url, config_dir):
+def _validate_endpoint(url, config_dir, plugin, start_date=None):
     endpoint_csv_path = os.path.join(config_dir, "endpoint.csv")
     if not url:
         logger.info("No endpoint URL provided")
@@ -464,15 +472,17 @@ def _validate_endpoint(url, config_dir):
         endpoint_summary["existing_endpoint_entry"] = existing_entry
 
     else:
-        current_date = datetime.now().strftime("%Y-%m-%d")
+        if not start_date:
+            start_date = datetime.now().strftime("%Y-%m-%d")
         entry_date = datetime.now().isoformat()
 
         endpoint_key, new_endpoint_row = append_endpoint(
             endpoint_csv_path=endpoint_csv_path,
             endpoint_url=url,
             entry_date=entry_date,
-            start_date=current_date,
+            start_date=start_date,
             end_date="",
+            plugin=plugin,
         )
 
         if new_endpoint_row:
@@ -483,7 +493,14 @@ def _validate_endpoint(url, config_dir):
 
 
 def _validate_source(
-    documentation_url, config_dir, collection, organisation, dataset, endpoint_summary
+    documentation_url,
+    config_dir,
+    collection,
+    organisation,
+    dataset,
+    endpoint_summary,
+    start_date=None,
+    licence=None,
 ):
     source_csv_path = os.path.join(config_dir, "source.csv")
 
@@ -497,7 +514,8 @@ def _validate_source(
     if not documentation_url:
         logger.warning("No documentation URL provided")
 
-    current_date = datetime.now().strftime("%Y-%m-%d")
+    if not start_date:
+        start_date = datetime.now().strftime("%Y-%m-%d")
     entry_date = datetime.now().isoformat()
 
     source_key_returned, new_source_row = append_source(
@@ -507,10 +525,10 @@ def _validate_source(
         endpoint_key=endpoint_key,
         attribution="",
         documentation_url=documentation_url or "",
-        licence="",
+        licence=licence or "",
         pipelines=dataset,
         entry_date=entry_date,
-        start_date=current_date,
+        start_date=start_date,
         end_date="",
     )
 

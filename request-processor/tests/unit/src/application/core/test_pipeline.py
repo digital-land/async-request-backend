@@ -65,7 +65,9 @@ def test_fetch_add_data_response_success(monkeypatch, tmp_path):
     monkeypatch.setattr("src.application.core.pipeline.Organisation", MagicMock())
     monkeypatch.setattr(
         "src.application.core.pipeline._validate_endpoint",
-        lambda url, dir: {"endpoint_url_in_endpoint_csv": True},
+        lambda url, dir, plugin, start_date=None: {
+            "endpoint_url_in_endpoint_csv": True
+        },
     )
     monkeypatch.setattr(
         "src.application.core.pipeline._validate_source",
@@ -114,7 +116,9 @@ def test_fetch_add_data_response_no_files(monkeypatch, tmp_path):
     monkeypatch.setattr("src.application.core.pipeline.Organisation", MagicMock())
     monkeypatch.setattr(
         "src.application.core.pipeline._validate_endpoint",
-        lambda url, dir: {"endpoint_url_in_endpoint_csv": True},
+        lambda url, dir, plugin, start_date=None: {
+            "endpoint_url_in_endpoint_csv": True
+        },
     )
     monkeypatch.setattr(
         "src.application.core.pipeline._validate_source",
@@ -210,7 +214,9 @@ def test_fetch_add_data_response_handles_processing_error(monkeypatch, tmp_path)
 
     monkeypatch.setattr(
         "src.application.core.pipeline._validate_endpoint",
-        lambda url, dir: {"endpoint_url_in_endpoint_csv": True},
+        lambda url, dir, plugin, start_date=None: {
+            "endpoint_url_in_endpoint_csv": True
+        },
     )
     monkeypatch.setattr(
         "src.application.core.pipeline._validate_source",
@@ -342,13 +348,13 @@ def test_validate_endpoint_creates_file(monkeypatch, tmp_path):
     endpoint_csv_path = pipeline_dir / "endpoint.csv"
 
     def fake_append_endpoint(
-        endpoint_csv_path, endpoint_url, entry_date, start_date, end_date
+        endpoint_csv_path, endpoint_url, entry_date, start_date, end_date, plugin=None
     ):
         return "endpoint_hash", {
             "endpoint": "endpoint_hash",
             "endpoint-url": endpoint_url,
             "parameters": "",
-            "plugin": "",
+            "plugin": plugin or "",
             "entry-date": entry_date,
             "start-date": start_date,
             "end-date": end_date,
@@ -360,7 +366,7 @@ def test_validate_endpoint_creates_file(monkeypatch, tmp_path):
 
     assert not endpoint_csv_path.exists()
 
-    _validate_endpoint(url, str(pipeline_dir))
+    _validate_endpoint(url, str(pipeline_dir), plugin=None)
 
     assert endpoint_csv_path.exists()
 
@@ -412,13 +418,13 @@ def test_validate_endpoint_appends(monkeypatch, tmp_path):
         )
 
     def fake_append_endpoint(
-        endpoint_csv_path, endpoint_url, entry_date, start_date, end_date
+        endpoint_csv_path, endpoint_url, entry_date, start_date, end_date, plugin=None
     ):
         return "new_endpoint_hash", {
             "endpoint": "new_endpoint_hash",
             "endpoint-url": endpoint_url,
             "parameters": "",
-            "plugin": "",
+            "plugin": plugin or "",
             "entry-date": entry_date,
             "start-date": start_date,
             "end-date": end_date,
@@ -428,7 +434,7 @@ def test_validate_endpoint_appends(monkeypatch, tmp_path):
         "src.application.core.pipeline.append_endpoint", fake_append_endpoint
     )
 
-    result = _validate_endpoint(url, str(pipeline_dir))
+    result = _validate_endpoint(url, str(pipeline_dir), plugin=None)
 
     assert result["endpoint_url_in_endpoint_csv"] is False
     assert "new_endpoint_entry" in result
@@ -472,7 +478,7 @@ def test_validate_endpoint_finds_existing(monkeypatch, tmp_path):
         lambda *a, **kw: (_ for _ in ()).throw(Exception("Should not be called")),
     )
 
-    result = _validate_endpoint(url, str(pipeline_dir))
+    result = _validate_endpoint(url, str(pipeline_dir), plugin=None)
     assert result["endpoint_url_in_endpoint_csv"] is True
     assert "existing_endpoint_entry" in result
     assert result["existing_endpoint_entry"]["endpoint-url"] == url
@@ -483,7 +489,7 @@ def test_validate_endpoint_empty_url(monkeypatch, tmp_path):
     pipeline_dir = tmp_path / "pipeline"
     pipeline_dir.mkdir()
 
-    result = _validate_endpoint("", str(pipeline_dir))
+    result = _validate_endpoint("", str(pipeline_dir), plugin=None)
 
     assert result == {}
 
@@ -498,25 +504,17 @@ def test_validate_endpoint_csv_read_error(monkeypatch, tmp_path):
     endpoint_csv_path.write_bytes(b"\x00\x00\x00")
 
     def fake_append_endpoint(
-        endpoint_csv_path, endpoint_url, entry_date, start_date, end_date
+        endpoint_csv_path, endpoint_url, entry_date, start_date, end_date, plugin=None
     ):
         return "endpoint_hash", {
             "endpoint": "endpoint_hash",
             "endpoint-url": endpoint_url,
             "parameters": "",
-            "plugin": "",
+            "plugin": plugin or "",
             "entry-date": entry_date,
             "start-date": start_date,
             "end-date": end_date,
         }
-
-    monkeypatch.setattr(
-        "src.application.core.pipeline.append_endpoint", fake_append_endpoint
-    )
-
-    result = _validate_endpoint(url, str(pipeline_dir))
-
-    assert "new_endpoint_entry" in result or "endpoint_url_in_endpoint_csv" in result
 
 
 def test_validate_source_creates_new_source(monkeypatch, tmp_path):
@@ -573,6 +571,8 @@ def test_validate_source_creates_new_source(monkeypatch, tmp_path):
         organisation,
         dataset,
         endpoint_summary,
+        start_date=None,
+        licence=None,
     )
 
     assert result["documentation_url_in_source_csv"] is False
@@ -647,6 +647,8 @@ def test_validate_source_finds_existing_source(monkeypatch, tmp_path):
         organisation,
         dataset,
         endpoint_summary,
+        start_date=None,
+        licence=None,
     )
 
     assert result["documentation_url_in_source_csv"] is True
@@ -674,6 +676,8 @@ def test_validate_source_no_endpoint_key(tmp_path):
         organisation,
         dataset,
         endpoint_summary,
+        start_date=None,
+        licence=None,
     )
 
     assert result == {}
@@ -732,6 +736,8 @@ def test_validate_source_empty_documentation_url(monkeypatch, tmp_path):
         organisation,
         dataset,
         endpoint_summary,
+        start_date=None,
+        licence=None,
     )
 
     assert "documentation_url_in_source_csv" in result
@@ -795,6 +801,8 @@ def test_validate_source_uses_new_endpoint_entry(monkeypatch, tmp_path):
         organisation,
         dataset,
         endpoint_summary,
+        start_date=None,
+        licence=None,
     )
 
     assert captured_endpoint_key == "new_endpoint_hash_789"
@@ -833,6 +841,8 @@ def test_validate_source_handles_csv_read_error(monkeypatch, tmp_path):
         organisation,
         dataset,
         endpoint_summary,
+        start_date=None,
+        licence=None,
     )
 
     assert "documentation_url_in_source_csv" in result

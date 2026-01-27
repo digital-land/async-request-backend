@@ -126,7 +126,12 @@ def hash_md5(value):
 
 
 def append_endpoint(
-    endpoint_csv_path, endpoint_url, entry_date=None, start_date=None, end_date=None
+    endpoint_csv_path,
+    endpoint_url,
+    entry_date=None,
+    start_date=None,
+    end_date=None,
+    plugin=None,
 ):
     endpoint_key = hash_sha256(endpoint_url)
     exists = False
@@ -162,7 +167,7 @@ def append_endpoint(
                 "endpoint": endpoint_key,
                 "endpoint-url": endpoint_url,
                 "parameters": "",
-                "plugin": "",
+                "plugin": plugin or "",
                 "entry-date": _formatted_date(entry_date)
                 or datetime.now().date().isoformat(),
                 "start-date": _formatted_date(start_date),

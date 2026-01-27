@@ -262,6 +262,9 @@ def add_data_task(request: Dict, directories=None):
             directories.COLLECTION_DIR, "resource", request_schema.id
         )
         file_name, log = _fetch_resource(resource_dir, request_data.url)
+        # Auto detect plugin needs to update request_data.plugin for downstream processing
+        if "plugin" in log:
+            request_data.plugin = log["plugin"]
         logger.info(
             f"file name from fetch resource is : {file_name} and the log from fetch resource is {log}"
         )
@@ -275,6 +278,9 @@ def add_data_task(request: Dict, directories=None):
                 request_data.url,
                 request_data.documentation_url,
                 directories,
+                request_data.licence,
+                request_data.start_date,
+                request_data.plugin,
             )
             if "plugin" in log:
                 response["plugin"] = log["plugin"]
