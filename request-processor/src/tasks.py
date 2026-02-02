@@ -391,6 +391,12 @@ def _get_response(request_id):
 
 
 def save_response_to_db(request_id, response_data):
+    """Currently handles three types of response_data:
+    1. Full check data workflow response with 'converted-csv', 'issue-log', etc.
+    2. Full add data workflow pipeline summary response with 'pipeline-summary'.
+    3. Error log with 'message'.
+    Saves appropriately to Response and ResponseDetails tables.
+    """
     logger.info(f"save_response_to_db started for request_id: {request_id}")
     db_session = database.session_maker()
     with db_session() as session:
@@ -454,7 +460,7 @@ def save_response_to_db(request_id, response_data):
                     # Commit the changes to the database
                     session.commit()
 
-                elif "entity-summary" in response_data:
+                elif "pipeline-summary" in response_data:
                     new_response = models.Response(
                         request_id=request_id, data=response_data
                     )

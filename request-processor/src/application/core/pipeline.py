@@ -190,20 +190,14 @@ def assign_entries(
 
 
 def fetch_add_data_response(
-    collection,
     dataset,
     organisation_provider,
     pipeline_dir,
-    collection_dir,
     input_dir,
     output_path,
     specification_dir,
     cache_dir,
-    url,
-    documentation_url,
-    licence=None,
-    start_date=None,
-    plugin=None,
+    url
 ):
     try:
         specification = Specification(specification_dir)
@@ -212,7 +206,6 @@ def fetch_add_data_response(
             os.path.join(cache_dir, "organisation.csv"), Path(pipeline.path)
         )
         api = API(specification=specification)
-
         valid_category_values = api.get_valid_category_values(dataset, pipeline)
 
         files_in_resource = os.listdir(input_dir)
@@ -267,10 +260,23 @@ def fetch_add_data_response(
                         f"Found {len(new_lookups)} unidentified lookups in {resource_file}"
                     )
                     new_entities.extend(new_lookups)
+
+                    # Reload pipeline to pick up newly saved lookups
+                    pipeline = Pipeline(pipeline_dir, dataset, specification=specification)
+
+                    # Now re-run transform to check and return issue log
+                    issues_log = pipeline.transform(
+                        input_path=resource_file_path,
+                        output_path=output_path,
+                        organisation=organisation,
+                        organisations=[organisation_provider],
+                        resource=resource_from_path(resource_file_path),
+                        valid_category_values=valid_category_values,
+                        disable_lookups=False,
+                        endpoints=[url],
+                    )
                 else:
                     logger.info(f"No unidentified lookups found in {resource_file}")
-
-                # TODO: Re-run to see if no unidentified remain, if so new add data error summary
 
             except Exception as err:
                 logger.error(f"Error processing {resource_file}: {err}")
@@ -281,38 +287,15 @@ def fetch_add_data_response(
             existing_entities
         )
 
-        # TODO: creation of endpoint and source summary should be in workflow.py
-        endpoint_summary = _validate_endpoint(
-            url,
-            collection_dir,
-            plugin,
-            start_date=start_date,
-        )
-        source_summary = _validate_source(
-            documentation_url,
-            collection_dir,
-            collection,
-            organisation_provider,
-            dataset,
-            endpoint_summary,
-            start_date=start_date,
-            licence=licence,
-        )
-
-        entity_summary = {
+        pipeline_summary = {
             "new-in-resource": len(new_entities),
             "existing-in-resource": len(existing_entities),
             "new-entities": new_entities_breakdown,
             "existing-entities": existing_entities_breakdown,
+            "pipeline-issues": [dict(issue) for issue in issues_log.rows],
         }
 
-        response_data = {
-            "entity-summary": entity_summary,
-            "endpoint-summary": endpoint_summary,
-            "source-summary": source_summary,
-        }
-
-        return response_data
+        return pipeline_summary
 
     except FileNotFoundError as e:
         logger.exception(f"File not found: {e}")
@@ -419,145 +402,3 @@ def _map_transformed_entities(transformed_csv_path, pipeline_dir):  # noqa: C901
             )
 
     return mapped_entities
-
-
-def _validate_endpoint(url, config_dir, plugin, start_date=None):
-    endpoint_csv_path = os.path.join(config_dir, "endpoint.csv")
-    if not url:
-        logger.info("No endpoint URL provided")
-        return {}
-
-    if not os.path.exists(endpoint_csv_path):
-        os.makedirs(os.path.dirname(endpoint_csv_path), exist_ok=True)
-        with open(endpoint_csv_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(
-                [
-                    "endpoint",
-                    "endpoint-url",
-                    "parameters",
-                    "plugin",
-                    "entry-date",
-                    "start-date",
-                    "end-date",
-                ]
-            )
-
-    endpoint_exists = False
-    existing_entry = None
-
-    try:
-        with open(endpoint_csv_path, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                if row.get("endpoint-url", "").strip() == url.strip():
-                    endpoint_exists = True
-                    existing_entry = {
-                        "endpoint": row.get("endpoint", ""),
-                        "endpoint-url": row.get("endpoint-url", ""),
-                        "parameters": row.get("parameters", ""),
-                        "plugin": row.get("plugin", ""),
-                        "entry-date": row.get("entry-date", ""),
-                        "start-date": row.get("start-date", ""),
-                        "end-date": row.get("end-date", ""),
-                    }
-                    logger.info("Endpoint URL found in endpoint.csv")
-                    break
-    except Exception as e:
-        logger.error(f"Error reading endpoint.csv: {e}")
-
-    endpoint_summary = {"endpoint_url_in_endpoint_csv": endpoint_exists}
-
-    if endpoint_exists and existing_entry:
-        endpoint_summary["existing_endpoint_entry"] = existing_entry
-
-    else:
-        if not start_date:
-            start_date = datetime.now().strftime("%Y-%m-%d")
-        entry_date = datetime.now().isoformat()
-
-        endpoint_key, new_endpoint_row = append_endpoint(
-            endpoint_csv_path=endpoint_csv_path,
-            endpoint_url=url,
-            entry_date=entry_date,
-            start_date=start_date,
-            end_date="",
-            plugin=plugin,
-        )
-
-        if new_endpoint_row:
-            logger.info(f"Appended new endpoint with hash: {endpoint_key}")
-            endpoint_summary["new_endpoint_entry"] = new_endpoint_row
-
-    return endpoint_summary
-
-
-def _validate_source(
-    documentation_url,
-    config_dir,
-    collection,
-    organisation,
-    dataset,
-    endpoint_summary,
-    start_date=None,
-    licence=None,
-):
-    source_csv_path = os.path.join(config_dir, "source.csv")
-
-    endpoint_key = endpoint_summary.get("existing_endpoint_entry", {}).get(
-        "endpoint"
-    ) or endpoint_summary.get("new_endpoint_entry", {}).get("endpoint")
-    if not endpoint_key:
-        logger.warning("No endpoint_key available from endpoint_summary")
-        return {}
-
-    if not documentation_url:
-        logger.warning("No documentation URL provided")
-
-    if not start_date:
-        start_date = datetime.now().strftime("%Y-%m-%d")
-    entry_date = datetime.now().isoformat()
-
-    source_key_returned, new_source_row = append_source(
-        source_csv_path=source_csv_path,
-        collection=collection,
-        organisation=organisation,
-        endpoint_key=endpoint_key,
-        attribution="",
-        documentation_url=documentation_url or "",
-        licence=licence or "",
-        pipelines=dataset,
-        entry_date=entry_date,
-        start_date=start_date,
-        end_date="",
-    )
-
-    if new_source_row:
-        return {
-            "documentation_url_in_source_csv": False,
-            "new_source_entry": new_source_row,
-        }
-
-    source_summary = {"documentation_url_in_source_csv": True}
-    try:
-        with open(source_csv_path, "r", encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                if row.get("source", "").strip() == source_key_returned:
-                    source_summary["existing_source_entry"] = {
-                        "source": row.get("source", ""),
-                        "attribution": row.get("attribution", ""),
-                        "collection": row.get("collection", ""),
-                        "documentation-url": row.get("documentation-url", ""),
-                        "endpoint": row.get("endpoint", ""),
-                        "licence": row.get("licence", ""),
-                        "organisation": row.get("organisation", ""),
-                        "pipelines": row.get("pipelines", ""),
-                        "entry-date": row.get("entry-date", ""),
-                        "start-date": row.get("start-date", ""),
-                        "end-date": row.get("end-date", ""),
-                    }
-                    break
-    except Exception as e:
-        logger.error(f"Error reading existing source: {e}")
-
-    return source_summary

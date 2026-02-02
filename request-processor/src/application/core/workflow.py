@@ -5,7 +5,12 @@ from pathlib import Path
 import urllib
 import yaml
 from urllib.error import HTTPError
-from application.core.utils import detect_encoding, extract_dataset_field_rows
+from application.core.utils import (
+    detect_encoding,
+    extract_dataset_field_rows,
+    validate_endpoint,
+    validate_source,
+)
 from application.logging.logger import get_logger
 from application.core.pipeline import (
     fetch_response_data,
@@ -421,7 +426,10 @@ def add_data_workflow(
     plugin=None,
 ):
     """
-    Setup directories and download required CSVs to manage add-data pipeline, then invoke fetch_add_data_response, also clean up.
+    Setup directories and download required CSVs to manage add-data pipeline
+    Invoke fetch_add_data_response
+    Create source csv and endpoint csv summaries
+    Clean up directories
 
     Args:
         file_name (str): Collection resource file name
@@ -433,6 +441,8 @@ def add_data_workflow(
         documentation_url (str): Documentation URL for the dataset
         directories (Directories): Directories object with required paths
     """
+    response_data = {}
+
     try:
         pipeline_dir = os.path.join(directories.PIPELINE_DIR, collection, request_id)
         input_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
@@ -442,33 +452,54 @@ def add_data_workflow(
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
         # Loads csvs for Pipeline and Config
-        fetch_add_data_pipeline_csvs(collection, pipeline_dir)
-        fetch_add_data_collection_csvs(collection, collection_dir)
+        if not fetch_add_data_pipeline_csvs(collection, pipeline_dir):
+            response_data['message'] = f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
+            return response_data
+        if not fetch_add_data_collection_csvs(collection, collection_dir):
+            response_data['message'] = f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
+            return response_data
 
-        response_data = fetch_add_data_response(
-            collection=collection,
+        # All processes arount transforming the data and generating pipeline summary
+        pipeline_summary = fetch_add_data_response(
             dataset=dataset,
             organisation_provider=organisation_provider,
             pipeline_dir=pipeline_dir,
-            collection_dir=collection_dir,
             input_dir=input_dir,
             output_path=output_path,
             specification_dir=directories.SPECIFICATION_DIR,
             cache_dir=directories.CACHE_DIR,
-            url=url,
-            documentation_url=documentation_url,
-            licence=licence,
-            start_date=start_date,
-            plugin=plugin,
+            url=url
         )
+
+        # Create endpoint and source summaries in workflow
+        endpoint_summary = validate_endpoint(
+            url,
+            collection_dir,
+            plugin,
+            start_date=start_date,
+        )
+        source_summary = validate_source(
+            documentation_url,
+            collection_dir,
+            collection,
+            organisation_provider,
+            dataset,
+            endpoint_summary,
+            start_date=start_date,
+            licence=licence,
+        )
+
+        response_data = {
+            "pipeline-summary": pipeline_summary,
+            "endpoint-summary": endpoint_summary,
+            "source-summary": source_summary,
+        }
+
         logger.info(f"add data response is for id {request_id} : {response_data}")
 
-        # TODO: Add additioanl data to response_data such as column mapping?
-        # TODO: Error summary? like in run_workflow map issue data to messages, if it exists create issue summary to bloc adding.
-
     except Exception as e:
-        logger.exception(f"An error occurred in add_data_workflow")
-        response_data = None
+        logger.warning(f"An error occurred in add_data_workflow: {e} for request id {request_id}")
+        response_data['message'] = f"An error occurred in add_data_workflow: {e}"
 
     finally:
         clean_up(
@@ -486,7 +517,7 @@ def add_data_workflow(
 
 
 def fetch_add_data_pipeline_csvs(collection, pipeline_dir):
-    """Download pipeline CSVs into pipeline_dir"""
+    """Download pipeline CSVs into pipeline_dir. Returns False if any errors occur."""
     os.makedirs(pipeline_dir, exist_ok=True)
     pipeline_csvs = [
         "column.csv",
@@ -511,11 +542,13 @@ def fetch_add_data_pipeline_csvs(collection, pipeline_dir):
             urllib.request.urlretrieve(url, csv_path)
             logger.info(f"Downloaded {csv_name} from {url} to {csv_path}")
         except HTTPError as e:
-            logger.warning(f"Failed to retrieve {csv_name}: {e}.")
+            logger.warning(f"Failed to retrieve {csv_name}: {e}")
+            return False
+    return True
 
 
 def fetch_add_data_collection_csvs(collection, config_dir):
-    """Download config CSVs (endpoint.csv, source.csv) into config_dir"""
+    """Download config CSVs (endpoint.csv, source.csv) into config_dir. Returns False if any errors occur."""
     os.makedirs(config_dir, exist_ok=True)
     config_csvs = ["endpoint.csv", "source.csv"]
     for csv_name in config_csvs:
@@ -525,4 +558,6 @@ def fetch_add_data_collection_csvs(collection, config_dir):
             urllib.request.urlretrieve(url, csv_path)
             logger.info(f"Downloaded {csv_name} from {url} to {csv_path}")
         except HTTPError as e:
-            logger.warning(f"Failed to retrieve {csv_name}: {e}.")
+            logger.warning(f"Failed to retrieve {csv_name}: {e}")
+            return False
+    return True
