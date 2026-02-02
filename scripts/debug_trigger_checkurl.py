@@ -42,7 +42,7 @@ def ensure_request_exists(request_payload: dict) -> None:
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:
         raise RuntimeError(
-            "DATABASE_URL is not set. Start the stack (or export DATABASE_URL) before running debug_trigger."
+            "DATABASE_URL is not set. Start the stack (or export DATABASE_URL) before running debug_trigger_checkurl."
         )
 
     request_id = request_payload["id"]
@@ -96,11 +96,11 @@ request_payload = {
     "params": {
         "type": "check_url",
         "organisationName": "London Borough of Hackney",
-        "dataset": "article-4-direction",
+        "dataset": "article-4-direction-area",
         "collection": "article-4-direction",
         "column_mapping": None,
         "geom_type": None,
-        "url": "https://map2.hackney.gov.uk/geoserver/ows?service=WFS&version=2.0&request=GetFeature&outputFormat=application/json&SrsName=EPSG:4326&typeName=planning:lldc_hackney_conservation_area"
+        "url": "https://raw.githubusercontent.com/digital-land/PublishExamples/refs/heads/main/Article4Direction/Files/Article4DirectionArea/articel4directionareas-(wrongColName-NewRefs)"
     }
 }
 

@@ -7,7 +7,7 @@
             "type": "python",
             "request": "launch",
             "python": "${workspaceFolder}/request-processor/.venv/bin/python",
-            "program": "${workspaceFolder}/scripts/debug_trigger.py",
+            "program": "${workspaceFolder}/scripts/debug_trigger_checkurl.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
