@@ -3,11 +3,33 @@
     "python": "${workspaceFolder}/request-processor/.venv/bin/python",
     "configurations": [
         {
-            "name": "Debug Request Processor - Manual Task Trigger",
+            "name": "Debug Request Processor - Manual Check URL Task Trigger",
             "type": "python",
             "request": "launch",
             "python": "${workspaceFolder}/request-processor/.venv/bin/python",
-            "program": "${workspaceFolder}/scripts/debug_trigger.py",
+            "program": "${workspaceFolder}/scripts/debug_trigger_checkurl.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/request-processor:${workspaceFolder}/request-processor/.venv/src/digital-land",
+                "DATABASE_URL": "postgresql://postgres:password@localhost:54320/request_database",
+                "CELERY_BROKER_URL": "redis://localhost:6379/0",
+                "AWS_ENDPOINT_URL": "http://localhost:4566",
+                "AWS_DEFAULT_REGION": "eu-west-2",
+                "AWS_ACCESS_KEY_ID": "example",
+                "AWS_SECRET_ACCESS_KEY": "example",
+                "REQUEST_FILES_BUCKET_NAME": "dluhc-data-platform-request-files-local",
+                "SENTRY_ENABLED": "false"
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}/request-processor"
+        },
+        {
+            "name": "Debug Request Processor - Manual Add Data Task",
+            "type": "python",
+            "request": "launch",
+            "python": "${workspaceFolder}/request-processor/.venv/bin/python",
+            "program": "${workspaceFolder}/scripts/debug_trigger_add_data.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {

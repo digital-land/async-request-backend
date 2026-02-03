@@ -5,7 +5,12 @@ from pathlib import Path
 import urllib
 import yaml
 from urllib.error import HTTPError
-from application.core.utils import detect_encoding, extract_dataset_field_rows
+from application.core.utils import (
+    detect_encoding,
+    extract_dataset_field_rows,
+    validate_endpoint,
+    validate_source,
+)
 from application.logging.logger import get_logger
 from application.core.pipeline import (
     fetch_response_data,
@@ -31,9 +36,9 @@ def run_workflow(
     directories,
 ):
     additional_concats = None
+    response_data = {}
 
     try:
-        response_data = {}
         # pipeline directory structure & download
         pipeline_dir = os.path.join(directories.PIPELINE_DIR, dataset, request_id)
 
@@ -412,49 +417,153 @@ def add_data_workflow(
     request_id,
     collection,
     dataset,
-    organisation,
+    organisation_provider,
     url,
     documentation_url,
     directories,
+    licence=None,
+    start_date=None,
+    plugin=None,
 ):
-    pipeline_dir = os.path.join(directories.PIPELINE_DIR, collection, request_id)
-    logger.info(f"pipeline_dir is : {pipeline_dir}")
-    input_path = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
-    file_path = os.path.join(input_path, file_name)
-    resource = resource_from_path(file_path)
-    logger.info(f"resource is : {resource}")
-    fetch_csv = fetch_add_data_csvs(collection, pipeline_dir)
-    logger.info(f"files fetched are : {fetch_csv}")
+    """
+    Setup directories and download required CSVs to manage add-data pipeline
+    Invoke fetch_add_data_response
+    Create source csv and endpoint csv summaries
+    Clean up directories
 
-    response_data = fetch_add_data_response(
-        collection,
-        dataset,
-        organisation,
-        pipeline_dir,
-        input_path,
-        directories.SPECIFICATION_DIR,
-        directories.CACHE_DIR,
-        url,
-        documentation_url,
-    )
-    logger.info(f"add data response is : {response_data}")
+    Args:
+        file_name (str): Collection resource file name
+        request_id (str): Unique request identifier
+        collection (str): Collection name (e.g. 'article-4-direction')
+        dataset (str): Dataset name (e.g. 'article-4-direction-area')
+        organisation_provider (str): Organisation code providing the data
+        url (str): Endpoint URL to fetch data from
+        documentation_url (str): Documentation URL for the dataset
+        directories (Directories): Directories object with required paths
+    """
+    response_data = {}
+
+    try:
+        pipeline_dir = os.path.join(directories.PIPELINE_DIR, collection, request_id)
+        input_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
+        collection_dir = os.path.join(directories.COLLECTION_DIR, request_id)
+        output_path = os.path.join(directories.TRANSFORMED_DIR, request_id, file_name)
+        if not os.path.exists(output_path):
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+        # Loads csvs for Pipeline and Config
+        if not fetch_add_data_pipeline_csvs(collection, pipeline_dir):
+            response_data[
+                "message"
+            ] = f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
+            return response_data
+        if not fetch_add_data_collection_csvs(collection, collection_dir):
+            response_data[
+                "message"
+            ] = f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
+            return response_data
+
+        # All processes arount transforming the data and generating pipeline summary
+        pipeline_summary = fetch_add_data_response(
+            dataset=dataset,
+            organisation_provider=organisation_provider,
+            pipeline_dir=pipeline_dir,
+            input_dir=input_dir,
+            output_path=output_path,
+            specification_dir=directories.SPECIFICATION_DIR,
+            cache_dir=directories.CACHE_DIR,
+            url=url,
+        )
+
+        # Create endpoint and source summaries in workflow
+        endpoint_summary = validate_endpoint(
+            url,
+            collection_dir,
+            plugin,
+            start_date=start_date,
+        )
+        source_summary = validate_source(
+            documentation_url,
+            collection_dir,
+            collection,
+            organisation_provider,
+            dataset,
+            endpoint_summary,
+            start_date=start_date,
+            licence=licence,
+        )
+
+        response_data = {
+            "pipeline-summary": pipeline_summary,
+            "endpoint-summary": endpoint_summary,
+            "source-summary": source_summary,
+        }
+
+        logger.info(f"add data response is for id {request_id} : {response_data}")
+
+    except Exception as e:
+        logger.warning(
+            f"An error occurred in add_data_workflow: {e} for request id {request_id}"
+        )
+        response_data["message"] = f"An error occurred in add_data_workflow: {e}"
+
+    finally:
+        clean_up(
+            request_id,
+            os.path.join(directories.COLLECTION_DIR, "resource", request_id),
+            os.path.join(directories.COLLECTION_DIR, request_id),
+            directories.COLLECTION_DIR,
+            os.path.join(directories.TRANSFORMED_DIR, request_id),
+            directories.TRANSFORMED_DIR,
+            os.path.join(directories.PIPELINE_DIR, collection),
+            directories.PIPELINE_DIR,
+        )
 
     return response_data
 
 
-def fetch_add_data_csvs(collection, pipeline_dir):
+def fetch_add_data_pipeline_csvs(collection, pipeline_dir):
+    """Download pipeline CSVs into pipeline_dir. Returns False if any errors occur."""
     os.makedirs(pipeline_dir, exist_ok=True)
-    add_data_csvs = ["lookup.csv", "endpoint.csv", "source.csv"]
-    fetched_files = []
-    for csv_name in add_data_csvs:
+    pipeline_csvs = [
+        "column.csv",
+        "combine.csv",
+        "concat.csv",
+        "convert.csv",
+        "default-value.csv",
+        "default.csv",
+        "entity-organisation.csv",
+        "expect.csv",
+        "filter.csv",
+        "lookup.csv",
+        "old-entity.csv",
+        "patch.csv",
+        "skip.csv",
+        "transform.csv",
+    ]
+    for csv_name in pipeline_csvs:
         csv_path = os.path.join(pipeline_dir, csv_name)
-        if csv_name == "lookup.csv":
-            url = f"{CONFIG_URL}pipeline/{collection}/{csv_name}"
-        else:
-            url = f"{CONFIG_URL}collection/{collection}/{csv_name}"
+        url = f"{CONFIG_URL}pipeline/{collection}/{csv_name}"
         try:
             urllib.request.urlretrieve(url, csv_path)
             logger.info(f"Downloaded {csv_name} from {url} to {csv_path}")
         except HTTPError as e:
-            logger.warning(f"Failed to retrieve {csv_name}: {e}.")
-    return fetched_files
+            logger.warning(f"Failed to retrieve {csv_name}: {e}")
+            return False
+    return True
+
+
+def fetch_add_data_collection_csvs(collection, config_dir):
+    """Download config CSVs (endpoint.csv, source.csv) into config_dir. Returns False if any errors occur."""
+    os.makedirs(config_dir, exist_ok=True)
+    config_csvs = ["endpoint.csv", "source.csv"]
+    for csv_name in config_csvs:
+        csv_path = os.path.join(config_dir, csv_name)
+        url = f"{CONFIG_URL}collection/{collection}/{csv_name}"
+        try:
+            urllib.request.urlretrieve(url, csv_path)
+            logger.info(f"Downloaded {csv_name} from {url} to {csv_path}")
+        except HTTPError as e:
+            logger.warning(f"Failed to retrieve {csv_name}: {e}")
+            return False
+    return True

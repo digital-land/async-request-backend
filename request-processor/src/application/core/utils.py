@@ -126,7 +126,12 @@ def hash_md5(value):
 
 
 def append_endpoint(
-    endpoint_csv_path, endpoint_url, entry_date=None, start_date=None, end_date=None
+    endpoint_csv_path,
+    endpoint_url,
+    entry_date=None,
+    start_date=None,
+    end_date=None,
+    plugin=None,
 ):
     endpoint_key = hash_sha256(endpoint_url)
     exists = False
@@ -162,7 +167,7 @@ def append_endpoint(
                 "endpoint": endpoint_key,
                 "endpoint-url": endpoint_url,
                 "parameters": "",
-                "plugin": "",
+                "plugin": plugin or "",
                 "entry-date": _formatted_date(entry_date)
                 or datetime.now().date().isoformat(),
                 "start-date": _formatted_date(start_date),
@@ -281,3 +286,147 @@ def _formatted_date(date_value):
         except Exception:
             pass
     return str(date_value)
+
+
+def validate_endpoint(url, config_dir, plugin, start_date=None):
+    """Validate if endpoint URL exists in endpoint.csv and create entry if not."""
+    endpoint_csv_path = os.path.join(config_dir, "endpoint.csv")
+    if not url:
+        logger.info("No endpoint URL provided")
+        return {}
+
+    if not os.path.exists(endpoint_csv_path):
+        os.makedirs(os.path.dirname(endpoint_csv_path), exist_ok=True)
+        with open(endpoint_csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                [
+                    "endpoint",
+                    "endpoint-url",
+                    "parameters",
+                    "plugin",
+                    "entry-date",
+                    "start-date",
+                    "end-date",
+                ]
+            )
+
+    endpoint_exists = False
+    existing_entry = None
+
+    try:
+        with open(endpoint_csv_path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row.get("endpoint-url", "").strip() == url.strip():
+                    endpoint_exists = True
+                    existing_entry = {
+                        "endpoint": row.get("endpoint", ""),
+                        "endpoint-url": row.get("endpoint-url", ""),
+                        "parameters": row.get("parameters", ""),
+                        "plugin": row.get("plugin", ""),
+                        "entry-date": row.get("entry-date", ""),
+                        "start-date": row.get("start-date", ""),
+                        "end-date": row.get("end-date", ""),
+                    }
+                    logger.info("Endpoint URL found in endpoint.csv")
+                    break
+    except Exception as e:
+        logger.error(f"Error reading endpoint.csv: {e}")
+
+    endpoint_summary = {"endpoint_url_in_endpoint_csv": endpoint_exists}
+
+    if endpoint_exists and existing_entry:
+        endpoint_summary["existing_endpoint_entry"] = existing_entry
+
+    else:
+        if not start_date:
+            start_date = datetime.now().strftime("%Y-%m-%d")
+        entry_date = datetime.now().isoformat()
+
+        endpoint_key, new_endpoint_row = append_endpoint(
+            endpoint_csv_path=endpoint_csv_path,
+            endpoint_url=url,
+            entry_date=entry_date,
+            start_date=start_date,
+            end_date="",
+            plugin=plugin,
+        )
+
+        if new_endpoint_row:
+            logger.info(f"Appended new endpoint with hash: {endpoint_key}")
+            endpoint_summary["new_endpoint_entry"] = new_endpoint_row
+
+    return endpoint_summary
+
+
+def validate_source(
+    documentation_url,
+    config_dir,
+    collection,
+    organisation,
+    dataset,
+    endpoint_summary,
+    start_date=None,
+    licence=None,
+):
+    """Validate if source exists in source.csv and create entry if not."""
+    source_csv_path = os.path.join(config_dir, "source.csv")
+
+    endpoint_key = endpoint_summary.get("existing_endpoint_entry", {}).get(
+        "endpoint"
+    ) or endpoint_summary.get("new_endpoint_entry", {}).get("endpoint")
+    if not endpoint_key:
+        logger.warning("No endpoint_key available from endpoint_summary")
+        return {}
+
+    if not documentation_url:
+        logger.warning("No documentation URL provided")
+
+    if not start_date:
+        start_date = datetime.now().strftime("%Y-%m-%d")
+    entry_date = datetime.now().isoformat()
+
+    source_key_returned, new_source_row = append_source(
+        source_csv_path=source_csv_path,
+        collection=collection,
+        organisation=organisation,
+        endpoint_key=endpoint_key,
+        attribution="",
+        documentation_url=documentation_url or "",
+        licence=licence or "",
+        pipelines=dataset,
+        entry_date=entry_date,
+        start_date=start_date,
+        end_date="",
+    )
+
+    if new_source_row:
+        return {
+            "documentation_url_in_source_csv": False,
+            "new_source_entry": new_source_row,
+        }
+
+    source_summary = {"documentation_url_in_source_csv": True}
+    try:
+        with open(source_csv_path, "r", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                if row.get("source", "").strip() == source_key_returned:
+                    source_summary["existing_source_entry"] = {
+                        "source": row.get("source", ""),
+                        "attribution": row.get("attribution", ""),
+                        "collection": row.get("collection", ""),
+                        "documentation-url": row.get("documentation-url", ""),
+                        "endpoint": row.get("endpoint", ""),
+                        "licence": row.get("licence", ""),
+                        "organisation": row.get("organisation", ""),
+                        "pipelines": row.get("pipelines", ""),
+                        "entry-date": row.get("entry-date", ""),
+                        "start-date": row.get("start-date", ""),
+                        "end-date": row.get("end-date", ""),
+                    }
+                    break
+    except Exception as e:
+        logger.error(f"Error reading existing source: {e}")
+
+    return source_summary
