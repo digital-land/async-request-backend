@@ -328,22 +328,35 @@ def test_add_data_workflow(monkeypatch):
 
     directories = DummyDirectories()
 
-    expected_response = {"status": "success", "data": "test"}
+    pipeline_response = {"status": "success", "data": "test"}
+    expected_response = {
+        "pipeline-summary": pipeline_response,
+        "endpoint-summary": {"endpoint_summary": "mocked"},
+        "source-summary": {"source_summary": "mocked"},
+    }
 
     monkeypatch.setattr(
         "src.application.core.workflow.resource_from_path", lambda path: "resource-hash"
     )
     monkeypatch.setattr(
         "src.application.core.workflow.fetch_add_data_pipeline_csvs",
-        lambda col, pdir: None,
+        lambda col, pdir: True,
     )
     monkeypatch.setattr(
         "src.application.core.workflow.fetch_add_data_collection_csvs",
-        lambda col, cdir: None,
+        lambda col, cdir: True,
     )
     monkeypatch.setattr(
         "src.application.core.workflow.fetch_add_data_response",
-        lambda *args, **kwargs: expected_response,
+        lambda *args, **kwargs: pipeline_response,
+    )
+    monkeypatch.setattr(
+        "src.application.core.workflow.validate_endpoint",
+        lambda *args, **kwargs: {"endpoint_summary": "mocked"},
+    )
+    monkeypatch.setattr(
+        "src.application.core.workflow.validate_source",
+        lambda *args, **kwargs: {"source_summary": "mocked"},
     )
 
     result = add_data_workflow(
@@ -382,41 +395,31 @@ def test_add_data_workflow_calls(monkeypatch):
 
     def fake_fetch_add_data_pipeline_csvs(col, pdir):
         called["fetch_add_data_pipeline_csvs"] = (col, pdir)
+        return True
 
     def fake_fetch_add_data_collection_csvs(col, cdir):
         called["fetch_add_data_collection_csvs"] = (col, cdir)
+        return True
 
     def fake_fetch_add_data_response(
-        collection,
         dataset,
         organisation_provider,
         pipeline_dir,
-        collection_dir,
         input_dir,
         output_path,
         specification_dir,
         cache_dir,
         url,
-        documentation_url,
-        licence=None,
-        start_date=None,
-        plugin=None,
     ):
         called["fetch_add_data_response"] = {
-            "collection": collection,
             "dataset": dataset,
             "organisation": organisation_provider,
             "pipeline_dir": pipeline_dir,
-            "collection_dir": collection_dir,
             "input_dir": input_dir,
             "output_path": output_path,
             "specification_dir": specification_dir,
             "cache_dir": cache_dir,
             "url": url,
-            "documentation_url": documentation_url,
-            "licence": licence,
-            "start_date": start_date,
-            "plugin": plugin,
         }
         return {"result": "ok"}
 
@@ -467,9 +470,7 @@ def test_add_data_workflow_calls(monkeypatch):
         == directories.SPECIFICATION_DIR
     )
     assert called["fetch_add_data_response"]["cache_dir"] == directories.CACHE_DIR
-    assert called["fetch_add_data_response"]["collection_dir"] == expected_config_dir
     assert called["fetch_add_data_response"]["url"] == url
-    assert called["fetch_add_data_response"]["documentation_url"] == documentation_url
 
 
 def test_fetch_add_data_pipeline_csvs_from_url(monkeypatch, tmp_path):

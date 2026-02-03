@@ -210,6 +210,7 @@ def fetch_add_data_response(
 
         existing_entities = []
         new_entities = []
+        issues_log = None
 
         for idx, resource_file in enumerate(files_in_resource):
             resource_file_path = os.path.join(input_dir, resource_file)
@@ -292,7 +293,9 @@ def fetch_add_data_response(
             "existing-in-resource": len(existing_entities),
             "new-entities": new_entities_breakdown,
             "existing-entities": existing_entities_breakdown,
-            "pipeline-issues": [dict(issue) for issue in issues_log.rows],
+            "pipeline-issues": [dict(issue) for issue in issues_log.rows]
+            if issues_log
+            else [],
         }
 
         return pipeline_summary

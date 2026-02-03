@@ -1,4 +1,9 @@
-from src.application.core.utils import get_request, check_content
+from src.application.core.utils import (
+    get_request,
+    check_content,
+    validate_endpoint,
+    validate_source,
+)
 import requests_mock
 import os
 import csv
@@ -192,3 +197,501 @@ def test_append_source_existing(tmp_path):
         reader = list(csv.DictReader(f))
         assert len(reader) == 1
         assert reader[0]["source"] == source_key
+
+
+def test_validate_endpoint_creates_file(monkeypatch, tmp_path):
+    """Test that validate_endpoint creates endpoint.csv if it doesn't exist"""
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+    url = "http://example.com/endpoint"
+    endpoint_csv_path = pipeline_dir / "endpoint.csv"
+
+    def fake_append_endpoint(
+        endpoint_csv_path, endpoint_url, entry_date, start_date, end_date, plugin=None
+    ):
+        return "endpoint_hash", {
+            "endpoint": "endpoint_hash",
+            "endpoint-url": endpoint_url,
+            "parameters": "",
+            "plugin": plugin or "",
+            "entry-date": entry_date,
+            "start-date": start_date,
+            "end-date": end_date,
+        }
+
+    monkeypatch.setattr(
+        "src.application.core.utils.append_endpoint", fake_append_endpoint
+    )
+
+    assert not endpoint_csv_path.exists()
+
+    validate_endpoint(url, str(pipeline_dir), plugin=None)
+
+    assert endpoint_csv_path.exists()
+
+    with open(endpoint_csv_path, "r", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        headers = next(reader)
+        assert headers == [
+            "endpoint",
+            "endpoint-url",
+            "parameters",
+            "plugin",
+            "entry-date",
+            "start-date",
+            "end-date",
+        ]
+
+
+def test_validate_endpoint_appends(monkeypatch, tmp_path):
+    """Test that validate_endpoint appends new endpoint when URL not found"""
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+    url = "http://example.com/new-endpoint"
+    endpoint_csv_path = pipeline_dir / "endpoint.csv"
+
+    with open(endpoint_csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "endpoint",
+                "endpoint-url",
+                "parameters",
+                "plugin",
+                "entry-date",
+                "start-date",
+                "end-date",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "endpoint": "existing_hash",
+                "endpoint-url": "http://example.com/existing",
+                "parameters": "",
+                "plugin": "",
+                "entry-date": "2024-01-01T00:00:00",
+                "start-date": "2024-01-01",
+                "end-date": "",
+            }
+        )
+
+    def fake_append_endpoint(
+        endpoint_csv_path, endpoint_url, entry_date, start_date, end_date, plugin=None
+    ):
+        return "new_endpoint_hash", {
+            "endpoint": "new_endpoint_hash",
+            "endpoint-url": endpoint_url,
+            "parameters": "",
+            "plugin": plugin or "",
+            "entry-date": entry_date,
+            "start-date": start_date,
+            "end-date": end_date,
+        }
+
+    monkeypatch.setattr(
+        "src.application.core.utils.append_endpoint", fake_append_endpoint
+    )
+
+    result = validate_endpoint(url, str(pipeline_dir), plugin=None)
+
+    assert result["endpoint_url_in_endpoint_csv"] is False
+    assert "new_endpoint_entry" in result
+    assert result["new_endpoint_entry"]["endpoint"] == "new_endpoint_hash"
+    assert result["new_endpoint_entry"]["endpoint-url"] == url
+
+
+def test_validate_endpoint_finds_existing(monkeypatch, tmp_path):
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+    url = "http://example.com/endpoint"
+    endpoint_csv_path = pipeline_dir / "endpoint.csv"
+    with open(endpoint_csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "endpoint",
+                "endpoint-url",
+                "parameters",
+                "plugin",
+                "entry-date",
+                "start-date",
+                "end-date",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "endpoint": "endpoint_hash",
+                "endpoint-url": url,
+                "parameters": "",
+                "plugin": "",
+                "entry-date": "2024-01-01",
+                "start-date": "2024-01-01",
+                "end-date": "",
+            }
+        )
+
+    monkeypatch.setattr(
+        "src.application.core.utils.append_endpoint",
+        lambda *a, **kw: (_ for _ in ()).throw(Exception("Should not be called")),
+    )
+
+    result = validate_endpoint(url, str(pipeline_dir), plugin=None)
+    assert result["endpoint_url_in_endpoint_csv"] is True
+    assert "existing_endpoint_entry" in result
+    assert result["existing_endpoint_entry"]["endpoint-url"] == url
+
+
+def test_validate_endpoint_empty_url(monkeypatch, tmp_path):
+    """Test validate_endpoint with empty URL"""
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+
+    result = validate_endpoint("", str(pipeline_dir), plugin=None)
+
+    assert result == {}
+
+
+def test_validate_endpoint_csv_read_error(monkeypatch, tmp_path):
+    """Test validate_endpoint when reading CSV fails"""
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+    url = "http://example.com/endpoint"
+
+    endpoint_csv_path = pipeline_dir / "endpoint.csv"
+    endpoint_csv_path.write_bytes(b"\x00\x00\x00")
+
+    def fake_append_endpoint(
+        endpoint_csv_path, endpoint_url, entry_date, start_date, end_date, plugin=None
+    ):
+        return "endpoint_hash", {
+            "endpoint": "endpoint_hash",
+            "endpoint-url": endpoint_url,
+            "parameters": "",
+            "plugin": plugin or "",
+            "entry-date": entry_date,
+            "start-date": start_date,
+            "end-date": end_date,
+        }
+
+
+def test_validate_source_creates_new_source(monkeypatch, tmp_path):
+    """Test validate_source creates new source entry when it doesn't exist"""
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+    source_csv_path = pipeline_dir / "source.csv"
+
+    documentation_url = "http://example.com/doc"
+    collection = "test-collection"
+    organisation = "test-org"
+    dataset = "test-dataset"
+
+    endpoint_summary = {
+        "endpoint_url_in_endpoint_csv": True,
+        "existing_endpoint_entry": {"endpoint": "endpoint_hash_123"},
+    }
+
+    def fake_append_source(
+        source_csv_path,
+        collection,
+        organisation,
+        endpoint_key,
+        attribution,
+        documentation_url,
+        licence,
+        pipelines,
+        entry_date,
+        start_date,
+        end_date,
+    ):
+        return "source_hash_456", {
+            "source": "source_hash_456",
+            "attribution": attribution,
+            "collection": collection,
+            "documentation-url": documentation_url,
+            "endpoint": endpoint_key,
+            "licence": licence,
+            "organisation": organisation,
+            "pipelines": pipelines,
+            "entry-date": entry_date,
+            "start-date": start_date,
+            "end-date": end_date,
+        }
+
+    monkeypatch.setattr("src.application.core.utils.append_source", fake_append_source)
+
+    result = validate_source(
+        documentation_url,
+        str(pipeline_dir),
+        collection,
+        organisation,
+        dataset,
+        endpoint_summary,
+        start_date=None,
+        licence=None,
+    )
+
+    assert result["documentation_url_in_source_csv"] is False
+    assert "new_source_entry" in result
+    assert result["new_source_entry"]["source"] == "source_hash_456"
+    assert result["new_source_entry"]["collection"] == collection
+    assert result["new_source_entry"]["organisation"] == organisation
+    assert result["new_source_entry"]["pipelines"] == dataset
+
+
+def test_validate_source_finds_existing_source(monkeypatch, tmp_path):
+    """Test validate_source finds existing source entry"""
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+    source_csv_path = pipeline_dir / "source.csv"
+
+    documentation_url = "http://example.com/doc"
+    collection = "test-collection"
+    organisation = "test-org"
+    dataset = "test-dataset"
+
+    endpoint_summary = {
+        "endpoint_url_in_endpoint_csv": True,
+        "existing_endpoint_entry": {"endpoint": "endpoint_hash_123"},
+    }
+
+    with open(source_csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "source",
+                "attribution",
+                "collection",
+                "documentation-url",
+                "endpoint",
+                "licence",
+                "organisation",
+                "pipelines",
+                "entry-date",
+                "start-date",
+                "end-date",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "source": "existing_source_hash",
+                "attribution": "",
+                "collection": collection,
+                "documentation-url": documentation_url,
+                "endpoint": "endpoint_hash_123",
+                "licence": "",
+                "organisation": organisation,
+                "pipelines": dataset,
+                "entry-date": "2024-01-01T00:00:00",
+                "start-date": "2024-01-01",
+                "end-date": "",
+            }
+        )
+
+    def fake_append_source(*args, **kwargs):
+        return "existing_source_hash", None
+
+    monkeypatch.setattr("src.application.core.utils.append_source", fake_append_source)
+
+    result = validate_source(
+        documentation_url,
+        str(pipeline_dir),
+        collection,
+        organisation,
+        dataset,
+        endpoint_summary,
+        start_date=None,
+        licence=None,
+    )
+
+    assert result["documentation_url_in_source_csv"] is True
+    assert "existing_source_entry" in result
+    assert result["existing_source_entry"]["source"] == "existing_source_hash"
+    assert result["existing_source_entry"]["collection"] == collection
+
+
+def test_validate_source_no_endpoint_key(tmp_path):
+    """Test validate_source returns empty dict when no endpoint key available"""
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+
+    documentation_url = "http://example.com/doc"
+    collection = "test-collection"
+    organisation = "test-org"
+    dataset = "test-dataset"
+
+    endpoint_summary = {}
+
+    result = validate_source(
+        documentation_url,
+        str(pipeline_dir),
+        collection,
+        organisation,
+        dataset,
+        endpoint_summary,
+        start_date=None,
+        licence=None,
+    )
+
+    assert result == {}
+
+
+def test_validate_source_empty_documentation_url(monkeypatch, tmp_path):
+    """Test validate_source handles empty documentation URL"""
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+
+    documentation_url = ""
+    collection = "test-collection"
+    organisation = "test-org"
+    dataset = "test-dataset"
+
+    endpoint_summary = {
+        "endpoint_url_in_endpoint_csv": True,
+        "existing_endpoint_entry": {"endpoint": "endpoint_hash_123"},
+    }
+
+    def fake_append_source(
+        source_csv_path,
+        collection,
+        organisation,
+        endpoint_key,
+        attribution,
+        documentation_url,
+        licence,
+        pipelines,
+        entry_date,
+        start_date,
+        end_date,
+    ):
+        return "source_hash_456", {
+            "source": "source_hash_456",
+            "attribution": attribution,
+            "collection": collection,
+            "documentation-url": documentation_url,
+            "endpoint": endpoint_key,
+            "licence": licence,
+            "organisation": organisation,
+            "pipelines": pipelines,
+            "entry-date": entry_date,
+            "start-date": start_date,
+            "end-date": end_date,
+        }
+
+    monkeypatch.setattr("src.application.core.utils.append_source", fake_append_source)
+
+    result = validate_source(
+        documentation_url,
+        str(pipeline_dir),
+        collection,
+        organisation,
+        dataset,
+        endpoint_summary,
+        start_date=None,
+        licence=None,
+    )
+
+    assert "documentation_url_in_source_csv" in result
+    assert result["new_source_entry"]["documentation-url"] == ""
+
+
+def test_validate_source_uses_new_endpoint_entry(monkeypatch, tmp_path):
+    """Test validate_source uses endpoint from new_endpoint_entry when available"""
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+
+    documentation_url = "http://example.com/doc"
+    collection = "test-collection"
+    organisation = "test-org"
+    dataset = "test-dataset"
+
+    endpoint_summary = {
+        "endpoint_url_in_endpoint_csv": False,
+        "new_endpoint_entry": {"endpoint": "new_endpoint_hash_789"},
+    }
+
+    captured_endpoint_key = None
+
+    def fake_append_source(
+        source_csv_path,
+        collection,
+        organisation,
+        endpoint_key,
+        attribution,
+        documentation_url,
+        licence,
+        pipelines,
+        entry_date,
+        start_date,
+        end_date,
+    ):
+        nonlocal captured_endpoint_key
+        captured_endpoint_key = endpoint_key
+        return "source_hash_456", {
+            "source": "source_hash_456",
+            "attribution": attribution,
+            "collection": collection,
+            "documentation-url": documentation_url,
+            "endpoint": endpoint_key,
+            "licence": licence,
+            "organisation": organisation,
+            "pipelines": pipelines,
+            "entry-date": entry_date,
+            "start-date": start_date,
+            "end-date": end_date,
+        }
+
+    monkeypatch.setattr("src.application.core.utils.append_source", fake_append_source)
+
+    result = validate_source(
+        documentation_url,
+        str(pipeline_dir),
+        collection,
+        organisation,
+        dataset,
+        endpoint_summary,
+        start_date=None,
+        licence=None,
+    )
+
+    assert captured_endpoint_key == "new_endpoint_hash_789"
+    assert result["new_source_entry"]["endpoint"] == "new_endpoint_hash_789"
+
+
+def test_validate_source_handles_csv_read_error(monkeypatch, tmp_path):
+    """Test validate_source handles CSV read errors gracefully"""
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+    source_csv_path = pipeline_dir / "source.csv"
+
+    documentation_url = "http://example.com/doc"
+    collection = "test-collection"
+    organisation = "test-org"
+    dataset = "test-dataset"
+
+    endpoint_summary = {
+        "endpoint_url_in_endpoint_csv": True,
+        "existing_endpoint_entry": {"endpoint": "endpoint_hash_123"},
+    }
+
+    source_csv_path.write_bytes(b"\x00\x00\x00")
+
+    def fake_append_source(*args, **kwargs):
+        return "existing_source_hash", None
+
+    monkeypatch.setattr("src.application.core.utils.append_source", fake_append_source)
+
+    result = validate_source(
+        documentation_url,
+        str(pipeline_dir),
+        collection,
+        organisation,
+        dataset,
+        endpoint_summary,
+        start_date=None,
+        licence=None,
+    )
+
+    assert "documentation_url_in_source_csv" in result
