@@ -453,10 +453,14 @@ def add_data_workflow(
 
         # Loads csvs for Pipeline and Config
         if not fetch_add_data_pipeline_csvs(collection, pipeline_dir):
-            response_data['message'] = f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
+            response_data[
+                "message"
+            ] = f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
             return response_data
         if not fetch_add_data_collection_csvs(collection, collection_dir):
-            response_data['message'] = f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
+            response_data[
+                "message"
+            ] = f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
             return response_data
 
         # All processes arount transforming the data and generating pipeline summary
@@ -468,7 +472,7 @@ def add_data_workflow(
             output_path=output_path,
             specification_dir=directories.SPECIFICATION_DIR,
             cache_dir=directories.CACHE_DIR,
-            url=url
+            url=url,
         )
 
         # Create endpoint and source summaries in workflow
@@ -498,8 +502,10 @@ def add_data_workflow(
         logger.info(f"add data response is for id {request_id} : {response_data}")
 
     except Exception as e:
-        logger.warning(f"An error occurred in add_data_workflow: {e} for request id {request_id}")
-        response_data['message'] = f"An error occurred in add_data_workflow: {e}"
+        logger.warning(
+            f"An error occurred in add_data_workflow: {e} for request id {request_id}"
+        )
+        response_data["message"] = f"An error occurred in add_data_workflow: {e}"
 
     finally:
         clean_up(

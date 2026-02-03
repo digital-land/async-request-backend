@@ -7,8 +7,6 @@ from digital_land.api import API
 
 from digital_land.pipeline import Pipeline, Lookups
 from digital_land.commands import get_resource_unidentified_lookups
-from application.core.utils import append_endpoint, append_source
-from datetime import datetime
 from pathlib import Path
 
 logger = get_logger(__name__)
@@ -42,7 +40,7 @@ def fetch_response_data(
     try:
         for file_name in files_in_resource:
             file_path = os.path.join(input_path, file_name)
-            # retrieve unnassigned entities and assign
+            # retrieve unnassigned entities and assign, TODO: Is this necessary here?
             assign_entries(
                 resource_path=file_path,
                 dataset=dataset,
@@ -197,7 +195,7 @@ def fetch_add_data_response(
     output_path,
     specification_dir,
     cache_dir,
-    url
+    url,
 ):
     try:
         specification = Specification(specification_dir)
@@ -262,7 +260,9 @@ def fetch_add_data_response(
                     new_entities.extend(new_lookups)
 
                     # Reload pipeline to pick up newly saved lookups
-                    pipeline = Pipeline(pipeline_dir, dataset, specification=specification)
+                    pipeline = Pipeline(
+                        pipeline_dir, dataset, specification=specification
+                    )
 
                     # Now re-run transform to check and return issue log
                     issues_log = pipeline.transform(
