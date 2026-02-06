@@ -513,6 +513,7 @@ def _fetch_resource(resource_dir, url):
                     }
                 )
         elif log.get("exception") or log.get("status", "").startswith("4"):
+            log["plugin"] = plugin  # Save plugin used for arcgis error context
             break
 
     # All fetch attempts failed - include content-type if available

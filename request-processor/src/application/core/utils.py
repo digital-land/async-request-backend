@@ -251,9 +251,11 @@ def create_user_friendly_error_log(exception_detail):
     status_code = exception_detail.get("errCode")
     exception_type = exception_detail.get("exceptionType")
     content_type = exception_detail.get("contentType")
+    plugin = exception_detail.get("plugin")
 
     user_message = "An error occurred, please try again later."
 
+    # The ordering here has been considered to show the most relevant message to users in the front end
     if exception_type in ["SSLError", "SSLCertVerificationError"]:
         user_message = "SSL certificate verification failed"
     elif content_type and "text/html" in content_type:
@@ -264,6 +266,8 @@ def create_user_friendly_error_log(exception_detail):
         user_message = "The URL must be accessible"
     elif status_code == "404":
         user_message = "The URL does not exist. Check the URL you've entered is correct (HTTP 404 error)"
+    elif plugin == "arcgis" and status_code == "200":
+        user_message = "URL must be the data layer"
 
     result = dict(exception_detail)
     result["message"] = user_message

@@ -93,7 +93,7 @@ request_payload = {
         "collection": "article-4-direction",
         "column_mapping": None,
         "geom_type": None,
-        "url": "https://smbc-opendata.s3.eu-west-1.amazonaws.com/Article4/Article4_Dataset_Stockport.csv",
+        "url": "https://raw.githubusercontent.com/digital-land/PublishExamples/refs/heads/main/Article4Direction/Files/Article4DirectionArea/articel4directionareas-(wrongColName-NewRefs).csv",
         "documentation_url": "https://example.com/article-4-direction/documentation",
         "licence": "ogl3",
         "start_date": "2020-01-01",
