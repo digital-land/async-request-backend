@@ -1,6 +1,8 @@
 test: lint test-coverage
 
-lint:: black-check flake8
+lint:: 
+	make black ./src
+	python -m flake8 ./src
 
 black-check:
 	black --check .
