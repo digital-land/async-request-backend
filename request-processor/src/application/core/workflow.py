@@ -1,4 +1,5 @@
 import datetime
+import hashlib
 import os
 import csv
 from pathlib import Path
@@ -463,6 +464,8 @@ def add_data_workflow(
             ] = f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
             return response_data
 
+        endpoint_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()
+
         # All processes arount transforming the data and generating pipeline summary
         pipeline_summary = fetch_add_data_response(
             dataset=dataset,
@@ -472,7 +475,7 @@ def add_data_workflow(
             output_path=output_path,
             specification_dir=directories.SPECIFICATION_DIR,
             cache_dir=directories.CACHE_DIR,
-            url=url,
+            endpoint=endpoint_hash,
         )
 
         # Create endpoint and source summaries in workflow

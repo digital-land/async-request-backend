@@ -44,11 +44,13 @@ class CustomException(Exception):
         # Content type of the response useful for text/html checks (when not using arcgis/wfs plugin)
         self.content_type = log.get("content-type")
         self.message_detail = log.get("user_message_detail")
+        self.plugin = log.get("plugin")
 
         self.load()
         super().__init__(self.detail)
 
     def load(self):
+        # This is not the best way to do this but keeps backward compatibility for now
         self.detail = {
             "errCode": str(self.status) if self.status is not None else None,
             "errType": "User Error",
@@ -60,4 +62,5 @@ class CustomException(Exception):
             "fetchStatus": self.fetch_status,
             "exceptionType": self.exception_type,
             "contentType": self.content_type,
+            "plugin": self.plugin,
         }

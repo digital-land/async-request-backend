@@ -38,6 +38,7 @@ class AddDataParams(Params):
     type: Literal[RequestTypeEnum.add_data] = RequestTypeEnum.add_data
     url: Optional[str] = None
     documentation_url: Optional[str] = None
+    authoritative: Optional[bool] = None
     licence: Optional[str] = None
     start_date: Optional[str] = None
     organisation: Optional[str] = None

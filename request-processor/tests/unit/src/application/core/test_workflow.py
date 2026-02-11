@@ -9,6 +9,7 @@ from src.application.core.workflow import (
     fetch_add_data_collection_csvs,
 )
 import csv
+import hashlib
 import os
 from pathlib import Path
 import urllib
@@ -409,7 +410,7 @@ def test_add_data_workflow_calls(monkeypatch):
         output_path,
         specification_dir,
         cache_dir,
-        url,
+        endpoint,
     ):
         called["fetch_add_data_response"] = {
             "dataset": dataset,
@@ -419,7 +420,7 @@ def test_add_data_workflow_calls(monkeypatch):
             "output_path": output_path,
             "specification_dir": specification_dir,
             "cache_dir": cache_dir,
-            "url": url,
+            "endpoint": endpoint,
         }
         return {"result": "ok"}
 
@@ -470,7 +471,8 @@ def test_add_data_workflow_calls(monkeypatch):
         == directories.SPECIFICATION_DIR
     )
     assert called["fetch_add_data_response"]["cache_dir"] == directories.CACHE_DIR
-    assert called["fetch_add_data_response"]["url"] == url
+    expected_endpoint_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()
+    assert called["fetch_add_data_response"]["endpoint"] == expected_endpoint_hash
 
 
 def test_fetch_add_data_pipeline_csvs_from_url(monkeypatch, tmp_path):
