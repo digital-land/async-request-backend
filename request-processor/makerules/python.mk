@@ -2,11 +2,11 @@ all:: lint test-coverage
 
 lint: black-check flake8
 
-black-check: 
-	python -m black --check ./src ./tests
+black-check:
+	python -m black --check --exclude "digital-land" ./src ./tests
 
-flake8: 
-	python -m flake8 ./src ./tests
+flake8:
+	python -m flake8 --exclude="./src/digital-land" ./src ./tests
 
 black:
 	python -m black .
