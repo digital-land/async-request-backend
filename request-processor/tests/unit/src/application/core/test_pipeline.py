@@ -1,6 +1,4 @@
 import pytest
-import os
-import csv
 from unittest.mock import MagicMock
 from src.application.core.pipeline import (
     fetch_add_data_response,

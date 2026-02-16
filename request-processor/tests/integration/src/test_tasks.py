@@ -99,7 +99,7 @@ def test_check_datafile(
             "https://example.com/arcgis/rest/services/MapServer",
             (
                 None,
-                '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":"Test Feature"}}]}'.encode(
+                '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":"Test Feature"}}]}'.encode(  # noqa: E501
                     "utf-8"
                 ),
             ),

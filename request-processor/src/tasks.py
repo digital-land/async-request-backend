@@ -141,7 +141,7 @@ def handle_check_file(request_schema, request_data, tmp_dir):
 
 
 @celery.task(base=CheckDataUrlTask, name=CheckDataUrlTask.name)
-def check_dataurl(request: Dict, directories=None):
+def check_dataurl(request: Dict, directories=None):  # noqa
     logger.info(
         f"Started check_dataurl task for request_id = {request.get('id', 'unknown')}"
     )
