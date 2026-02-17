@@ -3,11 +3,10 @@ import database
 import pytest
 import json
 from src import tasks
-from src.tasks import save_response_to_db, _fetch_resource, check_dataurl
+from src.tasks import save_response_to_db, check_dataurl
 from request_model import models, schemas
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 from application.exceptions.customExceptions import CustomException
-from application.configurations.config import Directories
 
 
 @pytest.mark.parametrize(
@@ -640,7 +639,7 @@ def test_check_dataurl_workflow_called_with_correct_params(monkeypatch):
         tasks, "_get_request", lambda rid: {"id": rid, "status": "COMPLETE"}
     )
 
-    result = check_dataurl(request, directories_json)
+    check_dataurl(request, directories_json)
 
     assert len(workflow_calls) == 1
     assert workflow_calls[0]["file_name"] == "brownfield-data.csv"

@@ -195,7 +195,7 @@ def fetch_add_data_response(
     output_path,
     specification_dir,
     cache_dir,
-    url,
+    endpoint,
 ):
     try:
         specification = Specification(specification_dir)
@@ -210,6 +210,7 @@ def fetch_add_data_response(
 
         existing_entities = []
         new_entities = []
+        entity_org_mapping = []
         issues_log = None
 
         for idx, resource_file in enumerate(files_in_resource):
@@ -227,7 +228,7 @@ def fetch_add_data_response(
                     resource=resource_from_path(resource_file_path),
                     valid_category_values=valid_category_values,
                     disable_lookups=False,
-                    endpoints=[url],
+                    endpoints=[endpoint],
                 )
 
                 existing_entities.extend(
@@ -253,12 +254,18 @@ def fetch_add_data_response(
                         pipeline_dir=pipeline_dir,
                         specification=specification,
                         cache_dir=cache_dir,
-                        endpoints=[url] if url else None,
+                        endpoints=[endpoint] if endpoint else None,
                     )
                     logger.info(
                         f"Found {len(new_lookups)} unidentified lookups in {resource_file}"
                     )
                     new_entities.extend(new_lookups)
+
+                    # Default create a entity-organisation mapping, front end can use the 'authoritative' flag
+                    entity_org_mapping = create_entity_organisation(
+                        new_lookups, dataset, organisation_provider
+                    )
+                    # TODO, save to pipeline as well for rerun?
 
                     # Reload pipeline to pick up newly saved lookups
                     pipeline = Pipeline(
@@ -274,7 +281,7 @@ def fetch_add_data_response(
                         resource=resource_from_path(resource_file_path),
                         valid_category_values=valid_category_values,
                         disable_lookups=False,
-                        endpoints=[url],
+                        endpoints=[endpoint],
                     )
                 else:
                     logger.info(f"No unidentified lookups found in {resource_file}")
@@ -293,6 +300,7 @@ def fetch_add_data_response(
             "existing-in-resource": len(existing_entities),
             "new-entities": new_entities_breakdown,
             "existing-entities": existing_entities_breakdown,
+            "entity-organisation": entity_org_mapping,
             "pipeline-issues": [dict(issue) for issue in issues_log.rows]
             if issues_log
             else [],
@@ -352,6 +360,38 @@ def _get_existing_entities_breakdown(existing_entities):
 
     breakdown = list(unique_entities.values())
     return breakdown
+
+
+def create_entity_organisation(new_entities, dataset, organisation):
+    """
+    Create entity-organisation mapping from new entities.
+
+    Args:
+        new_entities: List of entity dicts with 'entity' key
+        dataset: Dataset name
+        organisation: Organisation identifier
+
+    Returns:
+        List with single dict containing dataset, entity-minimum, entity-maximum, organisation
+    """
+    if not new_entities:
+        return []
+
+    entity_values = [
+        entry.get("entity") for entry in new_entities if entry.get("entity")
+    ]
+
+    if not entity_values:
+        return []
+
+    return [
+        {
+            "dataset": dataset,
+            "entity-minimum": min(entity_values),
+            "entity-maximum": max(entity_values),
+            "organisation": organisation,
+        }
+    ]
 
 
 def _map_transformed_entities(transformed_csv_path, pipeline_dir):  # noqa: C901

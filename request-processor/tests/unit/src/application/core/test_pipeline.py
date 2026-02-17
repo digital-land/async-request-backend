@@ -1,6 +1,4 @@
 import pytest
-import os
-import csv
 from unittest.mock import MagicMock
 from src.application.core.pipeline import (
     fetch_add_data_response,
@@ -17,7 +15,7 @@ def test_fetch_add_data_response_success(monkeypatch, tmp_path):
     input_path = tmp_path / "resource"
     specification_dir = tmp_path / "specification"
     cache_dir = tmp_path / "cache"
-    url = "http://example.com/endpoint"
+    endpoint = "abc123hash"
 
     input_path.mkdir(parents=True)
     pipeline_dir.mkdir(parents=True)
@@ -68,7 +66,7 @@ def test_fetch_add_data_response_success(monkeypatch, tmp_path):
         output_path=str(input_path / "output.csv"),
         specification_dir=str(specification_dir),
         cache_dir=str(cache_dir),
-        url=url,
+        endpoint=endpoint,
     )
 
     assert "new-in-resource" in result
@@ -83,7 +81,7 @@ def test_fetch_add_data_response_no_files(monkeypatch, tmp_path):
     input_path = tmp_path / "resource"
     specification_dir = tmp_path / "specification"
     cache_dir = tmp_path / "cache"
-    url = "http://example.com/endpoint"
+    endpoint = "abc123hash"
 
     input_path.mkdir(parents=True)
     pipeline_dir.mkdir(parents=True)
@@ -103,7 +101,7 @@ def test_fetch_add_data_response_no_files(monkeypatch, tmp_path):
         output_path=str(input_path / "output.csv"),
         specification_dir=str(specification_dir),
         cache_dir=str(cache_dir),
-        url=url,
+        endpoint=endpoint,
     )
 
     assert "new-in-resource" in result
@@ -118,7 +116,7 @@ def test_fetch_add_data_response_file_not_found(monkeypatch, tmp_path):
     input_path = tmp_path / "nonexistent"
     specification_dir = tmp_path / "specification"
     cache_dir = tmp_path / "cache"
-    url = "http://example.com/endpoint"
+    endpoint = "abc123hash"
 
     pipeline_dir.mkdir(parents=True)
 
@@ -138,7 +136,7 @@ def test_fetch_add_data_response_file_not_found(monkeypatch, tmp_path):
             output_path=str(input_path / "output.csv"),
             specification_dir=str(specification_dir),
             cache_dir=str(cache_dir),
-            url=url,
+            endpoint=endpoint,
         )
 
 
@@ -150,7 +148,7 @@ def test_fetch_add_data_response_handles_processing_error(monkeypatch, tmp_path)
     input_path = tmp_path / "resource"
     specification_dir = tmp_path / "specification"
     cache_dir = tmp_path / "cache"
-    url = "http://example.com/endpoint"
+    endpoint = "abc123hash"
 
     input_path.mkdir(parents=True)
     pipeline_dir.mkdir(parents=True)
@@ -178,7 +176,7 @@ def test_fetch_add_data_response_handles_processing_error(monkeypatch, tmp_path)
         output_path=str(input_path / "output.csv"),
         specification_dir=str(specification_dir),
         cache_dir=str(cache_dir),
-        url=url,
+        endpoint=endpoint,
     )
 
     assert "new-in-resource" in result

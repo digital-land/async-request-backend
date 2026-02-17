@@ -357,8 +357,6 @@ def test_validate_endpoint_csv_read_error(monkeypatch, tmp_path):
     """Test validate_endpoint when reading CSV fails"""
     pipeline_dir = tmp_path / "pipeline"
     pipeline_dir.mkdir()
-    url = "http://example.com/endpoint"
-
     endpoint_csv_path = pipeline_dir / "endpoint.csv"
     endpoint_csv_path.write_bytes(b"\x00\x00\x00")
 
@@ -380,7 +378,6 @@ def test_validate_source_creates_new_source(monkeypatch, tmp_path):
     """Test validate_source creates new source entry when it doesn't exist"""
     pipeline_dir = tmp_path / "pipeline"
     pipeline_dir.mkdir()
-    source_csv_path = pipeline_dir / "source.csv"
 
     documentation_url = "http://example.com/doc"
     collection = "test-collection"
