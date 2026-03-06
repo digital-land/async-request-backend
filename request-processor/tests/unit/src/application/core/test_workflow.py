@@ -339,11 +339,11 @@ def test_add_data_workflow(monkeypatch):
     )
     monkeypatch.setattr(
         "src.application.core.workflow.fetch_add_data_pipeline_csvs",
-        lambda col, pdir: True,
+        lambda col, pdir, **kwargs: True,
     )
     monkeypatch.setattr(
         "src.application.core.workflow.fetch_add_data_collection_csvs",
-        lambda col, cdir: True,
+        lambda col, cdir, **kwargs: True,
     )
     monkeypatch.setattr(
         "src.application.core.workflow.fetch_add_data_response",
@@ -392,11 +392,11 @@ def test_add_data_workflow_calls(monkeypatch):
 
     called = {}
 
-    def fake_fetch_add_data_pipeline_csvs(col, pdir):
+    def fake_fetch_add_data_pipeline_csvs(col, pdir, **_):
         called["fetch_add_data_pipeline_csvs"] = (col, pdir)
         return True
 
-    def fake_fetch_add_data_collection_csvs(col, cdir):
+    def fake_fetch_add_data_collection_csvs(col, cdir, **_):
         called["fetch_add_data_collection_csvs"] = (col, cdir)
         return True
 

@@ -43,6 +43,7 @@ class AddDataParams(Params):
     start_date: Optional[str] = None
     organisation: Optional[str] = None
     plugin: Optional[PluginTypeEnum] = None
+    github_branch: Optional[str] = None
 
 
 class RequestBase(BaseModel):
