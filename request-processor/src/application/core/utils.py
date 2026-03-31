@@ -396,7 +396,9 @@ def validate_source(
     if not documentation_url:
         logger.warning("No documentation URL provided")
 
-    safe_documentation_url = _quote_url_if_comma(documentation_url) if documentation_url else ""
+    safe_documentation_url = (
+        _quote_url_if_comma(documentation_url) if documentation_url else ""
+    )
 
     if not start_date:
         start_date = datetime.now().strftime("%Y-%m-%d")
