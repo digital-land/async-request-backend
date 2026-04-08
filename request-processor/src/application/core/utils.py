@@ -10,6 +10,13 @@ from datetime import datetime
 logger = get_logger(__name__)
 
 
+def _quote_url_if_comma(url):
+    """Wrap url in double quotes if it contains a comma, to prevent CSV parsing errors."""
+    if url and "," in url:
+        return f'"{url}"'
+    return url
+
+
 def get_request(url, verify_ssl=True):
     # log["ssl-verify"] = verify_ssl
     log = {"status": "", "message": ""}
@@ -315,6 +322,8 @@ def validate_endpoint(url, config_dir, plugin, start_date=None):
                 ]
             )
 
+    safe_url = _quote_url_if_comma(url)
+
     endpoint_exists = False
     existing_entry = None
 
@@ -322,7 +331,7 @@ def validate_endpoint(url, config_dir, plugin, start_date=None):
         with open(endpoint_csv_path, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                if row.get("endpoint-url", "").strip() == url.strip():
+                if row.get("endpoint-url", "").strip() == safe_url.strip():
                     endpoint_exists = True
                     existing_entry = {
                         "endpoint": row.get("endpoint", ""),
@@ -350,7 +359,7 @@ def validate_endpoint(url, config_dir, plugin, start_date=None):
 
         endpoint_key, new_endpoint_row = append_endpoint(
             endpoint_csv_path=endpoint_csv_path,
-            endpoint_url=url,
+            endpoint_url=safe_url,
             entry_date=entry_date,
             start_date=start_date,
             end_date="",
@@ -387,6 +396,10 @@ def validate_source(
     if not documentation_url:
         logger.warning("No documentation URL provided")
 
+    safe_documentation_url = (
+        _quote_url_if_comma(documentation_url) if documentation_url else ""
+    )
+
     if not start_date:
         start_date = datetime.now().strftime("%Y-%m-%d")
     entry_date = datetime.now().isoformat()
@@ -397,7 +410,7 @@ def validate_source(
         organisation=organisation,
         endpoint_key=endpoint_key,
         attribution="",
-        documentation_url=documentation_url or "",
+        documentation_url=safe_documentation_url,
         licence=licence or "",
         pipelines=dataset,
         entry_date=entry_date,
