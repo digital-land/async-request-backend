@@ -141,6 +141,7 @@ def append_endpoint(
     plugin=None,
 ):
     endpoint_key = hash_sha256(endpoint_url)
+    endpoint_url = _quote_url_if_comma(endpoint_url)
     exists = False
     new_row = None
 
@@ -322,8 +323,6 @@ def validate_endpoint(url, config_dir, plugin, start_date=None):
                 ]
             )
 
-    safe_url = _quote_url_if_comma(url)
-
     endpoint_exists = False
     existing_entry = None
 
@@ -331,7 +330,7 @@ def validate_endpoint(url, config_dir, plugin, start_date=None):
         with open(endpoint_csv_path, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                if row.get("endpoint-url", "").strip() == safe_url.strip():
+                if row.get("endpoint-url", "").strip() == url.strip():
                     endpoint_exists = True
                     existing_entry = {
                         "endpoint": row.get("endpoint", ""),
@@ -359,7 +358,7 @@ def validate_endpoint(url, config_dir, plugin, start_date=None):
 
         endpoint_key, new_endpoint_row = append_endpoint(
             endpoint_csv_path=endpoint_csv_path,
-            endpoint_url=safe_url,
+            endpoint_url=url,
             entry_date=entry_date,
             start_date=start_date,
             end_date="",
