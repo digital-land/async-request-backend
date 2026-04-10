@@ -50,3 +50,56 @@ developer-agreement-transaction:
 - reference
 infrastructure-funding-statement:
 - reference
+plan-timetable:
+- reference
+- plan
+- plan-event
+- event-date
+- entry-date
+local-plan:
+- reference
+- name
+- description
+- datasets
+- period-start-date
+- period-end-date
+- local-planning-authorities
+- documentation-url
+- document-url
+- required-housing
+- entry-date
+supplementary-plan:
+- reference
+- name
+- description
+- datasets
+- period-start-date
+- period-end-date
+- local-planning-authorities
+- documentation-url
+- document-url
+- entry-date
+minerals-plan:
+- reference
+- name
+- description
+- datasets
+- period-start-date
+- period-end-date
+- minerals-and-waste-planning-authorities
+- documentation-url
+- document-url
+- document-count
+- entry-date
+waste-plan:
+- reference
+- name
+- description
+- datasets
+- period-start-date
+- period-end-date
+- minerals-and-waste-planning-authorities
+- documentation-url
+- document-url
+- document-count
+- entry-date
