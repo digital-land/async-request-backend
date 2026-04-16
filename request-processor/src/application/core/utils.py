@@ -403,6 +403,21 @@ def validate_source(
         start_date = datetime.now().strftime("%Y-%m-%d")
     entry_date = datetime.now().isoformat()
 
+    # Check if a source already exists for same organisation and dataset, to flag to the user
+    existing_endpoint_for_org_dataset = None
+    if os.path.exists(source_csv_path):
+        try:
+            with open(source_csv_path, "r", encoding="utf-8") as f:
+                for row in csv.DictReader(f):
+                    if (
+                        row.get("organisation", "").strip() == organisation.strip()
+                        and row.get("pipelines", "").strip() == dataset.strip()
+                    ):
+                        existing_endpoint_for_org_dataset = row.get("endpoint") or None
+                        break
+        except Exception as e:
+            logger.error(f"Error checking existing endpoint for org/dataset: {e}")
+
     source_key_returned, new_source_row = append_source(
         source_csv_path=source_csv_path,
         collection=collection,
@@ -421,6 +436,7 @@ def validate_source(
         return {
             "documentation_url_in_source_csv": False,
             "new_source_entry": new_source_row,
+            "existing_endpoint_for_organisation_dataset": existing_endpoint_for_org_dataset,
         }
 
     source_summary = {"documentation_url_in_source_csv": True}
@@ -445,4 +461,5 @@ def validate_source(
     except Exception as e:
         logger.error(f"Error reading existing source: {e}")
 
+    source_summary["existing_endpoint_for_organisation_dataset"] = existing_endpoint_for_org_dataset
     return source_summary

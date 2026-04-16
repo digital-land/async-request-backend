@@ -112,9 +112,7 @@ fsspec==2025.3.2
 geojson==3.2.0
     # via digital-land
 greenlet==3.1.1
-    # via
-    #   eventlet
-    #   sqlalchemy
+    # via eventlet
 h11==0.14.0
     # via
     #   httpcore
@@ -202,6 +200,8 @@ pre-commit==4.2.0
     # via -r requirements/requirements.in
 prompt-toolkit==3.0.50
     # via click-repl
+psutil==7.2.2
+    # via digital-land
 psycopg2-binary==2.9.10
     # via -r requirements/requirements.in
 pyarrow==19.0.1
@@ -253,7 +253,7 @@ responses==0.25.7
     # via moto
 s3transfer==0.11.4
     # via boto3
-sentry-sdk[celery]==2.2.1
+sentry-sdk[celery]==2.44.0
     # via -r requirements/requirements.in
 shapely==2.0.2
     # via digital-land

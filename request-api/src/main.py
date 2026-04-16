@@ -46,6 +46,7 @@ if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
             FastApiIntegration(transaction_style="url"),
         ],
         debug=os.environ.get("SENTRY_DEBUG", "false").lower() == "true",
+        enable_logs=True,
     )
 
 app = FastAPI()

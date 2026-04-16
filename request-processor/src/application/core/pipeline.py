@@ -77,16 +77,16 @@ def fetch_response_data(
             resource = resource_from_path(file_path)
             issue_log = pipeline.transform(
                 input_path=file_path,
-                output_path=os.path.join(
-                    transformed_dir, dataset, request_id, f"{resource}.csv"
+                output_path=Path(
+                    os.path.join(transformed_dir, dataset, request_id, f"{resource}.csv")
                 ),
                 organisation=Organisation(
                     os.path.join(cache_dir, "organisation.csv"), Path(pipeline.path)
                 ),
                 resource=resource,
                 valid_category_values=api.get_valid_category_values(dataset, pipeline),
-                converted_path=os.path.join(
-                    converted_dir, request_id, f"{resource}.csv"
+                converted_path=Path(
+                    os.path.join(converted_dir, request_id, f"{resource}.csv")
                 ),
                 disable_lookups=True,
             )

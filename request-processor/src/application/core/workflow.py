@@ -493,7 +493,7 @@ def add_data_workflow(
             ] = f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
             return response_data
 
-        # All processes arount transforming the data and generating pipeline summary
+        # All processes around transforming the data and generating pipeline summary
         pipeline_summary = fetch_add_data_response(
             dataset=dataset,
             organisation_provider=organisation_provider,
@@ -523,10 +523,13 @@ def add_data_workflow(
             licence=licence,
         )
 
+        pipeline_issues = pipeline_summary.pop("pipeline-issues", [])
         response_data = {
             "pipeline-summary": pipeline_summary,
+            "pipeline-issues": pipeline_issues,
             "endpoint-summary": endpoint_summary,
             "source-summary": source_summary,
+            "transformed-csv": csv_to_json(output_path),
         }
 
         logger.info(f"add data response is for id {request_id} : {response_data}")
