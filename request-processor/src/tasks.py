@@ -482,9 +482,7 @@ def save_response_to_db(request_id, response_data):
                         "endpoint-summary": response_data.get("endpoint-summary"),
                         "source-summary": response_data.get("source-summary"),
                     }
-                    new_response = models.Response(
-                        request_id=request_id, data=data
-                    )
+                    new_response = models.Response(request_id=request_id, data=data)
                     session.add(new_response)
                     session.flush()
 
@@ -494,7 +492,8 @@ def save_response_to_db(request_id, response_data):
                         response_data.get("transformed-csv", []), start=1
                     ):
                         current_issue_logs = [
-                            issue for issue in issue_log_data
+                            issue
+                            for issue in issue_log_data
                             if issue.get("entry-number") == str(entry_number)
                         ]
                         new_response_detail = models.ResponseDetails(

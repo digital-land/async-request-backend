@@ -481,16 +481,16 @@ def add_data_workflow(
             endpoint_hash=endpoint_hash,
             github_branch=github_branch,
         ):
-            response_data[
-                "message"
-            ] = f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
+            response_data["message"] = (
+                f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
+            )
             return response_data
         if not fetch_add_data_collection_csvs(
             collection, collection_dir, github_branch=github_branch
         ):
-            response_data[
-                "message"
-            ] = f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
+            response_data["message"] = (
+                f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
+            )
             return response_data
 
         # All processes around transforming the data and generating pipeline summary

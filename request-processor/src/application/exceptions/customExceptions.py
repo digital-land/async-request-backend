@@ -11,9 +11,11 @@ def create_generic_error_log(
         "message": "There is a problem with our service, please try again later.",
         "endpoint-url": url,
         "status": status,
-        "exception": type(exception).__name__
-        if exception and not isinstance(exception, str)
-        else exception,
+        "exception": (
+            type(exception).__name__
+            if exception and not isinstance(exception, str)
+            else exception
+        ),
     }
 
     if plugin:

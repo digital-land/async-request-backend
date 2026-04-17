@@ -78,7 +78,9 @@ def fetch_response_data(
             issue_log = pipeline.transform(
                 input_path=file_path,
                 output_path=Path(
-                    os.path.join(transformed_dir, dataset, request_id, f"{resource}.csv")
+                    os.path.join(
+                        transformed_dir, dataset, request_id, f"{resource}.csv"
+                    )
                 ),
                 organisation=Organisation(
                     os.path.join(cache_dir, "organisation.csv"), Path(pipeline.path)
@@ -301,9 +303,9 @@ def fetch_add_data_response(
             "new-entities": new_entities_breakdown,
             "existing-entities": existing_entities_breakdown,
             "entity-organisation": entity_org_mapping,
-            "pipeline-issues": [dict(issue) for issue in issues_log.rows]
-            if issues_log
-            else [],
+            "pipeline-issues": (
+                [dict(issue) for issue in issues_log.rows] if issues_log else []
+            ),
         }
 
         return pipeline_summary
