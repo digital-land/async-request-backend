@@ -482,9 +482,7 @@ def save_response_to_db(request_id, response_data):
                         "endpoint-summary": response_data.get("endpoint-summary"),
                         "source-summary": response_data.get("source-summary"),
                     }
-                    new_response = models.Response(
-                        request_id=request_id, data=data
-                    )
+                    new_response = models.Response(request_id=request_id, data=data)
                     session.add(new_response)
                     session.flush()
 

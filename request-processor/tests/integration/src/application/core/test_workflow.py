@@ -4,7 +4,6 @@ import os
 import csv
 from src.application.core.workflow import run_workflow
 
-
 valid_geometry = "MULTIPOLYGON (((-1.799316 53.717797, -1.790771 53.717797, -1.790771 53.721066, -1.799316 53.721066, -1.799316 53.717797)))"  # noqa
 invalid_geometry = "MULTIPOLYGON (((-1.790771 53.717797, -1.790771 53.721066, -1.799316 53.721066, -1.799316 53.717797)))"  # noqa
 
