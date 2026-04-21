@@ -79,7 +79,7 @@ for d in directories_override.values():
 # Request payload - edit the params block if you need to test different datasets or URLs
 now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
 request_payload = {
-    "id": "debug-add-data-001",
+    "id": "debug-add-data-009",
     "type": "add_data",
     "status": "PENDING",
     "created": now,
@@ -89,7 +89,7 @@ request_payload = {
         "type": "add_data",
         "organisationName": "Stockport Metropolitan Borough Council",
         "organisation": "local-authority:SKP",
-        "dataset": "article-4-direction",
+        "dataset": "article-4-direction-area",
         "collection": "article-4-direction",
         "column_mapping": None,
         "geom_type": None,

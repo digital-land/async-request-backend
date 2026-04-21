@@ -31,9 +31,9 @@ services:
       AWS_SECRET_ACCESS_KEY: example
       SQS_QUEUE_NAME: request-queue
       DATABASE_URL: postgresql://postgres:password@request-db/request_database
-      SENTRY_ENABLED: "false"
-      SENTRY_DSN: https://secret.sentry.url/here
-      SENTRY_ENVIRONMENT: docker-compose-local
+      SENTRY_ENABLED: "true"
+      SENTRY_DSN: https://bed724d615eabf0b7bcbc7e39a4650e7@o4510940714041344.ingest.de.sentry.io/4510975693553744
+      SENTRY_ENVIRONMENT: local
       SENTRY_TRACING_ENABLED: "true"
       SENTRY_TRACING_SAMPLE_RATE: "0.50"
       SENTRY_DEBUG: "true"
@@ -68,9 +68,9 @@ services:
       CELERY_BROKER_IS_SECURE: "false"
       DATABASE_URL: postgresql://postgres:password@request-db/request_database
       REQUEST_FILES_BUCKET_NAME: dluhc-data-platform-request-files-local
-      SENTRY_ENABLED: "false"
-      SENTRY_DSN: https://secret.sentry.url/here
-      SENTRY_ENVIRONMENT: docker-compose-local
+      SENTRY_ENABLED: "true"
+      SENTRY_DSN: https://bed724d615eabf0b7bcbc7e39a4650e7@o4510940714041344.ingest.de.sentry.io/4510975693553744
+      SENTRY_ENVIRONMENT: local
       SENTRY_TRACING_ENABLED: "true"
       SENTRY_TRACING_SAMPLE_RATE: "0.50"
       SENTRY_DEBUG: "true"
