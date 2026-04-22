@@ -491,6 +491,7 @@ def test_check_dataurl_with_plugin(monkeypatch):
     monkeypatch.setattr(
         tasks, "_get_request", lambda rid: {"id": rid, "status": "COMPLETE"}
     )
+    monkeypatch.setattr(tasks.sentry_sdk.metrics, "count", lambda *a, **kw: None)
 
     result = check_dataurl(request, directories_json)
 
