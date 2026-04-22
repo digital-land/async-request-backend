@@ -257,7 +257,7 @@ def add_extra_column_mappings(
         mappings["column"] = key
         mappings["field"] = value
         if filtered_rows is not None:
-            if mappings["field"] not in [row["field"] for row in filtered_rows]:
+            if mappings["field"] != "IGNORE" and mappings["field"] not in [row["field"] for row in filtered_rows]:
                 logger.error(
                     f"Error: Field '{mappings['field']}' does not exist in dataset-field.csv"
                 )

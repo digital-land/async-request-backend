@@ -493,7 +493,7 @@ def save_response_to_db(request_id, response_data):
                     ):
                         current_issue_logs = [
                             issue for issue in issue_log_data
-                            if str(issue.get("entry-number"))== str(entry_number)
+                            if str(issue.get("entry-number")) == str(entry_number)
                         ]
                         new_response_detail = models.ResponseDetails(
                             response_id=new_response.id,

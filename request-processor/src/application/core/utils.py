@@ -412,6 +412,7 @@ def validate_source(
                     if (
                         row.get("organisation", "").strip() == organisation.strip()
                         and row.get("pipelines", "").strip() == dataset.strip()
+                        and row.get("endpoint", "").strip() != ""
                     ):
                         existing_endpoint_for_org_dataset = row.get("endpoint") or None
                         break
