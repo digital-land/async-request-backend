@@ -372,7 +372,49 @@ def validate_endpoint(url, config_dir, plugin, start_date=None):
     return endpoint_summary
 
 
-def validate_source(  # noqa: C901
+def _find_existing_endpoint_for_org_dataset(source_csv_path, organisation, dataset):
+    if not os.path.exists(source_csv_path):
+        return []
+    try:
+        with open(source_csv_path, "r", encoding="utf-8") as f:
+            return [
+                row.get("endpoint")
+                for row in csv.DictReader(f)
+                if (
+                    row.get("organisation", "").strip() == organisation.strip()
+                    and row.get("pipelines", "").strip() == dataset.strip()
+                    and row.get("endpoint", "").strip() != ""
+                )
+            ]
+    except Exception as e:
+        logger.error(f"Error checking existing endpoint for org/dataset: {e}")
+    return []
+
+
+def _read_existing_source_entry(source_csv_path, source_key):
+    try:
+        with open(source_csv_path, "r", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                if row.get("source", "").strip() == source_key:
+                    return {
+                        "source": row.get("source", ""),
+                        "attribution": row.get("attribution", ""),
+                        "collection": row.get("collection", ""),
+                        "documentation-url": row.get("documentation-url", ""),
+                        "endpoint": row.get("endpoint", ""),
+                        "licence": row.get("licence", ""),
+                        "organisation": row.get("organisation", ""),
+                        "pipelines": row.get("pipelines", ""),
+                        "entry-date": row.get("entry-date", ""),
+                        "start-date": row.get("start-date", ""),
+                        "end-date": row.get("end-date", ""),
+                    }
+    except Exception as e:
+        logger.error(f"Error reading existing source: {e}")
+    return None
+
+
+def validate_source(
     documentation_url,
     config_dir,
     collection,
@@ -403,21 +445,9 @@ def validate_source(  # noqa: C901
         start_date = datetime.now().strftime("%Y-%m-%d")
     entry_date = datetime.now().isoformat()
 
-    # Check if a source already exists for same organisation and dataset
-    existing_endpoint_for_org_dataset = None
-    if os.path.exists(source_csv_path):
-        try:
-            with open(source_csv_path, "r", encoding="utf-8") as f:
-                for row in csv.DictReader(f):
-                    if (
-                        row.get("organisation", "").strip() == organisation.strip()
-                        and row.get("pipelines", "").strip() == dataset.strip()
-                        and row.get("endpoint", "").strip() != ""
-                    ):
-                        existing_endpoint_for_org_dataset = row.get("endpoint") or None
-                        break
-        except Exception as e:
-            logger.error(f"Error checking existing endpoint for org/dataset: {e}")
+    existing_endpoint_for_org_dataset = _find_existing_endpoint_for_org_dataset(
+        source_csv_path, organisation, dataset
+    )
 
     source_key_returned, new_source_row = append_source(
         source_csv_path=source_csv_path,
@@ -441,28 +471,8 @@ def validate_source(  # noqa: C901
         }
 
     source_summary = {"documentation_url_in_source_csv": True}
-    try:
-        with open(source_csv_path, "r", encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                if row.get("source", "").strip() == source_key_returned:
-                    source_summary["existing_source_entry"] = {
-                        "source": row.get("source", ""),
-                        "attribution": row.get("attribution", ""),
-                        "collection": row.get("collection", ""),
-                        "documentation-url": row.get("documentation-url", ""),
-                        "endpoint": row.get("endpoint", ""),
-                        "licence": row.get("licence", ""),
-                        "organisation": row.get("organisation", ""),
-                        "pipelines": row.get("pipelines", ""),
-                        "entry-date": row.get("entry-date", ""),
-                        "start-date": row.get("start-date", ""),
-                        "end-date": row.get("end-date", ""),
-                    }
-                    break
-    except Exception as e:
-        logger.error(f"Error reading existing source: {e}")
-
-    source_summary[
-        "existing_endpoint_for_organisation_dataset"
-    ] = existing_endpoint_for_org_dataset
+    existing_entry = _read_existing_source_entry(source_csv_path, source_key_returned)
+    if existing_entry:
+        source_summary["existing_source_entry"] = existing_entry
+    source_summary["existing_endpoint_for_organisation_dataset"] = existing_endpoint_for_org_dataset
     return source_summary
