@@ -257,7 +257,9 @@ def add_extra_column_mappings(
         mappings["column"] = key
         mappings["field"] = value
         if filtered_rows is not None:
-            if mappings["field"] != "IGNORE" and mappings["field"] not in [row["field"] for row in filtered_rows]:
+            if mappings["field"] != "IGNORE" and mappings["field"] not in [
+                row["field"] for row in filtered_rows
+            ]:
                 logger.error(
                     f"Error: Field '{mappings['field']}' does not exist in dataset-field.csv"
                 )
@@ -481,16 +483,16 @@ def add_data_workflow(
             endpoint_hash=endpoint_hash,
             github_branch=github_branch,
         ):
-            response_data["message"] = (
-                f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
-            )
+            response_data[
+                "message"
+            ] = f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
             return response_data
         if not fetch_add_data_collection_csvs(
             collection, collection_dir, github_branch=github_branch
         ):
-            response_data["message"] = (
-                f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
-            )
+            response_data[
+                "message"
+            ] = f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
             return response_data
 
         # All processes around transforming the data and generating pipeline summary

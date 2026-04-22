@@ -330,8 +330,10 @@ def test_add_data_workflow(monkeypatch):
     pipeline_response = {"status": "success", "data": "test"}
     expected_response = {
         "pipeline-summary": pipeline_response,
+        "pipeline-issues": [],
         "endpoint-summary": {"endpoint_summary": "mocked"},
         "source-summary": {"source_summary": "mocked"},
+        "transformed-csv": [],
     }
 
     monkeypatch.setattr(

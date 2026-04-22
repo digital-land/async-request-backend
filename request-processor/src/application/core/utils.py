@@ -43,9 +43,9 @@ def get_request(url, verify_ssl=True):
             if not response.headers.get("Content-Type", "").startswith("text/html"):
                 content = response.content
             else:
-                log["message"] = (
-                    "The requested URL leads to a html webpage which we cannot process"
-                )
+                log[
+                    "message"
+                ] = "The requested URL leads to a html webpage which we cannot process"
         else:
             log["message"] = (
                 "The requested URL could not be downloaded: " + log["status"] + " error"
@@ -462,7 +462,7 @@ def validate_source(
     except Exception as e:
         logger.error(f"Error reading existing source: {e}")
 
-    source_summary["existing_endpoint_for_organisation_dataset"] = (
-        existing_endpoint_for_org_dataset
-    )
+    source_summary[
+        "existing_endpoint_for_organisation_dataset"
+    ] = existing_endpoint_for_org_dataset
     return source_summary
