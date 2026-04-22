@@ -372,7 +372,7 @@ def validate_endpoint(url, config_dir, plugin, start_date=None):
     return endpoint_summary
 
 
-def validate_source(
+def validate_source(  # noqa: C901
     documentation_url,
     config_dir,
     collection,
@@ -403,7 +403,7 @@ def validate_source(
         start_date = datetime.now().strftime("%Y-%m-%d")
     entry_date = datetime.now().isoformat()
 
-    # Check if a source already exists for same organisation and dataset, to flag to the user
+    # Check if a source already exists for same organisation and dataset
     existing_endpoint_for_org_dataset = None
     if os.path.exists(source_csv_path):
         try:
