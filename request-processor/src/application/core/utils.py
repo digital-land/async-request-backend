@@ -474,5 +474,7 @@ def validate_source(
     existing_entry = _read_existing_source_entry(source_csv_path, source_key_returned)
     if existing_entry:
         source_summary["existing_source_entry"] = existing_entry
-    source_summary["existing_endpoint_for_organisation_dataset"] = existing_endpoint_for_org_dataset
+    source_summary[
+        "existing_endpoint_for_organisation_dataset"
+    ] = existing_endpoint_for_org_dataset
     return source_summary

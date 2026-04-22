@@ -6,6 +6,7 @@ from src.application.core.workflow import (
     fetch_pipeline_csvs,
     add_data_workflow,
     fetch_add_data_pipeline_csvs,
+    add_extra_column_mappings,
 )
 import csv
 import hashlib
@@ -515,3 +516,81 @@ def test_fetch_add_data_pipeline_csvs_handles_http_error(monkeypatch, tmp_path):
     fetch_add_data_pipeline_csvs(collection, pipeline_dir_str)
 
     assert os.path.exists(pipeline_dir_str)
+
+
+COLUMN_CSV_FIELDNAMES = ["dataset", "resource", "column", "field"]
+
+
+def _write_column_csv(path, rows=None):
+    with open(path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=COLUMN_CSV_FIELDNAMES)
+        writer.writeheader()
+        for row in rows or []:
+            writer.writerow(row)
+
+
+def test_add_extra_column_mappings_ignore_field_not_in_not_mapped(tmp_path):
+    """IGNORE field should be written to column.csv but not flagged as not_mapped."""
+    column_csv = tmp_path / "column.csv"
+    spec_dir = tmp_path / "spec"
+    spec_dir.mkdir()
+    dataset_field_csv = spec_dir / "dataset-field.csv"
+    with open(dataset_field_csv, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["dataset", "field"])
+        writer.writeheader()
+        writer.writerow({"dataset": "test-dataset", "field": "name"})
+    _write_column_csv(column_csv)
+
+    not_mapped = add_extra_column_mappings(
+        str(column_csv),
+        {"MyColumn": "IGNORE"},
+        "test-dataset",
+        "resource-hash",
+        str(spec_dir),
+    )
+
+    assert "IGNORE" not in not_mapped
+    with open(column_csv, newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert any(r["field"] == "IGNORE" for r in rows)
+
+
+def test_add_extra_column_mappings_mix_valid_ignore_invalid(tmp_path):
+    """Only invalid fields flagged; IGNORE and valid fields written to CSV."""
+    column_csv = tmp_path / "column.csv"
+    spec_dir = tmp_path / "spec"
+    spec_dir.mkdir()
+    dataset_field_csv = spec_dir / "dataset-field.csv"
+    with open(dataset_field_csv, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["dataset", "field"])
+        writer.writeheader()
+        writer.writerow({"dataset": "test-dataset", "field": "name"})
+    _write_column_csv(column_csv)
+
+    not_mapped = add_extra_column_mappings(
+        str(column_csv),
+        {"ColA": "name", "ColB": "IGNORE", "ColC": "nonexistent-field"},
+        "test-dataset",
+        "resource-hash",
+        str(spec_dir),
+    )
+
+    assert not_mapped == ["nonexistent-field"]
+
+
+def test_add_extra_column_mappings_ignore_with_no_filtered_rows(tmp_path):
+    """When filtered_rows is None (spec dir missing), IGNORE field causes no crash."""
+    column_csv = tmp_path / "column.csv"
+    _write_column_csv(column_csv)
+    empty_spec_dir = tmp_path / "spec"
+    empty_spec_dir.mkdir()
+
+    not_mapped = add_extra_column_mappings(
+        str(column_csv),
+        {"MyColumn": "IGNORE"},
+        "test-dataset",
+        "resource-hash",
+        str(empty_spec_dir),
+    )
+
+    assert not_mapped == []
