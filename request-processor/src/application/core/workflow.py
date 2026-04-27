@@ -623,8 +623,8 @@ def fetch_add_data_pipeline_csvs(
             urllib.request.urlretrieve(url, csv_path)
             logger.info(f"Downloaded {csv_name} from {url} to {csv_path}")
         except HTTPError as e:
-            logger.warning(f"Failed to retrieve {csv_name}: {e}")
-            return False
+            logger.warning(f"Failed to retrieve optional {csv_name}: {e}")
+            continue
 
         if csv_name == "column.csv":
             try:
