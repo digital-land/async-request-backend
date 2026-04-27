@@ -297,6 +297,10 @@ def fetch_add_data_response(
             existing_entities
         )
 
+        issues_log.add_severity_column(
+                os.path.join(specification_dir, "issue-type.csv")
+            ) 
+
         pipeline_summary = {
             "new-in-resource": len(new_entities),
             "existing-in-resource": len(existing_entities),

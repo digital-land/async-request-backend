@@ -578,7 +578,6 @@ def fetch_add_data_pipeline_csvs(
         "column.csv",
         "combine.csv",
         "concat.csv",
-        "convert.csv",
         "default-value.csv",
         "default.csv",
         "entity-organisation.csv",
