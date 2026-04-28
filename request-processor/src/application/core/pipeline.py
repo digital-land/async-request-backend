@@ -77,16 +77,18 @@ def fetch_response_data(
             resource = resource_from_path(file_path)
             issue_log = pipeline.transform(
                 input_path=file_path,
-                output_path=os.path.join(
-                    transformed_dir, dataset, request_id, f"{resource}.csv"
+                output_path=Path(
+                    os.path.join(
+                        transformed_dir, dataset, request_id, f"{resource}.csv"
+                    )
                 ),
                 organisation=Organisation(
                     os.path.join(cache_dir, "organisation.csv"), Path(pipeline.path)
                 ),
                 resource=resource,
                 valid_category_values=api.get_valid_category_values(dataset, pipeline),
-                converted_path=os.path.join(
-                    converted_dir, request_id, f"{resource}.csv"
+                converted_path=Path(
+                    os.path.join(converted_dir, request_id, f"{resource}.csv")
                 ),
                 disable_lookups=True,
             )
@@ -295,15 +297,20 @@ def fetch_add_data_response(
             existing_entities
         )
 
+        if issues_log:
+            issues_log.add_severity_column(
+                os.path.join(specification_dir, "issue-type.csv")
+            )
+
         pipeline_summary = {
             "new-in-resource": len(new_entities),
             "existing-in-resource": len(existing_entities),
             "new-entities": new_entities_breakdown,
             "existing-entities": existing_entities_breakdown,
             "entity-organisation": entity_org_mapping,
-            "pipeline-issues": [dict(issue) for issue in issues_log.rows]
-            if issues_log
-            else [],
+            "pipeline-issues": (
+                [dict(issue) for issue in issues_log.rows] if issues_log else []
+            ),
         }
 
         return pipeline_summary

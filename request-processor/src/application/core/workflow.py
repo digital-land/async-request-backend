@@ -257,7 +257,9 @@ def add_extra_column_mappings(
         mappings["column"] = key
         mappings["field"] = value
         if filtered_rows is not None:
-            if mappings["field"] not in [row["field"] for row in filtered_rows]:
+            if mappings["field"] != "IGNORE" and mappings["field"] not in [
+                row["field"] for row in filtered_rows
+            ]:
                 logger.error(
                     f"Error: Field '{mappings['field']}' does not exist in dataset-field.csv"
                 )
@@ -493,7 +495,7 @@ def add_data_workflow(
             ] = f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
             return response_data
 
-        # All processes arount transforming the data and generating pipeline summary
+        # All processes around transforming the data and generating pipeline summary
         pipeline_summary = fetch_add_data_response(
             dataset=dataset,
             organisation_provider=organisation_provider,
@@ -523,10 +525,13 @@ def add_data_workflow(
             licence=licence,
         )
 
+        pipeline_issues = pipeline_summary.pop("pipeline-issues", [])
         response_data = {
             "pipeline-summary": pipeline_summary,
+            "pipeline-issues": pipeline_issues,
             "endpoint-summary": endpoint_summary,
             "source-summary": source_summary,
+            "transformed-csv": csv_to_json(output_path),
         }
 
         logger.info(f"add data response is for id {request_id} : {response_data}")
@@ -573,7 +578,6 @@ def fetch_add_data_pipeline_csvs(
         "column.csv",
         "combine.csv",
         "concat.csv",
-        "convert.csv",
         "default-value.csv",
         "default.csv",
         "entity-organisation.csv",

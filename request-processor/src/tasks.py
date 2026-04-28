@@ -173,12 +173,13 @@ def check_dataurl(request: Dict, directories=None):  # noqa
         logger.info(f"Fetched resource: file_name={file_name}")
 
     except CustomException as e:
+        error_log = utils.create_user_friendly_error_log(e.detail)
         # Track in Sentry for monitoring (not as error)
         _capture_sentry_event(
-            e.detail,
+            error_log,
             request_schema.id,
+            handled=True,
         )
-        error_log = utils.create_user_friendly_error_log(e.detail)
         save_response_to_db(request_schema.id, error_log)
 
         return _get_request(request_schema.id)
@@ -210,6 +211,7 @@ def check_dataurl(request: Dict, directories=None):  # noqa
             if "plugin" in fetch_log:
                 response["plugin"] = fetch_log["plugin"]
             save_response_to_db(request_schema.id, response)
+            sentry_sdk.metrics.count("async.url_submission.success", 1)
         except Exception as e:
             logger.error(f"Workflow failed: {e}")
             plugin = fetch_log.get("plugin") if "plugin" in fetch_log else None
@@ -332,6 +334,7 @@ def init_sentry(**_kwargs):
             ),
             release=os.environ.get("GIT_COMMIT"),
             debug=os.environ.get("SENTRY_DEBUG", "false").lower() == "true",
+            enable_logs=True,
         )
 
 
@@ -355,6 +358,7 @@ def _get_request(request_id):
 def _capture_sentry_event(
     error_log,
     request_id,
+    handled=False,
     task_name="CheckURL",
 ):
     """
@@ -363,9 +367,10 @@ def _capture_sentry_event(
     Args:
         error_log: A dict containing error details
         request_id: The request ID for context
+        handled: If True, treated as an expected/user error (warning). If False, treated as an unexpected error (error).
         task_name: Task name (defaults to "CheckURL")
     """
-    with sentry_sdk.push_scope() as scope:
+    with sentry_sdk.new_scope() as scope:
         context = {"id": request_id}
         if isinstance(error_log, dict):
             if "endpoint-url" in error_log:
@@ -376,14 +381,22 @@ def _capture_sentry_event(
 
         scope.set_context("request", context)
         scope.set_tag("task", task_name)
+        scope.set_tag("handled", str(handled))
 
-        # Get message from error_log
         message = (
             error_log.get("message", "Error occurred")
             if isinstance(error_log, dict)
             else str(error_log)
         )
-        sentry_sdk.capture_message(message, level="warning")
+
+        if handled:
+            title = "Check URL User Error: " + message
+            level = "warning"
+        else:
+            title = "Check URL Unexpected Error: " + message
+            level = "error"
+
+        sentry_sdk.capture_message(title, level=level)
 
 
 def _get_response(request_id):
@@ -464,10 +477,35 @@ def save_response_to_db(request_id, response_data):
                     session.commit()
 
                 elif "pipeline-summary" in response_data:
-                    new_response = models.Response(
-                        request_id=request_id, data=response_data
-                    )
+                    data = {
+                        "pipeline-summary": response_data.get("pipeline-summary"),
+                        "endpoint-summary": response_data.get("endpoint-summary"),
+                        "source-summary": response_data.get("source-summary"),
+                    }
+                    new_response = models.Response(request_id=request_id, data=data)
                     session.add(new_response)
+                    session.flush()
+
+                    issue_log_data = response_data.get("pipeline-issues", [])
+
+                    for entry_number, transformed_row in enumerate(
+                        response_data.get("transformed-csv", []), start=1
+                    ):
+                        current_issue_logs = [
+                            issue
+                            for issue in issue_log_data
+                            if str(issue.get("entry-number")) == str(entry_number)
+                        ]
+                        new_response_detail = models.ResponseDetails(
+                            response_id=new_response.id,
+                            detail={
+                                "transformed_row": transformed_row,
+                                "issue_logs": current_issue_logs,
+                                "entry_number": entry_number,
+                            },
+                        )
+                        session.add(new_response_detail)
+
                     session.commit()
 
                 elif "message" in response_data:

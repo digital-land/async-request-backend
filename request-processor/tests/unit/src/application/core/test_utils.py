@@ -3,6 +3,8 @@ from src.application.core.utils import (
     check_content,
     validate_endpoint,
     validate_source,
+    _find_existing_endpoint_for_org_dataset,
+    _read_existing_source_entry,
 )
 import requests_mock
 import os
@@ -692,3 +694,198 @@ def test_validate_source_handles_csv_read_error(monkeypatch, tmp_path):
     )
 
     assert "documentation_url_in_source_csv" in result
+
+
+SOURCE_CSV_FIELDNAMES = [
+    "source",
+    "attribution",
+    "collection",
+    "documentation-url",
+    "endpoint",
+    "licence",
+    "organisation",
+    "pipelines",
+    "entry-date",
+    "start-date",
+    "end-date",
+]
+
+
+def _write_source_csv(path, rows):
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=SOURCE_CSV_FIELDNAMES)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+
+def test_find_existing_endpoint_file_not_exist(tmp_path):
+    result = _find_existing_endpoint_for_org_dataset(
+        str(tmp_path / "source.csv"), "org", "dataset"
+    )
+    assert result == []
+
+
+def test_find_existing_endpoint_no_matches(tmp_path):
+    source_csv = tmp_path / "source.csv"
+    _write_source_csv(
+        source_csv,
+        [
+            {
+                "source": "s1",
+                "attribution": "",
+                "collection": "c",
+                "documentation-url": "",
+                "endpoint": "ep1",
+                "licence": "",
+                "organisation": "other-org",
+                "pipelines": "dataset",
+                "entry-date": "",
+                "start-date": "",
+                "end-date": "",
+            },
+        ],
+    )
+    result = _find_existing_endpoint_for_org_dataset(str(source_csv), "org", "dataset")
+    assert result == []
+
+
+def test_find_existing_endpoint_single_match(tmp_path):
+    source_csv = tmp_path / "source.csv"
+    _write_source_csv(
+        source_csv,
+        [
+            {
+                "source": "s1",
+                "attribution": "",
+                "collection": "c",
+                "documentation-url": "",
+                "endpoint": "ep1",
+                "licence": "",
+                "organisation": "org",
+                "pipelines": "dataset",
+                "entry-date": "",
+                "start-date": "",
+                "end-date": "",
+            },
+        ],
+    )
+    result = _find_existing_endpoint_for_org_dataset(str(source_csv), "org", "dataset")
+    assert result == ["ep1"]
+
+
+def test_find_existing_endpoint_multiple_matches(tmp_path):
+    source_csv = tmp_path / "source.csv"
+    _write_source_csv(
+        source_csv,
+        [
+            {
+                "source": "s1",
+                "attribution": "",
+                "collection": "c",
+                "documentation-url": "",
+                "endpoint": "ep1",
+                "licence": "",
+                "organisation": "org",
+                "pipelines": "dataset",
+                "entry-date": "",
+                "start-date": "",
+                "end-date": "",
+            },
+            {
+                "source": "s2",
+                "attribution": "",
+                "collection": "c",
+                "documentation-url": "",
+                "endpoint": "ep2",
+                "licence": "",
+                "organisation": "org",
+                "pipelines": "dataset",
+                "entry-date": "",
+                "start-date": "",
+                "end-date": "",
+            },
+        ],
+    )
+    result = _find_existing_endpoint_for_org_dataset(str(source_csv), "org", "dataset")
+    assert result == ["ep1", "ep2"]
+
+
+def test_find_existing_endpoint_empty_endpoint_excluded(tmp_path):
+    source_csv = tmp_path / "source.csv"
+    _write_source_csv(
+        source_csv,
+        [
+            {
+                "source": "s1",
+                "attribution": "",
+                "collection": "c",
+                "documentation-url": "",
+                "endpoint": "",
+                "licence": "",
+                "organisation": "org",
+                "pipelines": "dataset",
+                "entry-date": "",
+                "start-date": "",
+                "end-date": "",
+            },
+        ],
+    )
+    result = _find_existing_endpoint_for_org_dataset(str(source_csv), "org", "dataset")
+    assert result == []
+
+
+def test_read_existing_source_entry_found(tmp_path):
+    source_csv = tmp_path / "source.csv"
+    _write_source_csv(
+        source_csv,
+        [
+            {
+                "source": "s1",
+                "attribution": "attr",
+                "collection": "col",
+                "documentation-url": "http://doc.url",
+                "endpoint": "ep1",
+                "licence": "ogl",
+                "organisation": "org",
+                "pipelines": "ds",
+                "entry-date": "2024-01-01",
+                "start-date": "2024-01-01",
+                "end-date": "",
+            },
+        ],
+    )
+    result = _read_existing_source_entry(str(source_csv), "s1")
+    assert result is not None
+    assert result["source"] == "s1"
+    assert result["organisation"] == "org"
+    assert result["endpoint"] == "ep1"
+
+
+def test_read_existing_source_entry_not_found(tmp_path):
+    source_csv = tmp_path / "source.csv"
+    _write_source_csv(
+        source_csv,
+        [
+            {
+                "source": "s1",
+                "attribution": "",
+                "collection": "col",
+                "documentation-url": "",
+                "endpoint": "ep1",
+                "licence": "",
+                "organisation": "org",
+                "pipelines": "ds",
+                "entry-date": "",
+                "start-date": "",
+                "end-date": "",
+            },
+        ],
+    )
+    result = _read_existing_source_entry(str(source_csv), "nonexistent")
+    assert result is None
+
+
+def test_read_existing_source_entry_file_missing(tmp_path):
+    result = _read_existing_source_entry(str(tmp_path / "source.csv"), "s1")
+    assert result is None
