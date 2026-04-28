@@ -10,13 +10,6 @@ from datetime import datetime
 logger = get_logger(__name__)
 
 
-def _quote_url_if_comma(url):
-    """Wrap url in double quotes if it contains a comma, to prevent CSV parsing errors."""
-    if url and "," in url:
-        return f'"{url}"'
-    return url
-
-
 def get_request(url, verify_ssl=True):
     # log["ssl-verify"] = verify_ssl
     log = {"status": "", "message": ""}
@@ -141,7 +134,7 @@ def append_endpoint(
     plugin=None,
 ):
     endpoint_key = hash_sha256(endpoint_url)
-    endpoint_url = _quote_url_if_comma(endpoint_url)
+
     exists = False
     new_row = None
 
@@ -437,9 +430,7 @@ def validate_source(
     if not documentation_url:
         logger.warning("No documentation URL provided")
 
-    safe_documentation_url = (
-        _quote_url_if_comma(documentation_url) if documentation_url else ""
-    )
+    safe_documentation_url = documentation_url or ""
 
     if not start_date:
         start_date = datetime.now().strftime("%Y-%m-%d")
