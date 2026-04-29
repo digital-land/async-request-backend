@@ -438,40 +438,36 @@ def save_response_to_db(request_id, response_data):
                     session.add(new_response)
                     session.flush()  # Flush to get the response ID
 
-                    # Initialize line number
                     entry_number = 1
                     converted_row_data = response_data.get("converted-csv")
                     issue_log_data = response_data.get("issue-log")
                     transformed_data = response_data.get("transformed-csv")
-                    # Save converted_row_data and issue_log_data in ResponseDetails
-                    for converted_row in converted_row_data:
-                        # Collect issue logs corresponding to the current line number
-                        current_issue_logs = [
-                            issue_log
-                            for issue_log in issue_log_data
-                            if issue_log.get("entry-number") == str(entry_number)
-                        ]
-                        transformed_csv = [
-                            transformed
-                            for transformed in transformed_data
-                            if transformed.get("entry-number") == str(entry_number)
-                        ]
 
+                    issue_log_by_entry = {}
+                    for issue in issue_log_data:
+                        key = issue.get("entry-number")
+                        issue_log_by_entry.setdefault(key, []).append(issue)
+
+                    transformed_by_entry = {}
+                    for row in transformed_data:
+                        key = row.get("entry-number")
+                        transformed_by_entry.setdefault(key, []).append(row)
+
+                    for converted_row in converted_row_data:
+                        entry_key = str(entry_number)
                         new_response_detail = models.ResponseDetails(
                             response_id=new_response.id,
                             detail={
                                 "converted_row": converted_row,
-                                "issue_logs": current_issue_logs,
+                                "issue_logs": issue_log_by_entry.get(entry_key, []),
                                 "entry_number": entry_number,
-                                "transformed_row": transformed_csv,
+                                "transformed_row": transformed_by_entry.get(
+                                    entry_key, []
+                                ),
                             },
                         )
                         session.add(new_response_detail)
-
-                        # Increment line number for the next iteration
                         entry_number += 1
-
-                        session.add(new_response_detail)
 
                     # Commit the changes to the database
                     session.commit()
