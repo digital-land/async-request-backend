@@ -406,7 +406,7 @@ def _get_response(request_id):
     return result
 
 
-def save_response_to_db(request_id, response_data):
+def save_response_to_db(request_id, response_data):  # noqa
     """Currently handles three types of response_data:
     1. Full check data workflow response with 'converted-csv', 'issue-log', etc.
     2. Full add data workflow pipeline summary response with 'pipeline-summary'.
