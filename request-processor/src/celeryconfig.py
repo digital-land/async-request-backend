@@ -3,14 +3,17 @@ import os
 broker_transport_options = {
     "region": os.environ["CELERY_BROKER_REGION"],
     "is_secure": os.environ.get("CELERY_BROKER_IS_SECURE", "false").lower() == "true",
-    # Wait time before allowing a message to be read again. Our default is 60 seconds (1 minute).
-    # Celery default is 1800 seconds (30 minutes)
+    # Must be >= task_time_limit so SQS doesn't re-deliver a message mid-execution.
     "visibility_timeout": int(
-        os.environ.get("CELERY_BROKER_VISIBILITY_TIMEOUT", "900")
+        os.environ.get("CELERY_BROKER_VISIBILITY_TIMEOUT", "1800")
     ),
 }
 
 broker_connection_retry_on_startup = True
+
+# Raise SoftTimeLimitExceeded at 29 min to allow graceful cleanup, hard kill at 30 min.
+task_soft_time_limit = 1740
+task_time_limit = 1800
 
 # Late ack means the task messages will be acknowledged __after__ the task has been executed,
 # not right before, which is the default behavior.
