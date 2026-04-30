@@ -27,6 +27,7 @@ from pathlib import Path
 from digital_land.collect import Collector, FetchStatus
 
 logger = get_task_logger(__name__)
+_DETAIL_BATCH_SIZE = 1000
 # Threshold for s3_transfer_manager to automatically use multipart download
 max_file_size_mb = 30
 
@@ -406,13 +407,40 @@ def _get_response(request_id):
     return result
 
 
-def save_response_to_db(request_id, response_data):  # noqa
-    """Currently handles three types of response_data:
-    1. Full check data workflow response with 'converted-csv', 'issue-log', etc.
-    2. Full add data workflow pipeline summary response with 'pipeline-summary'.
-    3. Error log with 'message'.
-    Saves appropriately to Response and ResponseDetails tables.
-    """
+def _save_response_details(
+    session, response_id, converted_row_data, issue_log_data, transformed_data
+):
+    issue_log_by_entry = {}
+    for issue in issue_log_data:
+        key = issue.get("entry-number")
+        issue_log_by_entry.setdefault(key, []).append(issue)
+
+    transformed_by_entry = {}
+    for row in transformed_data:
+        key = row.get("entry-number")
+        transformed_by_entry.setdefault(key, []).append(row)
+
+    for entry_number, converted_row in enumerate(converted_row_data, start=1):
+        entry_key = str(entry_number)
+        session.add(
+            models.ResponseDetails(
+                response_id=response_id,
+                detail={
+                    "converted_row": converted_row,
+                    "issue_logs": issue_log_by_entry.get(entry_key, []),
+                    "entry_number": entry_number,
+                    "transformed_row": transformed_by_entry.get(entry_key, []),
+                },
+            )
+        )
+        if entry_number % _DETAIL_BATCH_SIZE == 0:
+            session.flush()
+            session.expunge_all()
+
+    session.commit()
+
+
+def save_response_to_db(request_id, response_data):
     logger.info(f"save_response_to_db started for request_id: {request_id}")
     db_session = database.session_maker()
     with db_session() as session:
@@ -431,46 +459,16 @@ def save_response_to_db(request_id, response_data):  # noqa
                         "error-summary": response_data.get("error-summary", {}),
                         "plugin": response_data.get("plugin", None),
                     }
-                    # Create a new Response instance
                     new_response = models.Response(request_id=request_id, data=data)
-
-                    # Add the response to the session
                     session.add(new_response)
-                    session.flush()  # Flush to get the response ID
-
-                    entry_number = 1
-                    converted_row_data = response_data.get("converted-csv")
-                    issue_log_data = response_data.get("issue-log")
-                    transformed_data = response_data.get("transformed-csv")
-
-                    issue_log_by_entry = {}
-                    for issue in issue_log_data:
-                        key = issue.get("entry-number")
-                        issue_log_by_entry.setdefault(key, []).append(issue)
-
-                    transformed_by_entry = {}
-                    for row in transformed_data:
-                        key = row.get("entry-number")
-                        transformed_by_entry.setdefault(key, []).append(row)
-
-                    for converted_row in converted_row_data:
-                        entry_key = str(entry_number)
-                        new_response_detail = models.ResponseDetails(
-                            response_id=new_response.id,
-                            detail={
-                                "converted_row": converted_row,
-                                "issue_logs": issue_log_by_entry.get(entry_key, []),
-                                "entry_number": entry_number,
-                                "transformed_row": transformed_by_entry.get(
-                                    entry_key, []
-                                ),
-                            },
-                        )
-                        session.add(new_response_detail)
-                        entry_number += 1
-
-                    # Commit the changes to the database
-                    session.commit()
+                    session.flush()
+                    _save_response_details(
+                        session,
+                        new_response.id,
+                        response_data.get("converted-csv"),
+                        response_data.get("issue-log"),
+                        response_data.get("transformed-csv"),
+                    )
 
                 elif "pipeline-summary" in response_data:
                     data = {
@@ -481,40 +479,26 @@ def save_response_to_db(request_id, response_data):  # noqa
                     new_response = models.Response(request_id=request_id, data=data)
                     session.add(new_response)
                     session.flush()
-
-                    issue_log_data = response_data.get("pipeline-issues", [])
-
-                    for entry_number, transformed_row in enumerate(
-                        response_data.get("transformed-csv", []), start=1
-                    ):
-                        current_issue_logs = [
-                            issue
-                            for issue in issue_log_data
-                            if str(issue.get("entry-number")) == str(entry_number)
-                        ]
-                        new_response_detail = models.ResponseDetails(
-                            response_id=new_response.id,
-                            detail={
-                                "transformed_row": transformed_row,
-                                "issue_logs": current_issue_logs,
-                                "entry_number": entry_number,
-                            },
-                        )
-                        session.add(new_response_detail)
-
-                    session.commit()
+                    _save_response_details(
+                        session,
+                        new_response.id,
+                        response_data.get("converted-csv", []),
+                        response_data.get("pipeline-issues", []),
+                        response_data.get("transformed-csv", []),
+                    )
 
                 elif "message" in response_data:
                     error = CustomException(response_data)
-                    # error_detail_json = json.dumps(error.detail)
-                    # error_details = {
-                    #     "detail": error.as_dict()
-                    # }
                     new_response = models.Response(
                         request_id=request_id, error=error.detail
                     )
                     session.add(new_response)
                     session.commit()
+
+                else:
+                    logger.warning(
+                        f"save_response_to_db: unrecognised response shape for request_id: {request_id}"
+                    )
             else:
                 logger.info(f"Response already exists in DB for request: {request_id}")
         except Exception as e:

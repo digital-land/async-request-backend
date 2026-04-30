@@ -322,6 +322,7 @@ def test_add_data_workflow(monkeypatch):
     class DummyDirectories:
         PIPELINE_DIR = "/tmp/pipeline"
         COLLECTION_DIR = "/tmp/collection"
+        CONVERTED_DIR = "/tmp/converted"
         TRANSFORMED_DIR = "/tmp/transformed"
         SPECIFICATION_DIR = "/tmp/specification"
         CACHE_DIR = "/tmp/cache"
@@ -334,6 +335,7 @@ def test_add_data_workflow(monkeypatch):
         "pipeline-issues": [],
         "endpoint-summary": {"endpoint_summary": "mocked"},
         "source-summary": {"source_summary": "mocked"},
+        "converted-csv": [],
         "transformed-csv": [],
     }
 
@@ -387,6 +389,7 @@ def test_add_data_workflow_calls(monkeypatch):
     class DummyDirectories:
         PIPELINE_DIR = "/tmp/pipeline"
         COLLECTION_DIR = "/tmp/collection"
+        CONVERTED_DIR = "/tmp/converted"
         TRANSFORMED_DIR = "/tmp/transformed"
         SPECIFICATION_DIR = "/tmp/specification"
         CACHE_DIR = "/tmp/cache"
@@ -412,6 +415,7 @@ def test_add_data_workflow_calls(monkeypatch):
         specification_dir,
         cache_dir,
         endpoint,
+        converted_path=None,
     ):
         called["fetch_add_data_response"] = {
             "dataset": dataset,
