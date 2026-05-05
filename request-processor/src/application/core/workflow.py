@@ -465,8 +465,12 @@ def add_data_workflow(
         input_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
         collection_dir = os.path.join(directories.COLLECTION_DIR, request_id)
         output_path = os.path.join(directories.TRANSFORMED_DIR, request_id, file_name)
+        converted_path = Path(
+            os.path.join(directories.CONVERTED_DIR, request_id, f"{file_name}.csv")
+        )
         if not os.path.exists(output_path):
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        os.makedirs(converted_path.parent, exist_ok=True)
 
         resource = resource_from_path(os.path.join(input_dir, file_name))
         endpoint_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()
@@ -505,6 +509,7 @@ def add_data_workflow(
             specification_dir=directories.SPECIFICATION_DIR,
             cache_dir=directories.CACHE_DIR,
             endpoint=endpoint_hash,
+            converted_path=converted_path,
         )
 
         # Create endpoint and source summaries in workflow
@@ -531,6 +536,9 @@ def add_data_workflow(
             "pipeline-issues": pipeline_issues,
             "endpoint-summary": endpoint_summary,
             "source-summary": source_summary,
+            "converted-csv": csv_to_json(str(converted_path))
+            if converted_path.exists()
+            else csv_to_json(os.path.join(input_dir, file_name)),
             "transformed-csv": csv_to_json(output_path),
         }
 
@@ -548,6 +556,8 @@ def add_data_workflow(
             os.path.join(directories.COLLECTION_DIR, "resource", request_id),
             os.path.join(directories.COLLECTION_DIR, request_id),
             directories.COLLECTION_DIR,
+            os.path.join(directories.CONVERTED_DIR, request_id),
+            directories.CONVERTED_DIR,
             os.path.join(directories.TRANSFORMED_DIR, request_id),
             directories.TRANSFORMED_DIR,
             os.path.join(directories.PIPELINE_DIR, collection),

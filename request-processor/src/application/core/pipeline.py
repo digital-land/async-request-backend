@@ -198,6 +198,7 @@ def fetch_add_data_response(
     specification_dir,
     cache_dir,
     endpoint,
+    converted_path=None,
 ):
     try:
         specification = Specification(specification_dir)
@@ -231,6 +232,7 @@ def fetch_add_data_response(
                     valid_category_values=valid_category_values,
                     disable_lookups=False,
                     endpoints=[endpoint],
+                    converted_path=converted_path,
                 )
 
                 existing_entities.extend(
@@ -284,6 +286,7 @@ def fetch_add_data_response(
                         valid_category_values=valid_category_values,
                         disable_lookups=False,
                         endpoints=[endpoint],
+                        converted_path=converted_path,
                     )
                 else:
                     logger.info(f"No unidentified lookups found in {resource_file}")
