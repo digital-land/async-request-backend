@@ -26,6 +26,7 @@ tree-preservation-order:
 tree-preservation-zone:
 - reference
 - geometry
+- tree-preservation-order
 listed-building-outline:
 - reference
 - geometry
@@ -33,6 +34,7 @@ listed-building-outline:
 - listed-building
 tree:
 - reference
+- tree-preservation-order
 -
   - point
   - geometry
