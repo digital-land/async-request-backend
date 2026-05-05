@@ -3,9 +3,9 @@ import os
 broker_transport_options = {
     "region": os.environ["CELERY_BROKER_REGION"],
     "is_secure": os.environ.get("CELERY_BROKER_IS_SECURE", "false").lower() == "true",
-    # Must be >= task_time_limit so SQS doesn't re-deliver a message mid-execution.
+    # Must exceed task_time_limit (1800) so SQS doesn't re-deliver a message mid-execution.
     "visibility_timeout": int(
-        os.environ.get("CELERY_BROKER_VISIBILITY_TIMEOUT", "1800")
+        os.environ.get("CELERY_BROKER_VISIBILITY_TIMEOUT", "2100")
     ),
 }
 
