@@ -509,6 +509,81 @@ def test_validate_source_finds_existing_source(monkeypatch, tmp_path):
     assert "existing_source_entry" in result
     assert result["existing_source_entry"]["source"] == "existing_source_hash"
     assert result["existing_source_entry"]["collection"] == collection
+    assert "pipelines_append_required" not in result
+
+
+def test_validate_source_pipelines_append_required(monkeypatch, tmp_path):
+    """Test validate_source flags pipelines_append_required when the dataset is not in the existing pipelines"""
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+    source_csv_path = pipeline_dir / "source.csv"
+
+    documentation_url = "http://example.com/doc"
+    collection = "article-4-direction"
+    organisation = "local-authority:SKP"
+    existing_dataset = "article-4-direction-area"
+    new_dataset = "article-4-direction"
+
+    endpoint_summary = {
+        "endpoint_url_in_endpoint_csv": True,
+        "existing_endpoint_entry": {"endpoint": "endpoint_hash_123"},
+    }
+
+    with open(source_csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "source",
+                "attribution",
+                "collection",
+                "documentation-url",
+                "endpoint",
+                "licence",
+                "organisation",
+                "pipelines",
+                "entry-date",
+                "start-date",
+                "end-date",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "source": "existing_source_hash",
+                "attribution": "",
+                "collection": collection,
+                "documentation-url": documentation_url,
+                "endpoint": "endpoint_hash_123",
+                "licence": "",
+                "organisation": organisation,
+                "pipelines": existing_dataset,
+                "entry-date": "2024-01-01T00:00:00",
+                "start-date": "2024-01-01",
+                "end-date": "",
+            }
+        )
+
+    def fake_append_source(*args, **kwargs):
+        return "existing_source_hash", None
+
+    monkeypatch.setattr("src.application.core.utils.append_source", fake_append_source)
+
+    result = validate_source(
+        documentation_url,
+        str(pipeline_dir),
+        collection,
+        organisation,
+        new_dataset,
+        endpoint_summary,
+        start_date=None,
+        licence=None,
+    )
+
+    assert result["documentation_url_in_source_csv"] is True
+    assert "existing_source_entry" in result
+    assert "pipelines_append_required" in result
+    assert result["pipelines_append_required"]["current"] == existing_dataset
+    assert result["pipelines_append_required"]["updated"] == f"{existing_dataset};{new_dataset}"
 
 
 def test_validate_source_no_endpoint_key(tmp_path):
