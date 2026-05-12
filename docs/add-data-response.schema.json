@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/07/schema",
+  "title": "Add Data API Response",
+  "type": "object",
+  "required": ["id", "type", "status", "created", "modified", "response"],
+  "properties": {
+    "id": { "type": "string" },
+    "type": { "type": "string", "const": "add_data" },
+    "status": { "type": "string", "enum": ["PENDING", "PROCESSING", "COMPLETE", "FAILED"] },
+    "created": { "type": "string", "format": "date-time" },
+    "modified": { "type": "string", "format": "date-time" },
+    "response": {
+      "type": "object",
+      "properties": {
+        "error": { "type": ["object", "null"] },
+        "data": {
+          "type": ["object", "null"],
+          "properties": {
+            "plugin": { "type": ["string", "null"] },
+            "endpoint-summary": { "$ref": "#/$defs/endpointSummary" },
+            "source-summary": { "$ref": "#/$defs/sourceSummary" },
+            "pipeline-summary": { "$ref": "#/$defs/pipelineSummary" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "endpointSummary": {
+      "type": "object",
+      "required": ["endpoint_url_in_endpoint_csv"],
+      "properties": {
+        "endpoint_url_in_endpoint_csv": { "type": "boolean" },
+        "new_endpoint_entry": {
+          "description": "Present when endpoint_url_in_endpoint_csv is false — a new row was appended to endpoint.csv",
+          "type": "object",
+          "properties": {
+            "endpoint": { "type": "string" },
+            "endpoint-url": { "type": "string" },
+            "entry-date": { "type": "string" },
+            "start-date": { "type": "string" },
+            "end-date": { "type": "string" },
+            "plugin": { "type": "string" },
+            "parameters": { "type": "string" }
+          }
+        },
+        "existing_endpoint_entry": {
+          "description": "Present when endpoint_url_in_endpoint_csv is true — the endpoint already exists in endpoint.csv",
+          "type": "object",
+          "properties": {
+            "endpoint": { "type": "string" },
+            "endpoint-url": { "type": "string" },
+            "entry-date": { "type": "string" },
+            "start-date": { "type": "string" },
+            "end-date": { "type": "string" },
+            "plugin": { "type": "string" },
+            "parameters": { "type": "string" }
+          }
+        }
+      }
+    },
+    "sourceSummary": {
+      "type": "object",
+      "required": ["documentation_url_in_source_csv"],
+      "properties": {
+        "documentation_url_in_source_csv": { "type": "boolean" },
+        "new_source_entry": {
+          "description": "Present when documentation_url_in_source_csv is false — a new row was appended to source.csv",
+          "type": "object",
+          "properties": {
+            "source": { "type": "string" },
+            "collection": { "type": "string" },
+            "organisation": { "type": "string" },
+            "endpoint": { "type": "string" },
+            "pipelines": { "type": "string" },
+            "documentation-url": { "type": "string" },
+            "licence": { "type": "string" },
+            "attribution": { "type": "string" },
+            "entry-date": { "type": "string" },
+            "start-date": { "type": "string" },
+            "end-date": { "type": "string" }
+          }
+        },
+        "existing_source_entry": {
+          "description": "Present when documentation_url_in_source_csv is true — the source already exists in source.csv",
+          "type": "object",
+          "properties": {
+            "source": { "type": "string" },
+            "collection": { "type": "string" },
+            "organisation": { "type": "string" },
+            "endpoint": { "type": "string" },
+            "pipelines": { "type": "string" },
+            "documentation-url": { "type": "string" },
+            "licence": { "type": "string" },
+            "attribution": { "type": "string" },
+            "entry-date": { "type": "string" },
+            "start-date": { "type": "string" },
+            "end-date": { "type": "string" }
+          }
+        },
+        "pipelines_append_required": {
+          "description": "Present when the source exists but serves multiple datasets — the existing pipelines value in source.csv needs to be updated to include the new dataset",
+          "type": "object",
+          "required": ["current", "updated"],
+          "properties": {
+            "current": {
+              "description": "The current value of the pipelines field in source.csv",
+              "type": "string",
+              "examples": ["article-4-direction-area"]
+            },
+            "updated": {
+              "description": "The value pipelines should be updated to (semicolon-delimited)",
+              "type": "string",
+              "examples": ["article-4-direction-area;article-4-direction"]
+            }
+          }
+        },
+        "existing_endpoint_for_organisation_dataset": {
+          "description": "Endpoint hashes already registered for this organisation and dataset combination",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "pipelineSummary": {
+      "type": "object",
+      "properties": {
+        "new-in-resource": { "type": "integer" },
+        "existing-in-resource": { "type": "integer" },
+        "new-entities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/entityEntry" }
+        },
+        "existing-entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "entity": { "type": "string" },
+              "reference": { "type": "string" }
+            }
+          }
+        },
+        "entity-organisation": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "dataset": { "type": "string" },
+              "organisation": { "type": "string" },
+              "entity-minimum": { "type": "integer" },
+              "entity-maximum": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "entityEntry": {
+      "type": "object",
+      "properties": {
+        "entity": { "type": "string" },
+        "prefix": { "type": "string" },
+        "reference": { "type": "string" },
+        "organisation": { "type": "string" },
+        "resource": { "type": "string" },
+        "entry-number": { "type": "string" },
+        "entry-date": { "type": "string" },
+        "start-date": { "type": "string" },
+        "end-date": { "type": "string" },
+        "endpoint": { "type": "string" }
+      }
+    }
+  }
+}
