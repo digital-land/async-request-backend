@@ -583,7 +583,10 @@ def test_validate_source_pipelines_append_required(monkeypatch, tmp_path):
     assert "existing_source_entry" in result
     assert "pipelines_append_required" in result
     assert result["pipelines_append_required"]["current"] == existing_dataset
-    assert result["pipelines_append_required"]["updated"] == f"{existing_dataset};{new_dataset}"
+    assert (
+        result["pipelines_append_required"]["updated"]
+        == f"{existing_dataset};{new_dataset}"
+    )
 
 
 def test_validate_source_no_endpoint_key(tmp_path):

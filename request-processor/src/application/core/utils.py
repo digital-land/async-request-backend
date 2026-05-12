@@ -468,7 +468,9 @@ def validate_source(
         # A combined endpoint can serve multiple datasets; if this dataset isn't already
         # listed in pipelines, the existing row needs to be updated with a semicolon-appended value.
         existing_pipelines = existing_entry.get("pipelines", "")
-        existing_pipeline_list = [p.strip() for p in existing_pipelines.split(";") if p.strip()]
+        existing_pipeline_list = [
+            p.strip() for p in existing_pipelines.split(";") if p.strip()
+        ]
         if dataset.strip() not in existing_pipeline_list:
             updated_pipelines = ";".join(existing_pipeline_list + [dataset.strip()])
             source_summary["pipelines_append_required"] = {
