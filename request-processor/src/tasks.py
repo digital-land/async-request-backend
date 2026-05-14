@@ -457,6 +457,7 @@ def save_response_to_db(request_id, response_data):
                     data = {
                         "column-field-log": response_data.get("column-field-log", {}),
                         "error-summary": response_data.get("error-summary", {}),
+                        "task-log": response_data.get("task-log", []),
                         "plugin": response_data.get("plugin", None),
                     }
                     new_response = models.Response(request_id=request_id, data=data)

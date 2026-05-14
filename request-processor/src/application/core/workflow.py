@@ -1,11 +1,14 @@
+import csv
 import datetime
 import hashlib
+import json
 import os
-import csv
+
 from pathlib import Path
 import urllib
 import yaml
 from urllib.error import HTTPError
+
 from application.core.utils import (
     detect_encoding,
     extract_dataset_field_rows,
@@ -20,7 +23,8 @@ from application.core.pipeline import (
 )
 from application.configurations.config import source_url, CONFIG_URL
 from collections import defaultdict
-import json
+from digital_land.pipeline.task import TaskPipeline
+
 import warnings
 
 logger = get_logger(__name__)
@@ -98,6 +102,19 @@ def run_workflow(
         issue_log_json = csv_to_json(
             os.path.join(directories.ISSUE_DIR, dataset, request_id, f"{resource}.csv")
         )
+        task_log_path = os.path.join(
+            directories.ISSUE_DIR, dataset, request_id, f"{resource}-tasks.csv"
+        )
+        TaskPipeline().run(
+            output_path=task_log_path,
+            dataset=dataset,
+            organisation=organisation,
+            issue_path=os.path.join(
+                directories.ISSUE_DIR, dataset, request_id, f"{resource}.csv"
+            ),
+        )
+        task_log_json = csv_to_json(task_log_path)
+
         column_field_json = csv_to_json(
             os.path.join(
                 directories.COLUMN_FIELD_DIR, dataset, request_id, f"{resource}.csv"
@@ -119,6 +136,7 @@ def run_workflow(
             "column-field-log": column_field_json,
             "error-summary": summary_data,
             "transformed-csv": transformed_json,
+            "task-log": task_log_json,
         }
         # logger.info("Error Summary: %s", summary_data)
     except Exception as e:
