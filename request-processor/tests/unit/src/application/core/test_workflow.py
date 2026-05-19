@@ -337,7 +337,7 @@ def test_run_workflow_returns_error_response_when_pipeline_fails(
     )
 
     assert result == {
-        "message": "An error occurred during workflow processing: assign entries failed",
+        "message": "An error occurred during workflow processing.",
         "status": 500,
         "exception": "RuntimeError",
     }
