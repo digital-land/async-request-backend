@@ -9,3 +9,4 @@ request-processor/tests/converted
 request-processor/specification/*
 request-processor/var/*
 .DS_Store
+docker-compose.override.yml

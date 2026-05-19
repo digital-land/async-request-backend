@@ -20,11 +20,11 @@ from application.core.pipeline import (
     fetch_response_data,
     resource_from_path,
     fetch_add_data_response,
+    run_task_pipeline,
+    load_mappings,
 )
 from application.configurations.config import source_url, CONFIG_URL
 from collections import defaultdict
-from digital_land.pipeline.task import TaskPipeline
-
 import warnings
 
 logger = get_logger(__name__)
@@ -62,6 +62,7 @@ def run_workflow(
             directories.SPECIFICATION_DIR,
         )
 
+        # This manages the core workflow of transforming data to facts
         fetch_response_data(
             dataset,
             organisation,
@@ -85,6 +86,7 @@ def run_workflow(
         )
 
         required_fields = getMandatoryFields(required_fields_path, dataset)
+        # Pipeline will only create a converted if not csv format as raw input
         converted_json = []
         if os.path.exists(
             os.path.join(directories.CONVERTED_DIR, request_id, f"{resource}.csv")
@@ -102,27 +104,28 @@ def run_workflow(
         issue_log_json = csv_to_json(
             os.path.join(directories.ISSUE_DIR, dataset, request_id, f"{resource}.csv")
         )
+
+        # Secondary pipeline to create tasks from issues and column-field mappings, and generate task log summary
         task_log_path = os.path.join(
             directories.ISSUE_DIR, dataset, request_id, f"{resource}-tasks.csv"
         )
-        TaskPipeline().run(
-            output_path=task_log_path,
+        task_log_json = run_task_pipeline(
+            task_log_path=task_log_path,
             dataset=dataset,
             organisation=organisation,
             issue_path=os.path.join(
                 directories.ISSUE_DIR, dataset, request_id, f"{resource}.csv"
             ),
+            column_field_path=os.path.join(
+                directories.COLUMN_FIELD_DIR, dataset, request_id, f"{resource}.csv"
+            ),
+            mandatory_fields=required_fields,
         )
-        task_log_json = csv_to_json(task_log_path)
 
+        # Goal is to remove these three operations with task pipeline managing this
         column_field_json = csv_to_json(
             os.path.join(
                 directories.COLUMN_FIELD_DIR, dataset, request_id, f"{resource}.csv"
-            )
-        )
-        transformed_json = csv_to_json(
-            os.path.join(
-                directories.TRANSFORMED_DIR, dataset, request_id, f"{resource}.csv"
             )
         )
         updateColumnFieldLog(column_field_json, required_fields)
@@ -130,6 +133,11 @@ def run_workflow(
             issue_log_json, column_field_json, not_mapped_columns
         )
 
+        transformed_json = csv_to_json(
+            os.path.join(
+                directories.TRANSFORMED_DIR, dataset, request_id, f"{resource}.csv"
+            )
+        )
         response_data = {
             "converted-csv": converted_json,
             "issue-log": issue_log_json,
@@ -141,6 +149,7 @@ def run_workflow(
         # logger.info("Error Summary: %s", summary_data)
     except Exception as e:
         logger.exception(f"An error occurred: {e}")
+        response_data["message"] = "An error occurred while processing your request"
 
     finally:
         clean_up(
@@ -367,20 +376,6 @@ def getMandatoryFields(required_fields_path, dataset):
     required_fields = data.get(dataset, [])
     return required_fields
 
-
-def load_mappings():
-    mappings_file_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        "../application/configs/mapping.yaml",
-    )
-    with open(mappings_file_path, "r") as yaml_file:
-        mappings_data = yaml.safe_load(yaml_file)
-
-    mappings = mappings_data.get("mappings", [])
-    mapping_dict = {
-        (mapping["field"], mapping["issue-type"]): mapping for mapping in mappings
-    }
-    return mapping_dict
 
 
 def error_summary(issue_log, column_field, not_mapped_columns):
