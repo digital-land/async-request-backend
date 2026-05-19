@@ -1,10 +1,227 @@
 import pytest
 from unittest.mock import MagicMock
 from src.application.core.pipeline import (
+    fetch_response_data,
     fetch_add_data_response,
     _get_entities_breakdown,
     _get_existing_entities_breakdown,
 )
+
+
+def test_fetch_response_data_calls_assign_entries_with_expected_params(
+    monkeypatch, tmp_path
+):
+    dataset = "test-dataset"
+    organisation = "test-org"
+    request_id = "request-123"
+    collection_dir = tmp_path / "collection"
+    converted_dir = tmp_path / "converted"
+    issue_dir = tmp_path / "issue"
+    column_field_dir = tmp_path / "column-field"
+    transformed_dir = tmp_path / "transformed"
+    dataset_resource_dir = tmp_path / "dataset-resource"
+    pipeline_dir = tmp_path / "pipeline"
+    specification_dir = tmp_path / "specification"
+    cache_dir = tmp_path / "cache"
+
+    input_dir = collection_dir / "resource" / request_id
+    input_dir.mkdir(parents=True)
+    resource_file = input_dir / "resource-hash.csv"
+    resource_file.write_text("reference\nREF001\n")
+
+    converted_dir.mkdir()
+    pipeline_dir.mkdir()
+    specification_dir.mkdir()
+    cache_dir.mkdir()
+
+    mock_specification = MagicMock()
+    mock_issue_log = MagicMock()
+    mock_pipeline = MagicMock()
+    mock_pipeline.path = str(pipeline_dir)
+    mock_pipeline.transform.return_value = mock_issue_log
+    mock_api = MagicMock()
+    mock_api.get_valid_category_values.return_value = {"category": ["value"]}
+    mock_organisation = MagicMock()
+    assign_entries = MagicMock()
+
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Specification",
+        MagicMock(return_value=mock_specification),
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Pipeline",
+        MagicMock(return_value=mock_pipeline),
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline.API",
+        MagicMock(return_value=mock_api),
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Organisation",
+        MagicMock(return_value=mock_organisation),
+    )
+    monkeypatch.setattr("src.application.core.pipeline.assign_entries", assign_entries)
+
+    fetch_response_data(
+        dataset=dataset,
+        organisation=organisation,
+        request_id=request_id,
+        collection_dir=str(collection_dir),
+        converted_dir=str(converted_dir),
+        issue_dir=str(issue_dir),
+        column_field_dir=str(column_field_dir),
+        transformed_dir=str(transformed_dir),
+        dataset_resource_dir=str(dataset_resource_dir),
+        pipeline_dir=str(pipeline_dir),
+        specification_dir=str(specification_dir),
+        cache_dir=str(cache_dir),
+        additional_col_mappings=None,
+        additional_concats=None,
+    )
+
+    assign_entries.assert_called_once_with(
+        resource_path=str(resource_file),
+        dataset=dataset,
+        organisation=organisation,
+        pipeline_dir=str(pipeline_dir),
+        specification=mock_specification,
+        cache_dir=str(cache_dir),
+        endpoints=[],
+    )
+
+
+def test_fetch_response_data_reraises_assign_entries_exception(monkeypatch, tmp_path):
+    dataset = "test-dataset"
+    organisation = "test-org"
+    request_id = "request-123"
+    collection_dir = tmp_path / "collection"
+    converted_dir = tmp_path / "converted"
+    issue_dir = tmp_path / "issue"
+    column_field_dir = tmp_path / "column-field"
+    transformed_dir = tmp_path / "transformed"
+    dataset_resource_dir = tmp_path / "dataset-resource"
+    pipeline_dir = tmp_path / "pipeline"
+    specification_dir = tmp_path / "specification"
+    cache_dir = tmp_path / "cache"
+
+    input_dir = collection_dir / "resource" / request_id
+    input_dir.mkdir(parents=True)
+    resource_file = input_dir / "resource-hash.csv"
+    resource_file.write_text("reference\nREF001\n")
+
+    converted_dir.mkdir()
+    pipeline_dir.mkdir()
+    specification_dir.mkdir()
+    cache_dir.mkdir()
+
+    mock_specification = MagicMock()
+    mock_pipeline = MagicMock()
+    mock_api = MagicMock()
+    assign_entries = MagicMock(side_effect=RuntimeError("assign failed"))
+
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Specification",
+        MagicMock(return_value=mock_specification),
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Pipeline",
+        MagicMock(return_value=mock_pipeline),
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline.API",
+        MagicMock(return_value=mock_api),
+    )
+    monkeypatch.setattr("src.application.core.pipeline.assign_entries", assign_entries)
+
+    with pytest.raises(RuntimeError, match="assign failed"):
+        fetch_response_data(
+            dataset=dataset,
+            organisation=organisation,
+            request_id=request_id,
+            collection_dir=str(collection_dir),
+            converted_dir=str(converted_dir),
+            issue_dir=str(issue_dir),
+            column_field_dir=str(column_field_dir),
+            transformed_dir=str(transformed_dir),
+            dataset_resource_dir=str(dataset_resource_dir),
+            pipeline_dir=str(pipeline_dir),
+            specification_dir=str(specification_dir),
+            cache_dir=str(cache_dir),
+            additional_col_mappings=None,
+            additional_concats=None,
+        )
+
+
+def test_fetch_response_data_reraises_pipeline_transform_exception(
+    monkeypatch, tmp_path
+):
+    dataset = "test-dataset"
+    organisation = "test-org"
+    request_id = "request-123"
+    collection_dir = tmp_path / "collection"
+    converted_dir = tmp_path / "converted"
+    issue_dir = tmp_path / "issue"
+    column_field_dir = tmp_path / "column-field"
+    transformed_dir = tmp_path / "transformed"
+    dataset_resource_dir = tmp_path / "dataset-resource"
+    pipeline_dir = tmp_path / "pipeline"
+    specification_dir = tmp_path / "specification"
+    cache_dir = tmp_path / "cache"
+
+    input_dir = collection_dir / "resource" / request_id
+    input_dir.mkdir(parents=True)
+    resource_file = input_dir / "resource-hash.csv"
+    resource_file.write_text("reference\nREF001\n")
+
+    converted_dir.mkdir()
+    pipeline_dir.mkdir()
+    specification_dir.mkdir()
+    cache_dir.mkdir()
+
+    mock_specification = MagicMock()
+    mock_pipeline = MagicMock()
+    mock_pipeline.path = str(pipeline_dir)
+    mock_pipeline.transform.side_effect = RuntimeError("transform failed")
+    mock_api = MagicMock()
+    mock_api.get_valid_category_values.return_value = {"category": ["value"]}
+    mock_organisation = MagicMock()
+    assign_entries = MagicMock()
+
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Specification",
+        MagicMock(return_value=mock_specification),
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Pipeline",
+        MagicMock(return_value=mock_pipeline),
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline.API",
+        MagicMock(return_value=mock_api),
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Organisation",
+        MagicMock(return_value=mock_organisation),
+    )
+    monkeypatch.setattr("src.application.core.pipeline.assign_entries", assign_entries)
+
+    with pytest.raises(RuntimeError, match="transform failed"):
+        fetch_response_data(
+            dataset=dataset,
+            organisation=organisation,
+            request_id=request_id,
+            collection_dir=str(collection_dir),
+            converted_dir=str(converted_dir),
+            issue_dir=str(issue_dir),
+            column_field_dir=str(column_field_dir),
+            transformed_dir=str(transformed_dir),
+            dataset_resource_dir=str(dataset_resource_dir),
+            pipeline_dir=str(pipeline_dir),
+            specification_dir=str(specification_dir),
+            cache_dir=str(cache_dir),
+            additional_col_mappings=None,
+            additional_concats=None,
+        )
 
 
 def test_fetch_add_data_response_success(monkeypatch, tmp_path):
@@ -181,6 +398,47 @@ def test_fetch_add_data_response_handles_processing_error(monkeypatch, tmp_path)
 
     assert "new-in-resource" in result
     assert result["new-in-resource"] == 0
+
+
+def test_fetch_add_data_response_reraises_processing_error(monkeypatch, tmp_path):
+    dataset = "test-dataset"
+    organisation = "test-org"
+    pipeline_dir = tmp_path / "pipeline"
+    input_path = tmp_path / "resource"
+    specification_dir = tmp_path / "specification"
+    cache_dir = tmp_path / "cache"
+    endpoint = "abc123hash"
+
+    input_path.mkdir(parents=True)
+    pipeline_dir.mkdir(parents=True)
+
+    test_file = input_path / "test.csv"
+    test_file.write_text("invalid csv content without proper headers")
+
+    mock_spec = MagicMock()
+    mock_spec.dataset_prefix.return_value = "test-prefix"
+    mock_pipeline = MagicMock()
+    mock_pipeline.transform.side_effect = Exception("Processing error")
+
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Specification", lambda x: mock_spec
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Pipeline", MagicMock(return_value=mock_pipeline)
+    )
+    monkeypatch.setattr("src.application.core.pipeline.Organisation", MagicMock())
+
+    with pytest.raises(Exception, match="Processing error"):
+        fetch_add_data_response(
+            dataset=dataset,
+            organisation_provider=organisation,
+            pipeline_dir=str(pipeline_dir),
+            input_dir=str(input_path),
+            output_path=str(input_path / "output.csv"),
+            specification_dir=str(specification_dir),
+            cache_dir=str(cache_dir),
+            endpoint=endpoint,
+        )
 
 
 def test_get_entities_breakdown_success():

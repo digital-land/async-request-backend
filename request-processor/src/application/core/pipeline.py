@@ -51,7 +51,8 @@ def fetch_response_data(
                 endpoints=[],
             )
     except Exception as err:
-        logger.error("An exception occured during assign_entries process: %s", str(err))
+        logger.exception("An exception occurred when assigning entries: %s", err)
+        raise
 
     # Create directories if they don't exist
     for directory in [
@@ -108,7 +109,8 @@ def fetch_response_data(
                 ),
             )
         except Exception as err:
-            logger.error("An exception occured during Pipeline Transform: ", str(err))
+            logger.exception("An exception occurred during Pipeline Transform: %s", err)
+            raise
 
 
 def resource_from_path(path):
@@ -200,6 +202,13 @@ def fetch_add_data_response(
     endpoint,
     converted_path=None,
 ):
+    """
+    Run the add-data pipeline transform and build the pipeline summary response.
+
+    This is reached via POST /requests with type "add_data" through the
+    AddDataTask and add_data_workflow. Processing exceptions are re-raised so
+    add_data_workflow can return them in the standard async error response.
+    """
     try:
         specification = Specification(specification_dir)
         pipeline = Pipeline(pipeline_dir, dataset, specification=specification)
@@ -292,8 +301,8 @@ def fetch_add_data_response(
                     logger.info(f"No unidentified lookups found in {resource_file}")
 
             except Exception as err:
-                logger.error(f"Error processing {resource_file}: {err}")
-                logger.exception("Full traceback: ")
+                logger.exception(f"Error processing {resource_file}: {err}")
+                raise
 
         new_entities_breakdown = _get_entities_breakdown(new_entities)
         existing_entities_breakdown = _get_existing_entities_breakdown(
