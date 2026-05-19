@@ -124,7 +124,7 @@ def run_workflow(
     except Exception as e:
         logger.exception(f"An error occurred: {e}")
         response_data = {
-            "message": f"An error occurred during workflow processing: {e}",
+            "message": f"An error occurred during workflow processing.",
             "status": 500,
             "exception": type(e).__name__,
         }

@@ -400,6 +400,47 @@ def test_fetch_add_data_response_handles_processing_error(monkeypatch, tmp_path)
     assert result["new-in-resource"] == 0
 
 
+def test_fetch_add_data_response_reraises_processing_error(monkeypatch, tmp_path):
+    dataset = "test-dataset"
+    organisation = "test-org"
+    pipeline_dir = tmp_path / "pipeline"
+    input_path = tmp_path / "resource"
+    specification_dir = tmp_path / "specification"
+    cache_dir = tmp_path / "cache"
+    endpoint = "abc123hash"
+
+    input_path.mkdir(parents=True)
+    pipeline_dir.mkdir(parents=True)
+
+    test_file = input_path / "test.csv"
+    test_file.write_text("invalid csv content without proper headers")
+
+    mock_spec = MagicMock()
+    mock_spec.dataset_prefix.return_value = "test-prefix"
+    mock_pipeline = MagicMock()
+    mock_pipeline.transform.side_effect = Exception("Processing error")
+
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Specification", lambda x: mock_spec
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Pipeline", MagicMock(return_value=mock_pipeline)
+    )
+    monkeypatch.setattr("src.application.core.pipeline.Organisation", MagicMock())
+
+    with pytest.raises(Exception, match="Processing error"):
+        fetch_add_data_response(
+            dataset=dataset,
+            organisation_provider=organisation,
+            pipeline_dir=str(pipeline_dir),
+            input_dir=str(input_path),
+            output_path=str(input_path / "output.csv"),
+            specification_dir=str(specification_dir),
+            cache_dir=str(cache_dir),
+            endpoint=endpoint,
+        )
+
+
 def test_get_entities_breakdown_success():
     """Test converting entities to breakdown format"""
     new_entities = [
