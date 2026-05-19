@@ -51,7 +51,7 @@ def fetch_response_data(
                 endpoints=[],
             )
     except Exception as err:
-        logger.exception("An exception occurred during Pipeline Transform: %s", err)
+        logger.exception("An exception occurred when assigning entries: %s", err)
         raise
 
     # Create directories if they don't exist
@@ -109,7 +109,7 @@ def fetch_response_data(
                 ),
             )
         except Exception as err:
-            logger.error("An exception occured during Pipeline Transform: %s", str(err))
+            logger.exception("An exception occurred during Pipeline Transform: %s", err)
             raise
 
 
