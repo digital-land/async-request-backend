@@ -52,6 +52,7 @@ def fetch_response_data(
             )
     except Exception as err:
         logger.error("An exception occured during assign_entries process: %s", str(err))
+        raise
 
     # Create directories if they don't exist
     for directory in [
@@ -109,6 +110,7 @@ def fetch_response_data(
             )
         except Exception as err:
             logger.error("An exception occured during Pipeline Transform: ", str(err))
+            raise
 
 
 def resource_from_path(path):

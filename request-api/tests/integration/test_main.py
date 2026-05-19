@@ -116,9 +116,9 @@ def test_get_db_fails_after_retries(mock_restored, mock_slack, mock_session_make
 @patch("main.WebClient")
 @patch(
     "main.os.environ.get",
-    side_effect=lambda k, d=None: "fake_token"
-    if k == "SLACK_BOT_TOKEN"
-    else "fake_channel",
+    side_effect=lambda k, d=None: (
+        "fake_token" if k == "SLACK_BOT_TOKEN" else "fake_channel"
+    ),
 )
 def test_send_slack_alert(mock_env, mock_webclient):
     mock_client_instance = mock_webclient.return_value
