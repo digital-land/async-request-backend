@@ -60,7 +60,7 @@ def test_fetch_response_data_calls_assign_entries_with_expected_params(
         "src.application.core.pipeline.Organisation",
         MagicMock(return_value=mock_organisation),
     )
-    monkeypatch.setattr("src.application.core.pipeline.assign_entries", assign_entries)
+    monkeypatch.setattr("src.application.core.pipeline._assign_entries", assign_entries)
 
     fetch_response_data(
         dataset=dataset,
@@ -131,7 +131,7 @@ def test_fetch_response_data_reraises_assign_entries_exception(monkeypatch, tmp_
         "src.application.core.pipeline.API",
         MagicMock(return_value=mock_api),
     )
-    monkeypatch.setattr("src.application.core.pipeline.assign_entries", assign_entries)
+    monkeypatch.setattr("src.application.core.pipeline._assign_entries", assign_entries)
 
     with pytest.raises(RuntimeError, match="assign failed"):
         fetch_response_data(
@@ -203,7 +203,7 @@ def test_fetch_response_data_reraises_pipeline_transform_exception(
         "src.application.core.pipeline.Organisation",
         MagicMock(return_value=mock_organisation),
     )
-    monkeypatch.setattr("src.application.core.pipeline.assign_entries", assign_entries)
+    monkeypatch.setattr("src.application.core.pipeline._assign_entries", assign_entries)
 
     with pytest.raises(RuntimeError, match="transform failed"):
         fetch_response_data(

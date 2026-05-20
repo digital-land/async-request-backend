@@ -23,9 +23,7 @@ def load_mappings():
     with open(mappings_file_path, "r") as yaml_file:
         mappings_data = yaml.safe_load(yaml_file)
     mappings = mappings_data.get("mappings", [])
-    return {
-        (mapping["field"], mapping["issue-type"]): mapping for mapping in mappings
-    }
+    return {(mapping["field"], mapping["issue-type"]): mapping for mapping in mappings}
 
 
 def _format_task_summary(details_str, task_source, mappings):
@@ -43,7 +41,11 @@ def _format_task_summary(details_str, task_source, mappings):
 
     mapping = mappings.get((field, issue_type))
     if mapping:
-        template = mapping.get("summary-plural", "") if count > 1 else mapping.get("summary-singular", "")
+        template = (
+            mapping.get("summary-plural", "")
+            if count > 1
+            else mapping.get("summary-singular", "")
+        )
         if template:
             return template.format(count=count, issue_type=issue_type, field=field)
 
@@ -51,7 +53,12 @@ def _format_task_summary(details_str, task_source, mappings):
 
 
 def run_task_pipeline(
-    task_log_path, dataset, organisation, issue_path, column_field_path=None, mandatory_fields=None
+    task_log_path,
+    dataset,
+    organisation,
+    issue_path,
+    column_field_path=None,
+    mandatory_fields=None,
 ):
     task_pipeline = TaskPipeline()
     status = task_pipeline.run(
@@ -181,7 +188,6 @@ def fetch_response_data(
 
 def resource_from_path(path):
     return Path(path).stem
-
 
 
 def _assign_entries(

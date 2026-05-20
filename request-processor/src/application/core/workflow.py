@@ -400,7 +400,6 @@ def getMandatoryFields(required_fields_path, dataset):
     return required_fields
 
 
-
 def error_summary(issue_log, column_field, not_mapped_columns):
     error_issues = [
         issue
