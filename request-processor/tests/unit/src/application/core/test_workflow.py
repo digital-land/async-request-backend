@@ -1,5 +1,6 @@
 import pytest
 from src.application.core.workflow import (
+    run_workflow,
     updateColumnFieldLog,
     error_summary,
     csv_to_json,
@@ -308,6 +309,38 @@ def test_fetch_pipelines(
 
                 for row in expected_rows:
                     assert row in csv_rows
+
+
+def test_run_workflow_returns_error_response_when_pipeline_fails(
+    monkeypatch, mock_directories
+):
+    def raise_pipeline_error(*args, **kwargs):
+        raise RuntimeError("assign entries failed")
+
+    monkeypatch.setattr(
+        "src.application.core.workflow.fetch_pipeline_csvs", lambda *args: {}
+    )
+    monkeypatch.setattr(
+        "src.application.core.workflow.fetch_response_data", raise_pipeline_error
+    )
+    monkeypatch.setattr("src.application.core.workflow.clean_up", lambda *args: None)
+
+    result = run_workflow(
+        "data.csv",
+        "request-123",
+        "test-collection",
+        "test-dataset",
+        "test-org",
+        "",
+        {},
+        mock_directories,
+    )
+
+    assert result == {
+        "message": "An error occurred during workflow processing.",
+        "status": 500,
+        "exception": "RuntimeError",
+    }
 
 
 def test_add_data_workflow(monkeypatch):

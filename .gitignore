@@ -3,10 +3,14 @@ volume
 __pycache__
 .venv
 .python-version
-
+.history/
 request-processor/src/digital-land
 request-processor/tests/converted
 request-processor/specification/*
 request-processor/var/*
+request-api/.venv
+request-api/venv
+request-processor/.venv
+request-processor/venv
 .DS_Store
 docker-compose.override.yml
