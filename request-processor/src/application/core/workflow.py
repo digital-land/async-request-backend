@@ -122,6 +122,12 @@ def run_workflow(
             mandatory_fields=required_fields,
         )
 
+        column_mapping = _get_column_mapping(
+            os.path.join(
+                directories.COLUMN_FIELD_DIR, dataset, request_id, f"{resource}.csv"
+            )
+        )
+
         # Goal is to remove these three operations with task pipeline managing this
         column_field_json = csv_to_json(
             os.path.join(
@@ -145,6 +151,7 @@ def run_workflow(
             "error-summary": summary_data,
             "transformed-csv": transformed_json,
             "task-log": task_log_json,
+            "column-mapping": column_mapping,
         }
         # logger.info("Error Summary: %s", summary_data)
     except Exception as e:
@@ -352,6 +359,18 @@ def csv_to_json(csv_file):
             logger.error("Cannot process file as CSV ")
 
     return json_data
+
+
+def _get_column_mapping(column_field_path):
+    if not os.path.isfile(column_field_path):
+        return []
+    with open(column_field_path, "r") as f:
+        rows = list(csv.DictReader(f))
+    return [
+        {"column": row.get("column", ""), "field": row.get("field", "")}
+        for row in rows
+        if row.get("column") or row.get("field")
+    ]
 
 
 def updateColumnFieldLog(column_field_log, required_fields):
