@@ -1,10 +1,14 @@
+import json
+import csv
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from src.application.core.pipeline import (
     fetch_response_data,
     fetch_add_data_response,
     _get_entities_breakdown,
     _get_existing_entities_breakdown,
+    _format_task_summary,
+    run_task_pipeline,
 )
 
 
@@ -538,3 +542,152 @@ def test_get_existing_entities_breakdown_filters_empty_values():
     assert len(result) == 2
     assert result[0]["entity"] == "1000001"
     assert result[1]["entity"] == "1000004"
+
+
+# --- _format_task_summary ---
+
+
+def test_format_task_summary_issue_singular():
+    mappings = {
+        ("geometry", "invalid WKT"): {
+            "summary-singular": "{count} geometry value is invalid",
+            "summary-plural": "{count} geometry values are invalid",
+        }
+    }
+    details = json.dumps({"issue_type": "invalid WKT", "field": "geometry", "count": 1})
+    result = _format_task_summary(details, "issue", mappings)
+    assert result == "1 geometry value is invalid"
+
+
+def test_format_task_summary_issue_plural():
+    mappings = {
+        ("geometry", "invalid WKT"): {
+            "summary-singular": "{count} geometry value is invalid",
+            "summary-plural": "{count} geometry values are invalid",
+        }
+    }
+    details = json.dumps({"issue_type": "invalid WKT", "field": "geometry", "count": 3})
+    result = _format_task_summary(details, "issue", mappings)
+    assert result == "3 geometry values are invalid"
+
+
+def test_format_task_summary_column_field_source():
+    result = _format_task_summary(
+        json.dumps({"field": "geometry", "issue_type": "missing-field"}),
+        "column-field",
+        {},
+    )
+    assert result == "Geometry column missing"
+
+
+def test_format_task_summary_unknown_mapping_returns_empty():
+    details = json.dumps({"issue_type": "unknown-type", "field": "some-field", "count": 1})
+    result = _format_task_summary(details, "issue", {})
+    assert result == ""
+
+
+def test_format_task_summary_malformed_json_returns_empty():
+    result = _format_task_summary("not valid json", "issue", {})
+    assert result == ""
+
+
+def test_format_task_summary_none_returns_empty():
+    result = _format_task_summary(None, "issue", {})
+    assert result == ""
+
+
+# --- run_task_pipeline ---
+
+
+def test_run_task_pipeline_returns_task_log_with_summary(tmp_path, monkeypatch):
+    issue_csv = tmp_path / "issues.csv"
+    issue_csv.write_text(
+        "issue-type,field,resource,dataset,severity,responsibility\n"
+        "invalid WKT,geometry,res1,conservation-area,error,external\n"
+    )
+    task_log_path = str(tmp_path / "tasks.csv")
+
+    mappings = {
+        ("geometry", "invalid WKT"): {
+            "summary-singular": "1 geometry value is invalid",
+            "summary-plural": "{count} geometry values are invalid",
+        }
+    }
+    monkeypatch.setattr("src.application.core.pipeline.load_mappings", lambda: mappings)
+
+    result = run_task_pipeline(
+        task_log_path=task_log_path,
+        dataset="conservation-area",
+        organisation="local-authority:CTY",
+        issue_path=str(issue_csv),
+    )
+
+    assert isinstance(result, list)
+    assert len(result) > 0
+    assert "summary" in result[0]
+
+
+def test_run_task_pipeline_raises_on_failed_status(tmp_path, monkeypatch):
+    from digital_land.pipeline.task import TaskPipelineStatus
+
+    mock_pipeline = MagicMock()
+    mock_pipeline.run.return_value = TaskPipelineStatus.FAILED
+    monkeypatch.setattr(
+        "src.application.core.pipeline.TaskPipeline", lambda: mock_pipeline
+    )
+
+    with pytest.raises(RuntimeError, match="TaskPipeline failed"):
+        run_task_pipeline(
+            task_log_path=str(tmp_path / "tasks.csv"),
+            dataset="conservation-area",
+            organisation="local-authority:CTY",
+            issue_path=str(tmp_path / "nonexistent.csv"),
+        )
+
+
+def test_run_task_pipeline_empty_issue_path_returns_empty(tmp_path, monkeypatch):
+    task_log_path = str(tmp_path / "tasks.csv")
+    monkeypatch.setattr("src.application.core.pipeline.load_mappings", lambda: {})
+
+    result = run_task_pipeline(
+        task_log_path=task_log_path,
+        dataset="conservation-area",
+        organisation="local-authority:CTY",
+        issue_path=str(tmp_path / "nonexistent.csv"),
+    )
+
+    assert result == []
+
+
+# --- _get_column_mapping (workflow) ---
+
+
+def test_get_column_mapping_returns_list(tmp_path):
+    from src.application.core.workflow import _get_column_mapping
+
+    csv_path = tmp_path / "column-field.csv"
+    csv_path.write_text("dataset,resource,column,field\nconservation-area,res1,ref,reference\n")
+
+    result = _get_column_mapping(str(csv_path))
+
+    assert result == [{"column": "ref", "field": "reference"}]
+
+
+def test_get_column_mapping_missing_file_returns_empty(tmp_path):
+    from src.application.core.workflow import _get_column_mapping
+
+    result = _get_column_mapping(str(tmp_path / "nonexistent.csv"))
+
+    assert result == []
+
+
+def test_get_column_mapping_filters_empty_rows(tmp_path):
+    from src.application.core.workflow import _get_column_mapping
+
+    csv_path = tmp_path / "column-field.csv"
+    csv_path.write_text("dataset,resource,column,field\nconservation-area,res1,,\nconservation-area,res1,ref,reference\n")
+
+    result = _get_column_mapping(str(csv_path))
+
+    assert len(result) == 1
+    assert result[0] == {"column": "ref", "field": "reference"}
