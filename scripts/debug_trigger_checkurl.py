@@ -87,7 +87,7 @@ for d in directories_override.values():
 # Request payload - POST body from your requirement (all required fields for schemas.Request)
 now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
 request_payload = {
-    "id": "debug-request-003",
+    "id": "debug-request-1974",
     "type": "check_url",
     "status": "PENDING",
     "created": now,
@@ -100,7 +100,7 @@ request_payload = {
         "collection": "article-4-direction",
         "column_mapping": None,
         "geom_type": None,
-        "url": "https://raw.githubusercontent.com/digital-land/PublishExamples/refs/heads/main/Article4Direction/Files/Article4DirectionArea/articel4directionareas-(wrongColName-NewRefs)"
+        "url": "https://raw.githubusercontent.com/digital-land/PublishExamples/refs/heads/main/Article4Direction/Files/Article4DirectionArea/articel4directionareas-(wrongColName-NewRefs).csv"
     }
 }
 
