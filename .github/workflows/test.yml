@@ -11,7 +11,7 @@ jobs:
   test-request-api:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install test dependencies with pip
         working-directory: ./request-api
@@ -32,10 +32,10 @@ jobs:
           sudo apt-get install gdal-bin
           gdalinfo --version
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Python 3.10
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: '3.10'
 
