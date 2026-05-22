@@ -1,7 +1,6 @@
 import json
-import csv
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from src.application.core.pipeline import (
     fetch_response_data,
     fetch_add_data_response,
@@ -581,7 +580,9 @@ def test_format_task_summary_column_field_source():
 
 
 def test_format_task_summary_unknown_mapping_returns_empty():
-    details = json.dumps({"issue_type": "unknown-type", "field": "some-field", "count": 1})
+    details = json.dumps(
+        {"issue_type": "unknown-type", "field": "some-field", "count": 1}
+    )
     result = _format_task_summary(details, "issue", {})
     assert result == ""
 
@@ -666,7 +667,9 @@ def test_get_column_mapping_returns_list(tmp_path):
     from src.application.core.workflow import _get_column_mapping
 
     csv_path = tmp_path / "column-field.csv"
-    csv_path.write_text("dataset,resource,column,field\nconservation-area,res1,ref,reference\n")
+    csv_path.write_text(
+        "dataset,resource,column,field\nconservation-area,res1,ref,reference\n"
+    )
 
     result = _get_column_mapping(str(csv_path))
 
@@ -685,7 +688,9 @@ def test_get_column_mapping_filters_empty_rows(tmp_path):
     from src.application.core.workflow import _get_column_mapping
 
     csv_path = tmp_path / "column-field.csv"
-    csv_path.write_text("dataset,resource,column,field\nconservation-area,res1,,\nconservation-area,res1,ref,reference\n")
+    csv_path.write_text(
+        "dataset,resource,column,field\nconservation-area,res1,,\nconservation-area,res1,ref,reference\n"
+    )
 
     result = _get_column_mapping(str(csv_path))
 
