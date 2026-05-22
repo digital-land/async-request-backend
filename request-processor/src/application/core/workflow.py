@@ -1,11 +1,14 @@
+import csv
 import datetime
 import hashlib
+import json
 import os
-import csv
+
 from pathlib import Path
 import urllib
 import yaml
 from urllib.error import HTTPError
+
 from application.core.utils import (
     detect_encoding,
     extract_dataset_field_rows,
@@ -17,10 +20,11 @@ from application.core.pipeline import (
     fetch_response_data,
     resource_from_path,
     fetch_add_data_response,
+    run_task_pipeline,
+    load_mappings,
 )
 from application.configurations.config import source_url, CONFIG_URL
 from collections import defaultdict
-import json
 import warnings
 
 logger = get_logger(__name__)
@@ -58,6 +62,7 @@ def run_workflow(
             directories.SPECIFICATION_DIR,
         )
 
+        # This manages the core workflow of transforming data to facts
         fetch_response_data(
             dataset,
             organisation,
@@ -81,6 +86,7 @@ def run_workflow(
         )
 
         required_fields = getMandatoryFields(required_fields_path, dataset)
+        # Pipeline will only create a converted if not csv format as raw input
         converted_json = []
         if os.path.exists(
             os.path.join(directories.CONVERTED_DIR, request_id, f"{resource}.csv")
@@ -98,14 +104,34 @@ def run_workflow(
         issue_log_json = csv_to_json(
             os.path.join(directories.ISSUE_DIR, dataset, request_id, f"{resource}.csv")
         )
-        column_field_json = csv_to_json(
+
+        # Secondary pipeline to create tasks from issues and column-field mappings, and generate task log summary
+        task_log_path = os.path.join(
+            directories.ISSUE_DIR, dataset, request_id, f"{resource}-tasks.csv"
+        )
+        task_log_json = run_task_pipeline(
+            task_log_path=task_log_path,
+            dataset=dataset,
+            organisation=organisation,
+            issue_path=os.path.join(
+                directories.ISSUE_DIR, dataset, request_id, f"{resource}.csv"
+            ),
+            column_field_path=os.path.join(
+                directories.COLUMN_FIELD_DIR, dataset, request_id, f"{resource}.csv"
+            ),
+            mandatory_fields=required_fields,
+        )
+
+        column_mapping = _get_column_mapping(
             os.path.join(
                 directories.COLUMN_FIELD_DIR, dataset, request_id, f"{resource}.csv"
             )
         )
-        transformed_json = csv_to_json(
+
+        # Goal is to remove these three operations with task pipeline managing this
+        column_field_json = csv_to_json(
             os.path.join(
-                directories.TRANSFORMED_DIR, dataset, request_id, f"{resource}.csv"
+                directories.COLUMN_FIELD_DIR, dataset, request_id, f"{resource}.csv"
             )
         )
         updateColumnFieldLog(column_field_json, required_fields)
@@ -113,12 +139,19 @@ def run_workflow(
             issue_log_json, column_field_json, not_mapped_columns
         )
 
+        transformed_json = csv_to_json(
+            os.path.join(
+                directories.TRANSFORMED_DIR, dataset, request_id, f"{resource}.csv"
+            )
+        )
         response_data = {
             "converted-csv": converted_json,
             "issue-log": issue_log_json,
             "column-field-log": column_field_json,
             "error-summary": summary_data,
             "transformed-csv": transformed_json,
+            "task-log": task_log_json,
+            "column-mapping": column_mapping,
         }
         # logger.info("Error Summary: %s", summary_data)
     except Exception as e:
@@ -332,6 +365,18 @@ def csv_to_json(csv_file):
     return json_data
 
 
+def _get_column_mapping(column_field_path):
+    if not os.path.isfile(column_field_path):
+        return []
+    with open(column_field_path, "r") as f:
+        rows = list(csv.DictReader(f))
+    return [
+        {"column": row.get("column", ""), "field": row.get("field", "")}
+        for row in rows
+        if row.get("column") or row.get("field")
+    ]
+
+
 def updateColumnFieldLog(column_field_log, required_fields):
     # # Updating all the column field entries to missing:False
     for entry in column_field_log:
@@ -353,21 +398,6 @@ def getMandatoryFields(required_fields_path, dataset):
         data = yaml.safe_load(f)
     required_fields = data.get(dataset, [])
     return required_fields
-
-
-def load_mappings():
-    mappings_file_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        "../application/configs/mapping.yaml",
-    )
-    with open(mappings_file_path, "r") as yaml_file:
-        mappings_data = yaml.safe_load(yaml_file)
-
-    mappings = mappings_data.get("mappings", [])
-    mapping_dict = {
-        (mapping["field"], mapping["issue-type"]): mapping for mapping in mappings
-    }
-    return mapping_dict
 
 
 def error_summary(issue_log, column_field, not_mapped_columns):

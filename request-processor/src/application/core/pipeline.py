@@ -1,15 +1,88 @@
 import os
 import csv
+import json
+import yaml
 from application.logging.logger import get_logger
 from digital_land.specification import Specification
 from digital_land.organisation import Organisation
 from digital_land.api import API
 
 from digital_land.pipeline import Pipeline, Lookups
+from digital_land.pipeline.task import TaskPipeline, TaskPipelineStatus
 from digital_land.commands import get_resource_unidentified_lookups
 from pathlib import Path
 
 logger = get_logger(__name__)
+
+
+def load_mappings():
+    mappings_file_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        "../application/configs/mapping.yaml",
+    )
+    with open(mappings_file_path, "r") as yaml_file:
+        mappings_data = yaml.safe_load(yaml_file)
+    mappings = mappings_data.get("mappings", [])
+    return {(mapping["field"], mapping["issue-type"]): mapping for mapping in mappings}
+
+
+def _format_task_summary(details_str, task_source, mappings):
+    try:
+        details = json.loads(details_str)
+    except (json.JSONDecodeError, TypeError):
+        return ""
+
+    issue_type = details.get("issue_type", "")
+    field = details.get("field", "")
+    count = details.get("count", 1)
+
+    if task_source == "column-field":
+        return f"{field.capitalize()} column missing" if field else ""
+
+    mapping = mappings.get((field, issue_type))
+    if mapping:
+        template = (
+            mapping.get("summary-plural", "")
+            if count > 1
+            else mapping.get("summary-singular", "")
+        )
+        if template:
+            return template.format(count=count, issue_type=issue_type, field=field)
+
+    return ""
+
+
+def run_task_pipeline(
+    task_log_path,
+    dataset,
+    organisation,
+    issue_path,
+    column_field_path=None,
+    mandatory_fields=None,
+):
+    task_pipeline = TaskPipeline()
+    status = task_pipeline.run(
+        output_path=task_log_path,
+        dataset=dataset,
+        organisation=organisation,
+        issue_path=issue_path,
+        column_field_path=column_field_path,
+        mandatory_fields=mandatory_fields,
+    )
+    if status == TaskPipelineStatus.FAILED:
+        raise RuntimeError(f"TaskPipeline failed for dataset '{dataset}'")
+
+    mappings = load_mappings()
+    task_log = []
+    if os.path.isfile(task_log_path):
+        with open(task_log_path, "r") as f:
+            task_log = list(csv.DictReader(f))
+
+    for task in task_log:
+        task["summary"] = _format_task_summary(
+            task.get("details", ""), task.get("task-source", ""), mappings
+        )
+    return task_log
 
 
 def fetch_response_data(
@@ -41,7 +114,7 @@ def fetch_response_data(
         for file_name in files_in_resource:
             file_path = os.path.join(input_path, file_name)
             # retrieve unnassigned entities and assign, TODO: Is this necessary here?
-            assign_entries(
+            _assign_entries(
                 resource_path=file_path,
                 dataset=dataset,
                 organisation=organisation,
@@ -117,12 +190,7 @@ def resource_from_path(path):
     return Path(path).stem
 
 
-def default_output_path(command, input_path):
-    directory = "" if command in ["harmonised", "transformed"] else "var/"
-    return f"{directory}{command}/{resource_from_path(input_path)}.csv"
-
-
-def assign_entries(
+def _assign_entries(
     resource_path,
     dataset,
     organisation,
@@ -260,7 +328,7 @@ def fetch_add_data_response(
                 )
 
                 if has_unknown:
-                    new_lookups = assign_entries(
+                    new_lookups = _assign_entries(
                         resource_path=resource_file_path,
                         dataset=dataset,
                         organisation=organisation_provider,
@@ -275,7 +343,7 @@ def fetch_add_data_response(
                     new_entities.extend(new_lookups)
 
                     # Default create a entity-organisation mapping, front end can use the 'authoritative' flag
-                    entity_org_mapping = create_entity_organisation(
+                    entity_org_mapping = _create_entity_organisation(
                         new_lookups, dataset, organisation_provider
                     )
                     # TODO, save to pipeline as well for rerun?
@@ -381,7 +449,7 @@ def _get_existing_entities_breakdown(existing_entities):
     return breakdown
 
 
-def create_entity_organisation(new_entities, dataset, organisation):
+def _create_entity_organisation(new_entities, dataset, organisation):
     """
     Create entity-organisation mapping from new entities.
 

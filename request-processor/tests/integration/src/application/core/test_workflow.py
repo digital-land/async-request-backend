@@ -142,8 +142,8 @@ def test_run_workflow(
 
     assert "converted-csv" in response_data
     assert "issue-log" in response_data
-    assert "column-field-log" in response_data
-    assert "error-summary" in response_data
+    assert "column-mapping" in response_data
+    assert "task-log" in response_data
     assert "transformed-csv" in response_data
 
     # Check converted csv is in the form we expect
@@ -162,16 +162,16 @@ def test_run_workflow(
         for x in response_data["issue-log"]
     )
 
-    # Check column field log contains additional column mappings
+    # Check column mapping contains additional column mappings
     assert any(
         x["column"] == "ref" and x["field"] == "reference"
-        for x in response_data["column-field-log"]
+        for x in response_data["column-mapping"]
     )
 
-    # Check invalid WKT error has been generated and passed through in error summary
-    assert any("1 geometry" in error for error in response_data["error-summary"])
-    assert any("1 start date" in error for error in response_data["error-summary"])
-    assert any("2 references" in error for error in response_data["error-summary"])
+    # Check task log summaries have been generated for known issues
+    assert any("1 geometry" in task["summary"] for task in response_data["task-log"])
+    assert any("1 start date" in task["summary"] for task in response_data["task-log"])
+    assert any("2 references" in task["summary"] for task in response_data["task-log"])
 
 
 def test_run_workflow_geom_type_polygon(
@@ -215,8 +215,8 @@ def test_run_workflow_geom_type_polygon(
 
     assert "converted-csv" in response_data
     assert "issue-log" in response_data
-    assert "column-field-log" in response_data
-    assert "error-summary" in response_data
+    assert "column-mapping" in response_data
+    assert "task-log" in response_data
     assert "transformed-csv" in response_data
 
     # Check converted csv is in the form we expect
@@ -231,9 +231,9 @@ def test_run_workflow_geom_type_polygon(
     assert any(x["issue-type"] == "invalid WKT" for x in response_data["issue-log"])
     assert any(x["issue-type"] == "invalid date" for x in response_data["issue-log"])
 
-    # Check invalid WKT error has been generated and passed through in error summary
-    assert any("1 geometry" in error for error in response_data["error-summary"])
-    assert any("1 start date" in error for error in response_data["error-summary"])
+    # Check task log summaries have been generated for known issues
+    assert any("1 geometry" in task["summary"] for task in response_data["task-log"])
+    assert any("1 start date" in task["summary"] for task in response_data["task-log"])
 
 
 def test_run_workflow_no_dataset_field_entries(
@@ -321,8 +321,8 @@ def test_run_workflow_brownfield_land(
 
     assert "converted-csv" in response_data
     assert "issue-log" in response_data
-    assert "column-field-log" in response_data
-    assert "error-summary" in response_data
+    assert "column-mapping" in response_data
+    assert "task-log" in response_data
     assert "transformed-csv" in response_data
 
     # Check converted csv is in the form we expect
@@ -336,13 +336,13 @@ def test_run_workflow_brownfield_land(
     )
     assert "POINT" in point_entry["value"]
 
-    # Check column field log contains additional column mappings
+    # Check column mapping contains additional column mappings
     assert any(
         x["column"] == "ref" and x["field"] == "reference"
-        for x in response_data["column-field-log"]
+        for x in response_data["column-mapping"]
     )
 
-    # Check invalid WKT error has been generated and passed through in error summary
-    assert any("1 geometry" in error for error in response_data["error-summary"])
-    assert any("1 start date" in error for error in response_data["error-summary"])
-    assert any("2 references" in error for error in response_data["error-summary"])
+    # Check task log summaries have been generated for known issues
+    assert any("1 geometry" in task["summary"] for task in response_data["task-log"])
+    assert any("1 start date" in task["summary"] for task in response_data["task-log"])
+    assert any("2 references" in task["summary"] for task in response_data["task-log"])
