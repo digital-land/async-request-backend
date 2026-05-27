@@ -63,7 +63,7 @@ local-plan:
 - reference
 - name
 - description
-- datasets
+- dataset
 - period-start-date
 - period-end-date
 - local-planning-authorities
@@ -75,7 +75,7 @@ supplementary-plan:
 - reference
 - name
 - description
-- datasets
+- dataset
 - period-start-date
 - period-end-date
 - local-planning-authorities
@@ -86,7 +86,7 @@ minerals-plan:
 - reference
 - name
 - description
-- datasets
+- dataset
 - period-start-date
 - period-end-date
 - minerals-and-waste-planning-authorities
@@ -98,7 +98,7 @@ waste-plan:
 - reference
 - name
 - description
-- datasets
+- dataset
 - period-start-date
 - period-end-date
 - minerals-and-waste-planning-authorities
