@@ -37,13 +37,25 @@ def test_get_column_mapping(test_dir, tmp_path):
         )
         writer.writeheader()
         writer.writerow(
-            {"dataset": dataset, "resource": "abc", "column": "RefCode", "field": "reference"}
+            {
+                "dataset": dataset,
+                "resource": "abc",
+                "column": "RefCode",
+                "field": "reference",
+            }
         )
         writer.writerow(
-            {"dataset": dataset, "resource": "abc", "column": "ExtraCol", "field": "extra-field"}
+            {
+                "dataset": dataset,
+                "resource": "abc",
+                "column": "ExtraCol",
+                "field": "extra-field",
+            }
         )
 
-    result = _get_column_mapping(str(col_field_csv), dataset, required_fields, str(spec_dir))
+    result = _get_column_mapping(
+        str(col_field_csv), dataset, required_fields, str(spec_dir)
+    )
 
     by_field = {entry["field"]: entry for entry in result}
 

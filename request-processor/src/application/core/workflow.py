@@ -408,7 +408,6 @@ def getMandatoryFields(required_fields_path, dataset):
     return required_fields
 
 
-
 def add_data_workflow(
     file_name,
     request_id,
