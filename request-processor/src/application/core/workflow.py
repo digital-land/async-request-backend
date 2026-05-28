@@ -387,7 +387,7 @@ def _get_column_mapping(column_field_path, dataset, required_fields, specificati
         for row in rows:
             field = row.get("field", "")
             column = row.get("column", "")
-            if not field and not column:
+            if not field:
                 continue
             if field in field_dict:
                 field_dict[field]["column"] = column
