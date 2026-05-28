@@ -21,10 +21,8 @@ from application.core.pipeline import (
     resource_from_path,
     fetch_add_data_response,
     run_task_pipeline,
-    load_mappings,
 )
 from application.configurations.config import source_url, CONFIG_URL
-from collections import defaultdict
 import warnings
 
 logger = get_logger(__name__)
@@ -52,7 +50,7 @@ def run_workflow(
         file_path = os.path.join(input_path, fileName)
         resource = resource_from_path(file_path)
 
-        not_mapped_columns = fetch_pipeline_csvs(
+        fetch_pipeline_csvs(
             collection,
             dataset,
             pipeline_dir,
@@ -125,18 +123,10 @@ def run_workflow(
         column_mapping = _get_column_mapping(
             os.path.join(
                 directories.COLUMN_FIELD_DIR, dataset, request_id, f"{resource}.csv"
-            )
-        )
-
-        # Goal is to remove these three operations with task pipeline managing this
-        column_field_json = csv_to_json(
-            os.path.join(
-                directories.COLUMN_FIELD_DIR, dataset, request_id, f"{resource}.csv"
-            )
-        )
-        updateColumnFieldLog(column_field_json, required_fields)
-        summary_data = error_summary(
-            issue_log_json, column_field_json, not_mapped_columns
+            ),
+            dataset,
+            required_fields,
+            directories.SPECIFICATION_DIR,
         )
 
         transformed_json = csv_to_json(
@@ -147,13 +137,10 @@ def run_workflow(
         response_data = {
             "converted-csv": converted_json,
             "issue-log": issue_log_json,
-            "column-field-log": column_field_json,
-            "error-summary": summary_data,
             "transformed-csv": transformed_json,
             "task-log": task_log_json,
             "column-mapping": column_mapping,
         }
-        # logger.info("Error Summary: %s", summary_data)
     except Exception as e:
         logger.exception(f"An error occurred: {e}")
         response_data = {
@@ -365,32 +352,53 @@ def csv_to_json(csv_file):
     return json_data
 
 
-def _get_column_mapping(column_field_path):
-    if not os.path.isfile(column_field_path):
-        return []
-    with open(column_field_path, "r") as f:
-        rows = list(csv.DictReader(f))
-    return [
-        {"column": row.get("column", ""), "field": row.get("field", "")}
-        for row in rows
-        if row.get("column") or row.get("field")
-    ]
+def _is_mandatory(field_name, required_fields):
+    for req in required_fields:
+        if isinstance(req, list):
+            if field_name in req:
+                return True
+        else:
+            if field_name == req:
+                return True
+    return False
 
 
-def updateColumnFieldLog(column_field_log, required_fields):
-    # # Updating all the column field entries to missing:False
-    for entry in column_field_log:
-        entry.setdefault("missing", False)
+def _get_column_mapping(column_field_path, dataset, required_fields, specification_dir):
+    """Build the column-mapping attribute for the response.
 
-    for field in required_fields:
-        found = any(entry["field"] in field for entry in column_field_log)
-        if not found:
-            # Check if the field is a list, and if so, check if at least one element is present
-            if isinstance(field, list):
-                for f in field:
-                    column_field_log.append({"field": f, "missing": True})
+    Starts from all fields defined for the dataset in specification/dataset-field.csv,
+    then overlays actual column→field mappings recorded by the pipeline in the
+    column-field log CSV.  Fields that appear in the log but not the specification
+    are appended.  Every entry is annotated with 'mandatory' based on required_fields.
+    """
+    spec_rows = extract_dataset_field_rows(specification_dir, dataset) or []
+    field_dict = {}
+    for row in spec_rows:
+        field_name = row.get("field", "")
+        if field_name:
+            field_dict[field_name] = {
+                "field": field_name,
+                "mandatory": _is_mandatory(field_name, required_fields),
+            }
+
+    if os.path.isfile(column_field_path):
+        with open(column_field_path, "r") as f:
+            rows = list(csv.DictReader(f))
+        for row in rows:
+            field = row.get("field", "")
+            column = row.get("column", "")
+            if not field and not column:
+                continue
+            if field in field_dict:
+                field_dict[field]["column"] = column
             else:
-                column_field_log.append({"field": field, "missing": True})
+                field_dict[field] = {
+                    "field": field,
+                    "column": column,
+                    "mandatory": _is_mandatory(field, required_fields),
+                }
+
+    return list(field_dict.values())
 
 
 def getMandatoryFields(required_fields_path, dataset):
@@ -399,63 +407,6 @@ def getMandatoryFields(required_fields_path, dataset):
     required_fields = data.get(dataset, [])
     return required_fields
 
-
-def error_summary(issue_log, column_field, not_mapped_columns):
-    error_issues = [
-        issue
-        for issue in issue_log
-        if issue["severity"] == "error" and issue["responsibility"] == "external"
-    ]
-    missing_columns = [field for field in column_field if field["missing"]]
-    # Count occurrences for each issue-type and field
-    error_summary = defaultdict(int)
-    for issue in error_issues:
-        field = issue["field"]
-        issue_type = issue["issue-type"]
-        error_summary[(issue_type, field)] += 1
-
-    # fetch missing columns
-    for column in missing_columns:
-        field = column["field"]
-        error_summary[("missing", field)] = True
-
-    for col in not_mapped_columns:
-        error_summary[("mapping_missing", col)] = True
-
-    # Convert error summary to JSON with formatted messages
-    json_data = convert_error_summary_to_json(error_summary)
-    return json_data
-
-
-def convert_error_summary_to_json(error_summary):
-    mappings = load_mappings()
-
-    json_data = []
-    for key, count in error_summary.items():
-        if isinstance(key, tuple):
-            issue_type, field = key
-            mapping = mappings.get((field, issue_type))
-            if mapping:
-                summary_template = mapping.get("summary-singular", "")
-                summary_template_plural = mapping.get("summary-plural", "")
-                if summary_template or summary_template_plural:
-                    summary_template_to_use = (
-                        summary_template_plural if count > 1 else summary_template
-                    )
-                    message = summary_template_to_use.format(
-                        count=count, issue_type=issue_type, field=field
-                    )
-                    json_data.append(message)
-            elif "missing" in key:
-                message = f"{field.capitalize()} column missing"
-                json_data.append(message)
-            elif "mapping_missing" in key:
-                message = f"{field.capitalize()} not found in specification"
-                json_data.append(message)
-            else:
-                json_data.append(f"{count} {key}")
-                logger.warning(f"Mapping not found for: {key}")
-    return json_data
 
 
 def add_data_workflow(

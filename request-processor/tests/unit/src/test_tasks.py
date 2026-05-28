@@ -22,8 +22,6 @@ from application.exceptions.customExceptions import CustomException
                 uploaded_filename="492f15d8-45e4-427e-bde0-f60d69889f40",
             ),
             {
-                "column-field-log": {},
-                "error-summary": {},
                 "transformed-csv": [
                     {"column1": "value1", "column2": "value2-transformed"},
                     {"column1": "value3", "column2": "value4"},
@@ -37,7 +35,7 @@ from application.exceptions.customExceptions import CustomException
                     {"entry-number": "2", "issue": "Issue 2"},
                 ],
             },
-            ["error-summary", "column-field-log"],
+            ["task-log", "column-mapping"],
         ),
         (
             "exception_check_url",
@@ -247,8 +245,6 @@ def test_check_dataurl_success(monkeypatch):
         lambda *a, **kw: {
             "converted-csv": [{"col1": "val1"}],
             "issue-log": [],
-            "column-field-log": {},
-            "error-summary": {},
             "transformed-csv": [{"field1": "val1"}],
         },
     )

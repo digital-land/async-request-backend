@@ -71,8 +71,7 @@ class CheckDataFileResponseDetails(ResponseDetail):
 
 
 class CheckDataFileResponse(ResponseData):
-    error_summary: Optional[List[str]]
-    column_field_log: Optional[List[Dict[str, Any]]]
+    pass
 
 
 class ResponseError(BaseModel):
