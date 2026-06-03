@@ -164,7 +164,7 @@ def test_run_workflow(
 
     # Check column mapping contains additional column mappings
     assert any(
-        x["column"] == "ref" and x["field"] == "reference"
+        x.get("column") == "ref" and x["field"] == "reference"
         for x in response_data["column-mapping"]
     )
 
@@ -338,7 +338,7 @@ def test_run_workflow_brownfield_land(
 
     # Check column mapping contains additional column mappings
     assert any(
-        x["column"] == "ref" and x["field"] == "reference"
+        x.get("column") == "ref" and x["field"] == "reference"
         for x in response_data["column-mapping"]
     )
 

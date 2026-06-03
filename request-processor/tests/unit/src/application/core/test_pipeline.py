@@ -671,15 +671,20 @@ def test_get_column_mapping_returns_list(tmp_path):
         "dataset,resource,column,field\nconservation-area,res1,ref,reference\n"
     )
 
-    result = _get_column_mapping(str(csv_path))
+    result = _get_column_mapping(str(csv_path), "conservation-area", [], str(tmp_path))
 
-    assert result == [{"column": "ref", "field": "reference"}]
+    assert len(result) == 1
+    assert result[0]["field"] == "reference"
+    assert result[0]["column"] == "ref"
+    assert result[0]["mandatory"] is False
 
 
 def test_get_column_mapping_missing_file_returns_empty(tmp_path):
     from src.application.core.workflow import _get_column_mapping
 
-    result = _get_column_mapping(str(tmp_path / "nonexistent.csv"))
+    result = _get_column_mapping(
+        str(tmp_path / "nonexistent.csv"), "conservation-area", [], str(tmp_path)
+    )
 
     assert result == []
 
@@ -692,7 +697,8 @@ def test_get_column_mapping_filters_empty_rows(tmp_path):
         "dataset,resource,column,field\nconservation-area,res1,,\nconservation-area,res1,ref,reference\n"
     )
 
-    result = _get_column_mapping(str(csv_path))
+    result = _get_column_mapping(str(csv_path), "conservation-area", [], str(tmp_path))
 
     assert len(result) == 1
-    assert result[0] == {"column": "ref", "field": "reference"}
+    assert result[0]["field"] == "reference"
+    assert result[0]["column"] == "ref"

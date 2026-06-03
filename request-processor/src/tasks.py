@@ -448,15 +448,11 @@ def save_response_to_db(request_id, response_data):
             existing = _get_response(request_id)
             if not existing:
                 if (
-                    "column-field-log" in response_data
-                    and "error-summary" in response_data
-                    and "converted-csv" in response_data
+                    "converted-csv" in response_data
                     and "issue-log" in response_data
                     and "transformed-csv" in response_data
                 ):
                     data = {
-                        "column-field-log": response_data.get("column-field-log", {}),
-                        "error-summary": response_data.get("error-summary", {}),
                         "task-log": response_data.get("task-log", []),
                         "column-mapping": response_data.get("column-mapping", []),
                         "plugin": response_data.get("plugin", None),

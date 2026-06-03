@@ -1,13 +1,12 @@
 import pytest
 from src.application.core.workflow import (
     run_workflow,
-    updateColumnFieldLog,
-    error_summary,
     csv_to_json,
     fetch_pipeline_csvs,
     add_data_workflow,
     fetch_add_data_pipeline_csvs,
     add_extra_column_mappings,
+    _get_column_mapping,
 )
 import csv
 import hashlib
@@ -16,120 +15,63 @@ from pathlib import Path
 from urllib.error import HTTPError
 
 
-@pytest.mark.parametrize(
-    "column_field_log, expected_length, expected_missing_fields",
-    [
-        (
-            [
-                {
-                    "dataset": "conservation-area",
-                    "column": "documentation-url",
-                    "field": "documentation-url",
-                },
-                {"dataset": "conservation-area", "column": "name", "field": "name"},
-            ],
-            4,
-            ["reference", "geometry"],
-        ),
-        (
-            [
-                {
-                    "dataset": "conservation-area",
-                    "column": "documentation-url",
-                    "field": "documentation-url",
-                },
-                {
-                    "dataset": "conservation-area",
-                    "column": "geometry",
-                    "field": "geometry",
-                },
-                {
-                    "dataset": "conservation-area",
-                    "column": "reference",
-                    "field": "reference",
-                },
-            ],
-            3,
-            [],
-        ),
-    ],
-)
-def test_updateColumnFieldLog(
-    column_field_log, expected_length, expected_missing_fields
-):
+def test_get_column_mapping(test_dir, tmp_path):
+    dataset = "conservation-area"
     required_fields = ["reference", "geometry"]
-    updateColumnFieldLog(column_field_log, required_fields)
-    assert len(column_field_log) == expected_length
-    for field in expected_missing_fields:
-        assert any(
-            entry["field"] == field and entry["missing"] for entry in column_field_log
+
+    spec_dir = tmp_path / "specification"
+    spec_dir.mkdir()
+    dataset_field_csv = spec_dir / "dataset-field.csv"
+    with open(dataset_field_csv, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["dataset", "field"])
+        writer.writeheader()
+        writer.writerow({"dataset": dataset, "field": "reference"})
+        writer.writerow({"dataset": dataset, "field": "geometry"})
+        writer.writerow({"dataset": dataset, "field": "name"})
+        writer.writerow({"dataset": "other-dataset", "field": "other-field"})
+
+    col_field_csv = tmp_path / "column-field.csv"
+    with open(col_field_csv, "w", newline="") as f:
+        writer = csv.DictWriter(
+            f, fieldnames=["dataset", "resource", "column", "field"]
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "dataset": dataset,
+                "resource": "abc",
+                "column": "RefCode",
+                "field": "reference",
+            }
+        )
+        writer.writerow(
+            {
+                "dataset": dataset,
+                "resource": "abc",
+                "column": "ExtraCol",
+                "field": "extra-field",
+            }
         )
 
+    result = _get_column_mapping(
+        str(col_field_csv), dataset, required_fields, str(spec_dir)
+    )
 
-def test_error_summary():
-    internal_issue = "invalid organisation"
-    issue_log = [
-        {
-            "dataset": "conservation-area",
-            "resource": "d5b003b74563bb5bcf06742ee27f9dd573a47a123f8f5d975d9e04187fa58eff",
-            "line-number": "2",
-            "entry-number": "1",
-            "field": "geometry",
-            "issue-type": "OSGB out of bounds of England",
-            "value": "",
-            "severity": "error",
-            "description": "Geometry must be in England",
-            "responsibility": "external",
-        },
-        {
-            "dataset": "conservation-area",
-            "resource": "d5b003b74563bb5bcf06742ee27f9dd573a47a123f8f5d975d9e04187fa58eff",
-            "line-number": "3",
-            "entry-number": "2",
-            "field": "geometry",
-            "issue-type": "OSGB out of bounds of England",
-            "value": "",
-            "severity": "error",
-            "description": "Geometry must be in England",
-            "responsibility": "external",
-        },
-        {
-            "dataset": "conservation-area",
-            "resource": "d5b003b74563bb5bcf06742ee27f9dd573a47a123f8f5d975d9e04187fa58eff",
-            "line-number": "3",
-            "entry-number": "2",
-            "field": "start-date",
-            "issue-type": "invalid date",
-            "value": "40/04/2024",
-            "severity": "error",
-            "description": "Start date must be a real date",
-            "responsibility": "external",
-        },
-        {
-            "dataset": "conservation-area",
-            "resource": "d5b003b74563bb5bcf06742ee27f9dd573a47a123f8f5d975d9e04187fa58eff",
-            "line-number": "3",
-            "entry-number": "2",
-            "field": "start-date",
-            "issue-type": internal_issue,
-            "value": "40/04/2024",
-            "severity": "error",
-            "description": "Start date must be a real date",
-            "responsibility": "internal",
-        },
-    ]
-    column_field_log = [{"field": "reference", "missing": True}]
-    not_mapped_columns = ["test"]
-    json_data = error_summary(issue_log, column_field_log, not_mapped_columns)
-    expected_messages = [
-        "2 geometries must be in England",
-        "1 start date must be a real date",
-        "Reference column missing",
-        "test not found in specification",
-    ]
+    by_field = {entry["field"]: entry for entry in result}
 
-    assert any(message in json_data for message in expected_messages)
-    assert any(internal_issue not in message for message in json_data)
+    assert by_field["reference"]["column"] == "RefCode"
+    assert by_field["reference"]["mandatory"] is True
+
+    assert by_field["geometry"]["mandatory"] is True
+    assert "column" not in by_field["geometry"]
+
+    assert by_field["name"]["mandatory"] is False
+    assert "column" not in by_field["name"]
+
+    assert by_field["extra-field"]["column"] == "ExtraCol"
+    assert by_field["extra-field"]["mandatory"] is False
+
+    assert "other-field" not in by_field
 
 
 def test_csv_to_json_with_valid_file(test_dir):
