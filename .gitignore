@@ -14,3 +14,4 @@ request-processor/.venv
 request-processor/venv
 .DS_Store
 docker-compose.override.yml
+.env
