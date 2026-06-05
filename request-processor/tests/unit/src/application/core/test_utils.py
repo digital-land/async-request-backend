@@ -209,7 +209,13 @@ def test_validate_endpoint_creates_file(monkeypatch, tmp_path):
     endpoint_csv_path = pipeline_dir / "endpoint.csv"
 
     def fake_append_endpoint(
-        endpoint_csv_path, endpoint_url, entry_date, start_date, end_date, plugin=None, endpoint_parameters=None
+        endpoint_csv_path,
+        endpoint_url,
+        entry_date,
+        start_date,
+        end_date,
+        plugin=None,
+        endpoint_parameters=None,
     ):
         return "endpoint_hash", {
             "endpoint": "endpoint_hash",
@@ -279,7 +285,13 @@ def test_validate_endpoint_appends(monkeypatch, tmp_path):
         )
 
     def fake_append_endpoint(
-        endpoint_csv_path, endpoint_url, entry_date, start_date, end_date, plugin=None, endpoint_parameters=None
+        endpoint_csv_path,
+        endpoint_url,
+        entry_date,
+        start_date,
+        end_date,
+        plugin=None,
+        endpoint_parameters=None,
     ):
         return "new_endpoint_hash", {
             "endpoint": "new_endpoint_hash",
