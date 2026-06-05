@@ -287,6 +287,7 @@ def add_data_task(request: Dict, directories=None):
                 geom_type=getattr(request_data, "geom_type", ""),
                 column_mapping=getattr(request_data, "column_mapping", {}),
                 github_branch=request_data.github_branch,
+                endpoint_parameters=getattr(request_data, "endpoint_parameters", None),
             )
             if "plugin" in log:
                 response["plugin"] = log["plugin"]

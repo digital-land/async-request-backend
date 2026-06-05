@@ -44,6 +44,7 @@ class AddDataParams(Params):
     organisation: Optional[str] = None
     plugin: Optional[PluginTypeEnum] = None
     github_branch: Optional[str] = None
+    endpoint_parameters: Optional[Any] = None
 
 
 class RequestBase(BaseModel):
