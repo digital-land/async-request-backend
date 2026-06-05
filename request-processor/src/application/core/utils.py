@@ -132,6 +132,7 @@ def append_endpoint(
     start_date=None,
     end_date=None,
     plugin=None,
+    endpoint_parameters=None,
 ):
     endpoint_key = hash_sha256(endpoint_url)
 
@@ -164,10 +165,15 @@ def append_endpoint(
                 "start-date",
                 "end-date",
             ]
+            parameters_csv = (
+                json.dumps(endpoint_parameters)
+                if isinstance(endpoint_parameters, (dict, list))
+                else (endpoint_parameters or "")
+            )
             new_row = {
                 "endpoint": endpoint_key,
                 "endpoint-url": endpoint_url,
-                "parameters": "",
+                "parameters": parameters_csv,
                 "plugin": plugin or "",
                 "entry-date": _formatted_date(entry_date)
                 or datetime.now().date().isoformat(),
@@ -293,7 +299,9 @@ def _formatted_date(date_value):
     return str(date_value)
 
 
-def validate_endpoint(url, config_dir, plugin, start_date=None):
+def validate_endpoint(
+    url, config_dir, plugin, start_date=None, endpoint_parameters=None
+):
     """Validate if endpoint URL exists in endpoint.csv and create entry if not."""
     endpoint_csv_path = os.path.join(config_dir, "endpoint.csv")
     if not url:
@@ -356,6 +364,7 @@ def validate_endpoint(url, config_dir, plugin, start_date=None):
             start_date=start_date,
             end_date="",
             plugin=plugin,
+            endpoint_parameters=endpoint_parameters,
         )
 
         if new_endpoint_row:

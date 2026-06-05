@@ -423,6 +423,7 @@ def add_data_workflow(
     geom_type=None,
     column_mapping=None,
     github_branch=None,
+    endpoint_parameters=None,
 ):
     """
     Setup directories and download required CSVs to manage add-data pipeline
@@ -442,6 +443,7 @@ def add_data_workflow(
         geom_type (str): Optional geometry type for column mapping
         column_mapping (dict): Optional caller-supplied column mappings to append to column.csv
         github_branch (str): Optional branch name to indicate if the data should be appended to a specific branch
+        endpoint_parameters: Optional opaque value stored as the parameters field in the endpoint entry
     """
     response_data = {}
 
@@ -503,6 +505,7 @@ def add_data_workflow(
             collection_dir,
             plugin,
             start_date=start_date,
+            endpoint_parameters=endpoint_parameters,
         )
         source_summary = validate_source(
             documentation_url,
