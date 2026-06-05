@@ -8,6 +8,9 @@ from src.application.core.workflow import (
     add_extra_column_mappings,
     _get_column_mapping,
     download_file,
+    REQUEST_TIMEOUT_SECONDS,
+    _GITHUB_CONFIG_TOKEN_CACHE,
+    _github_installation_token,
 )
 import csv
 import hashlib
@@ -519,8 +522,8 @@ def test_download_file_does_not_add_auth_without_github_env(monkeypatch, tmp_pat
         def read(self):
             return b"dummy data"
 
-    def fake_urlopen(request):
-        requests.append(request)
+    def fake_urlopen(request, timeout=None):
+        requests.append((request, timeout))
         return FakeResponse()
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
@@ -530,7 +533,9 @@ def test_download_file_does_not_add_auth_without_github_env(monkeypatch, tmp_pat
         str(destination),
     )
 
-    assert "Authorization" not in requests[0].headers
+    request, timeout = requests[0]
+    assert "Authorization" not in request.headers
+    assert timeout == REQUEST_TIMEOUT_SECONDS
     assert destination.read_text() == "dummy data"
 
 
@@ -548,8 +553,8 @@ def test_download_file_adds_github_app_token_for_github_download(monkeypatch, tm
         def read(self):
             return b"dummy data"
 
-    def fake_urlopen(request):
-        requests.append(request)
+    def fake_urlopen(request, timeout=None):
+        requests.append((request, timeout))
         return FakeResponse()
 
     monkeypatch.setenv("GITHUB_CONFIG_APP_ID", "123")
@@ -566,7 +571,9 @@ def test_download_file_adds_github_app_token_for_github_download(monkeypatch, tm
         str(destination),
     )
 
-    assert requests[0].headers["Authorization"] == "Bearer installation-token"
+    request, timeout = requests[0]
+    assert request.headers["Authorization"] == "Bearer installation-token"
+    assert timeout == REQUEST_TIMEOUT_SECONDS
     assert destination.read_text() == "dummy data"
 
 
@@ -586,8 +593,8 @@ def test_download_file_does_not_add_token_for_non_github_download(
         def read(self):
             return b"dummy data"
 
-    def fake_urlopen(request):
-        requests.append(request)
+    def fake_urlopen(request, timeout=None):
+        requests.append((request, timeout))
         return FakeResponse()
 
     def fail_if_called(credentials):
@@ -607,8 +614,51 @@ def test_download_file_does_not_add_token_for_non_github_download(
         str(destination),
     )
 
-    assert "Authorization" not in requests[0].headers
+    request, timeout = requests[0]
+    assert "Authorization" not in request.headers
+    assert timeout == REQUEST_TIMEOUT_SECONDS
     assert destination.read_text() == "dummy data"
+
+
+def test_github_installation_token_uses_timeout(monkeypatch):
+    requests = []
+    _GITHUB_CONFIG_TOKEN_CACHE["token"] = None
+    _GITHUB_CONFIG_TOKEN_CACHE["expires_at"] = 0
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def read(self):
+            return (
+                b'{"token": "installation-token", "expires_at": "2099-01-01T00:00:00Z"}'
+            )
+
+    def fake_urlopen(request, timeout=None):
+        requests.append((request, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr(
+        "src.application.core.workflow._github_config_jwt",
+        lambda app_id, private_key: "app-jwt",
+    )
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    token = _github_installation_token(
+        {
+            "app_id": "123",
+            "installation_id": "456",
+            "private_key": "private-key",
+        }
+    )
+
+    request, timeout = requests[0]
+    assert token == "installation-token"
+    assert request.full_url.endswith("/app/installations/456/access_tokens")
+    assert timeout == REQUEST_TIMEOUT_SECONDS
 
 
 COLUMN_CSV_FIELDNAMES = ["dataset", "resource", "column", "field"]

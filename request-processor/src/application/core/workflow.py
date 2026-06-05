@@ -5,10 +5,11 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import socket
 import time
 import urllib.parse
 import urllib.request
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 import warnings
 
 from cryptography.hazmat.primitives import hashes, serialization
@@ -32,6 +33,7 @@ from application.configurations.config import source_url, CONFIG_URL
 
 logger = get_logger(__name__)
 
+REQUEST_TIMEOUT_SECONDS = 30
 _GITHUB_CONFIG_TOKEN_CACHE = {"token": None, "expires_at": 0}
 
 
@@ -113,9 +115,11 @@ def _github_installation_token(credentials):
     )
 
     try:
-        with urllib.request.urlopen(request) as response:
+        with urllib.request.urlopen(
+            request, timeout=REQUEST_TIMEOUT_SECONDS
+        ) as response:
             response_data = json.loads(response.read().decode("utf-8"))
-    except Exception as e:
+    except (socket.timeout, URLError) as e:
         logger.error(f"Failed to retrieve GitHub App installation token: {e}")
         raise
 
@@ -144,9 +148,15 @@ def _download_headers(url):
 
 def download_file(url, destination):
     request = urllib.request.Request(url, headers=_download_headers(url))
-    with urllib.request.urlopen(request) as response:
-        with open(destination, "wb") as f:
-            f.write(response.read())
+    try:
+        with urllib.request.urlopen(
+            request, timeout=REQUEST_TIMEOUT_SECONDS
+        ) as response:
+            with open(destination, "wb") as f:
+                f.write(response.read())
+    except (socket.timeout, URLError) as e:
+        logger.error(f"Failed to download {url}: {e}")
+        raise
     return destination
 
 
