@@ -22,6 +22,7 @@ class Params(BaseModel):
     collection: str
     column_mapping: Optional[Dict[str, str]] = None
     geom_type: Optional[str] = None
+    endpoint_parameters: Optional[Any] = None
 
 
 class CheckFileParams(Params):
@@ -44,7 +45,6 @@ class AddDataParams(Params):
     organisation: Optional[str] = None
     plugin: Optional[PluginTypeEnum] = None
     github_branch: Optional[str] = None
-    endpoint_parameters: Optional[Any] = None
 
 
 class RequestBase(BaseModel):
