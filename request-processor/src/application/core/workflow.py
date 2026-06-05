@@ -53,9 +53,15 @@ def _github_credentials():
     configured_values = [value for value in credentials.values() if value]
 
     if not configured_values:
+        logger.warning(
+            "GitHub credentials not configured. If you want to enable authenticated config downloads, please set GITHUB_CONFIG_APP_ID, GITHUB_CONFIG_INSTALLATION_ID, and GITHUB_CONFIG_PRIVATE_KEY environment variables."
+        )
         return None
 
     if len(configured_values) != len(credentials):
+        logger.warning(
+            "Incomplete GitHub credentials configuration. All of GITHUB_CONFIG_APP_ID, GITHUB_CONFIG_INSTALLATION_ID, and GITHUB_CONFIG_PRIVATE_KEY must be set to authenticate config downloads."
+        )
         raise RuntimeError(
             "GITHUB_CONFIG_APP_ID, GITHUB_CONFIG_INSTALLATION_ID, and "
             "GITHUB_CONFIG_PRIVATE_KEY must all be set to authenticate config downloads"
@@ -106,8 +112,12 @@ def _github_installation_token(credentials):
         },
     )
 
-    with urllib.request.urlopen(request) as response:
-        response_data = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request) as response:
+            response_data = json.loads(response.read().decode("utf-8"))
+    except Exception as e:
+        logger.error(f"Failed to retrieve GitHub App installation token: {e}")
+        raise
 
     expires_at = datetime.datetime.fromisoformat(
         response_data["expires_at"].replace("Z", "+00:00")
