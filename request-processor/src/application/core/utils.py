@@ -299,7 +299,9 @@ def _formatted_date(date_value):
     return str(date_value)
 
 
-def validate_endpoint(url, config_dir, plugin, start_date=None, endpoint_parameters=None):
+def validate_endpoint(
+    url, config_dir, plugin, start_date=None, endpoint_parameters=None
+):
     """Validate if endpoint URL exists in endpoint.csv and create entry if not."""
     endpoint_csv_path = os.path.join(config_dir, "endpoint.csv")
     if not url:
