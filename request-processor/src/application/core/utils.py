@@ -173,7 +173,7 @@ def append_endpoint(
             new_row = {
                 "endpoint": endpoint_key,
                 "endpoint-url": endpoint_url,
-                "parameters": endpoint_parameters or "",
+                "parameters": parameters_csv,
                 "plugin": plugin or "",
                 "entry-date": _formatted_date(entry_date)
                 or datetime.now().date().isoformat(),
@@ -181,7 +181,7 @@ def append_endpoint(
                 "end-date": _formatted_date(end_date),
             }
             writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writerow({**new_row, "parameters": parameters_csv})
+            writer.writerow(new_row)
     return endpoint_key, new_row
 
 
