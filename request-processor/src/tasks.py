@@ -170,7 +170,11 @@ def check_dataurl(request: Dict, directories=None):  # noqa
 
     # IMPORTANT: 'message' set in error_log to be user friendly = Map known exception types to user-friendly messages
     try:
-        file_name, fetch_log = _fetch_resource(resource_dir, request_data.url, endpoint_parameters=request_data.endpoint_parameters)
+        file_name, fetch_log = _fetch_resource(
+            resource_dir,
+            request_data.url,
+            endpoint_parameters=request_data.endpoint_parameters,
+        )
         logger.info(f"Fetched resource: file_name={file_name}")
 
     except CustomException as e:
@@ -264,7 +268,11 @@ def add_data_task(request: Dict, directories=None):
         resource_dir = os.path.join(
             directories.COLLECTION_DIR, "resource", request_schema.id
         )
-        file_name, log = _fetch_resource(resource_dir, request_data.url, endpoint_parameters=request_data.endpoint_parameters)
+        file_name, log = _fetch_resource(
+            resource_dir,
+            request_data.url,
+            endpoint_parameters=request_data.endpoint_parameters,
+        )
         # Auto detect plugin needs to update request_data.plugin for downstream processing
         if "plugin" in log:
             request_data.plugin = log["plugin"]
@@ -516,7 +524,9 @@ def _fetch_resource(resource_dir, url, endpoint_parameters=None):
     content_type = None
 
     for plugin in plugins:
-        fetch_status, log = collector.fetch(url, plugin=plugin, parameters=endpoint_parameters, refill_todays_logs=True)
+        fetch_status, log = collector.fetch(
+            url, plugin=plugin, parameters=endpoint_parameters, refill_todays_logs=True
+        )
         log["fetch-status"] = fetch_status.name
         if plugin is None:
             content_type = log.get("response-headers", {}).get("content-type")

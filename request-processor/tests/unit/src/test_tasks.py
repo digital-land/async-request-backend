@@ -467,7 +467,7 @@ def test_check_dataurl_with_plugin(monkeypatch):
 
     fetch_calls = []
 
-    def mock_fetch_resource(resource_dir, url):
+    def mock_fetch_resource(resource_dir, url, endpoint_parameters=None):
         fetch_calls.append({"url": url})
         return "test-file.csv", {"plugin": "arcgis"}
 
