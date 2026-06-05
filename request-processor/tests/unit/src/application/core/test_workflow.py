@@ -556,7 +556,7 @@ def test_download_file_adds_github_app_token_for_github_download(monkeypatch, tm
     monkeypatch.setenv("GITHUB_CONFIG_INSTALLATION_ID", "456")
     monkeypatch.setenv("GITHUB_CONFIG_PRIVATE_KEY", "base64-private-key")
     monkeypatch.setattr(
-        "src.application.core.workflow._github_config_installation_token",
+        "src.application.core.workflow._github_installation_token",
         lambda credentials: "installation-token",
     )
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
@@ -597,7 +597,7 @@ def test_download_file_does_not_add_token_for_non_github_download(
     monkeypatch.setenv("GITHUB_CONFIG_INSTALLATION_ID", "456")
     monkeypatch.setenv("GITHUB_CONFIG_PRIVATE_KEY", "base64-private-key")
     monkeypatch.setattr(
-        "src.application.core.workflow._github_config_installation_token",
+        "src.application.core.workflow._github_installation_token",
         fail_if_called,
     )
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)

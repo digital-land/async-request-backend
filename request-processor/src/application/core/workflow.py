@@ -39,21 +39,17 @@ def _base64url_encode(value):
     return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
 
 
-def _github_config_env():
-    return {
-        "app_id": os.getenv("GITHUB_CONFIG_APP_ID"),
-        "installation_id": os.getenv("GITHUB_CONFIG_INSTALLATION_ID"),
-        "private_key": os.getenv("GITHUB_CONFIG_PRIVATE_KEY"),
-    }
-
-
-def _raw_github_url(url):
+def is_github_url(url):
     parsed_url = urllib.parse.urlparse(url)
     return parsed_url.netloc == "raw.githubusercontent.com"
 
 
-def _github_config_credentials():
-    credentials = _github_config_env()
+def _github_credentials():
+    credentials = {
+        "app_id": os.getenv("GITHUB_CONFIG_APP_ID"),
+        "installation_id": os.getenv("GITHUB_CONFIG_INSTALLATION_ID"),
+        "private_key": os.getenv("GITHUB_CONFIG_PRIVATE_KEY"),
+    }
     configured_values = [value for value in credentials.values() if value]
 
     if not configured_values:
@@ -93,7 +89,7 @@ def _github_config_jwt(app_id, private_key_base64):
     return f"{signing_input.decode('ascii')}.{_base64url_encode(signature)}"
 
 
-def _github_config_installation_token(credentials):
+def _github_installation_token(credentials):
     if _GITHUB_CONFIG_TOKEN_CACHE["expires_at"] > time.time() + 300:
         return _GITHUB_CONFIG_TOKEN_CACHE["token"]
 
@@ -124,12 +120,13 @@ def _github_config_installation_token(credentials):
 
 def _download_headers(url):
     headers = {}
-    credentials = _github_config_credentials()
 
-    if credentials and _raw_github_url(url):
-        token = _github_config_installation_token(credentials)
+    if is_github_url(url):
+        credentials = _github_credentials()
+        if not credentials:
+            return headers
+        token = _github_installation_token(credentials)
         headers["Authorization"] = f"Bearer {token}"
-        logger.info("Using GitHub App authentication for config download from {url}")
 
     return headers
 
