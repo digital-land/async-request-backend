@@ -137,6 +137,7 @@ def _download_headers(url):
             return headers
         token = _github_installation_token(credentials)
         headers["Authorization"] = f"Bearer {token}"
+        logger.info(f"Using GitHub App authentication for config download from {url}")
 
     return headers
 
