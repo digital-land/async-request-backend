@@ -260,6 +260,16 @@ def test_read_response_details_limit1_jsonpath(
     )
 
 
+def test_read_response_geometries(db, geometry_test_request):
+    response = client.get(f"/requests/{geometry_test_request.id}/geometries")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        "MULTIPOLYGON (((0 0, 1 1, 1 0, 0 0)))",
+        "MULTIPOLYGON (((2 2, 3 3, 3 2, 2 2)))",
+    ]
+
+
 def test_read_unknown_request(db):
     response = client.get("/requests/0")
     assert response.status_code == 404
@@ -346,6 +356,72 @@ def test_request():
                 ),
                 models.ResponseDetails(
                     detail={"line": 3, "issue_logs": [{"severity": "warning"}]}
+                ),
+            ],
+        ),
+    )
+    db_session = database.session_maker()
+    with db_session() as session:
+        session.add(request_model)
+        session.commit()
+        session.refresh(request_model)
+        return request_model
+
+
+@pytest.fixture(scope="module")
+def geometry_test_request():
+    request_model = models.Request(
+        type=schemas.RequestTypeEnum.check_file,
+        created=datetime.datetime.now(),
+        modified=datetime.datetime.now(),
+        status="COMPLETE",
+        params=schemas.CheckFileParams(
+            collection="article-4-direction",
+            dataset="article-4-direction-area",
+            original_filename="article-direction-area.csv",
+            uploaded_filename="492f15d8-45e4-427e-bde0-f60d69889f40",
+        ).model_dump(),
+        response=models.Response(
+            data='{ "some_key": "some_value" }',
+            details=[
+                models.ResponseDetails(
+                    detail={
+                        "entry_number": 1,
+                        "transformed_row": [
+                            {"field": "reference", "value": "abc"},
+                            {
+                                "field": "geometry",
+                                "value": "MULTIPOLYGON (((0 0, 1 1, 1 0, 0 0)))",
+                            },
+                        ],
+                    }
+                ),
+                models.ResponseDetails(
+                    detail={
+                        "entry_number": 2,
+                        "transformed_row": [
+                            {"field": "reference", "value": "def"},
+                            {"field": "point", "value": "POINT (0 0)"},
+                        ],
+                    }
+                ),
+                models.ResponseDetails(
+                    detail={
+                        "entry_number": 3,
+                        "transformed_row": [
+                            {"field": "reference", "value": "ghi"},
+                            {
+                                "field": "geometry",
+                                "value": "MULTIPOLYGON (((2 2, 3 3, 3 2, 2 2)))",
+                            },
+                        ],
+                    }
+                ),
+                models.ResponseDetails(
+                    detail={
+                        "entry_number": 4,
+                        "transformed_row": [{"field": "reference", "value": "jkl"}],
+                    }
                 ),
             ],
         ),

@@ -622,8 +622,7 @@ def test_download_file_does_not_add_token_for_non_github_download(
 
 def test_github_installation_token_uses_timeout(monkeypatch):
     requests = []
-    _GITHUB_CONFIG_TOKEN_CACHE["token"] = None
-    _GITHUB_CONFIG_TOKEN_CACHE["expires_at"] = 0
+    original_cache = _GITHUB_CONFIG_TOKEN_CACHE.copy()
 
     class FakeResponse:
         def __enter__(self):
@@ -647,18 +646,25 @@ def test_github_installation_token_uses_timeout(monkeypatch):
     )
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
 
-    token = _github_installation_token(
-        {
-            "app_id": "123",
-            "installation_id": "456",
-            "private_key": "private-key",
-        }
-    )
+    try:
+        _GITHUB_CONFIG_TOKEN_CACHE["token"] = None
+        _GITHUB_CONFIG_TOKEN_CACHE["expires_at"] = 0
 
-    request, timeout = requests[0]
-    assert token == "installation-token"
-    assert request.full_url.endswith("/app/installations/456/access_tokens")
-    assert timeout == REQUEST_TIMEOUT_SECONDS
+        token = _github_installation_token(
+            {
+                "app_id": "123",
+                "installation_id": "456",
+                "private_key": "private-key",
+            }
+        )
+
+        request, timeout = requests[0]
+        assert token == "installation-token"
+        assert request.full_url.endswith("/app/installations/456/access_tokens")
+        assert timeout == REQUEST_TIMEOUT_SECONDS
+    finally:
+        _GITHUB_CONFIG_TOKEN_CACHE.clear()
+        _GITHUB_CONFIG_TOKEN_CACHE.update(original_cache)
 
 
 COLUMN_CSV_FIELDNAMES = ["dataset", "resource", "column", "field"]

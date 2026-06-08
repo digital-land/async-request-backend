@@ -208,6 +208,11 @@ def read_response_details(
     return list(map(lambda detail: detail.detail, paginated_result.data))
 
 
+@app.get("/requests/{request_id}/geometries", response_model=List[str])
+def read_response_geometries(request_id: str, db: Session = Depends(_get_db)):
+    return crud.get_response_geometries(db, request_id)
+
+
 def _map_to_schema(request_model: models.Request) -> schemas.Request:
     response = None
     if request_model.response:
