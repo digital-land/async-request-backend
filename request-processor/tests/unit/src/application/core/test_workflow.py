@@ -7,6 +7,10 @@ from src.application.core.workflow import (
     fetch_add_data_pipeline_csvs,
     add_extra_column_mappings,
     _get_column_mapping,
+    download_file,
+    REQUEST_TIMEOUT_SECONDS,
+    _GITHUB_CONFIG_TOKEN_CACHE,
+    _github_installation_token,
 )
 import csv
 import hashlib
@@ -211,8 +215,8 @@ def test_fetch_pipelines(
         # Mock extract_dataset_field_rows if column mapping is provided (original test 3)
         mock_extract_dataset_field_rows(dataset)
 
-    # Mock urllib.request.urlretrieve (common to all tests)
-    mocked_urlretrieve = mocker.patch("urllib.request.urlretrieve")
+    # Mock downloads (common to all tests)
+    mocked_download_file = mocker.patch("src.application.core.workflow.download_file")
 
     # Call the function (common to all tests)
     fetch_pipeline_csvs(
@@ -225,11 +229,11 @@ def test_fetch_pipelines(
         mock_directories.SPECIFICATION_DIR,
     )
 
-    # Check that urlretrieve was called with the expected URL and file path
+    # Check that download_file was called with the expected URL and file path
     source_url = "https://raw.githubusercontent.com/digital-land//"
     expected_url = f"{source_url}{collection + '-collection'}/main/pipeline/column.csv"
     expected_file_path = os.path.join(pipeline_dir, "column.csv")
-    mocked_urlretrieve.assert_any_call(expected_url, expected_file_path)
+    mocked_download_file.assert_any_call(expected_url, expected_file_path)
     assert (
         Path(pipeline_dir) / "transform.csv"
     ).exists(), "transform.csv not downloaded"
@@ -463,15 +467,16 @@ def test_fetch_add_data_pipeline_csvs_from_url(monkeypatch, tmp_path):
         "src.application.core.workflow.CONFIG_URL", "http://example.com/config/"
     )
 
-    # Patch urllib.request.urlretrieve to simulate download
     downloads = []
 
-    def fake_urlretrieve(url, path):
+    def fake_download_file(url, path):
         downloads.append((url, path))
         with open(path, "w") as f:
             f.write("dummy data")
 
-    monkeypatch.setattr("urllib.request.urlretrieve", fake_urlretrieve)
+    monkeypatch.setattr(
+        "src.application.core.workflow.download_file", fake_download_file
+    )
 
     fetch_add_data_pipeline_csvs(collection, pipeline_dir_str)
 
@@ -490,11 +495,170 @@ def test_fetch_add_data_pipeline_csvs_handles_http_error(monkeypatch, tmp_path):
     def raise_http_error(url, path):
         raise HTTPError(url, 404, "Not Found", None, None)
 
-    monkeypatch.setattr("urllib.request.urlretrieve", raise_http_error)
+    monkeypatch.setattr("src.application.core.workflow.download_file", raise_http_error)
 
     fetch_add_data_pipeline_csvs(collection, pipeline_dir_str)
 
     assert os.path.exists(pipeline_dir_str)
+
+
+def test_download_file_does_not_add_auth_without_github_env(monkeypatch, tmp_path):
+    destination = tmp_path / "column.csv"
+    requests = []
+    for env_name in (
+        "GITHUB_CONFIG_APP_ID",
+        "GITHUB_CONFIG_INSTALLATION_ID",
+        "GITHUB_CONFIG_PRIVATE_KEY",
+    ):
+        monkeypatch.delenv(env_name, raising=False)
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def read(self):
+            return b"dummy data"
+
+    def fake_urlopen(request, timeout=None):
+        requests.append((request, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    download_file(
+        "https://raw.githubusercontent.com/digital-land/config/refs/heads/main/test.csv",
+        str(destination),
+    )
+
+    request, timeout = requests[0]
+    assert "Authorization" not in request.headers
+    assert timeout == REQUEST_TIMEOUT_SECONDS
+    assert destination.read_text() == "dummy data"
+
+
+def test_download_file_adds_github_app_token_for_github_download(monkeypatch, tmp_path):
+    destination = tmp_path / "column.csv"
+    requests = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def read(self):
+            return b"dummy data"
+
+    def fake_urlopen(request, timeout=None):
+        requests.append((request, timeout))
+        return FakeResponse()
+
+    monkeypatch.setenv("GITHUB_CONFIG_APP_ID", "123")
+    monkeypatch.setenv("GITHUB_CONFIG_INSTALLATION_ID", "456")
+    monkeypatch.setenv("GITHUB_CONFIG_PRIVATE_KEY", "base64-private-key")
+    monkeypatch.setattr(
+        "src.application.core.workflow._github_installation_token",
+        lambda credentials: "installation-token",
+    )
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    download_file(
+        "https://raw.githubusercontent.com/digital-land/PublishExamples/main/test.csv",
+        str(destination),
+    )
+
+    request, timeout = requests[0]
+    assert request.headers["Authorization"] == "Bearer installation-token"
+    assert timeout == REQUEST_TIMEOUT_SECONDS
+    assert destination.read_text() == "dummy data"
+
+
+def test_download_file_does_not_add_token_for_non_github_download(
+    monkeypatch, tmp_path
+):
+    destination = tmp_path / "column.csv"
+    requests = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def read(self):
+            return b"dummy data"
+
+    def fake_urlopen(request, timeout=None):
+        requests.append((request, timeout))
+        return FakeResponse()
+
+    def fail_if_called(credentials):
+        raise AssertionError("Token should only be requested for GitHub downloads")
+
+    monkeypatch.setenv("GITHUB_CONFIG_APP_ID", "123")
+    monkeypatch.setenv("GITHUB_CONFIG_INSTALLATION_ID", "456")
+    monkeypatch.setenv("GITHUB_CONFIG_PRIVATE_KEY", "base64-private-key")
+    monkeypatch.setattr(
+        "src.application.core.workflow._github_installation_token",
+        fail_if_called,
+    )
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    download_file(
+        "https://www.easthants.gov.uk/sites/default/files/2026-04/tree-preservation-zone_0.csv",
+        str(destination),
+    )
+
+    request, timeout = requests[0]
+    assert "Authorization" not in request.headers
+    assert timeout == REQUEST_TIMEOUT_SECONDS
+    assert destination.read_text() == "dummy data"
+
+
+def test_github_installation_token_uses_timeout(monkeypatch):
+    requests = []
+    _GITHUB_CONFIG_TOKEN_CACHE["token"] = None
+    _GITHUB_CONFIG_TOKEN_CACHE["expires_at"] = 0
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def read(self):
+            return (
+                b'{"token": "installation-token", "expires_at": "2099-01-01T00:00:00Z"}'
+            )
+
+    def fake_urlopen(request, timeout=None):
+        requests.append((request, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr(
+        "src.application.core.workflow._github_config_jwt",
+        lambda app_id, private_key: "app-jwt",
+    )
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    token = _github_installation_token(
+        {
+            "app_id": "123",
+            "installation_id": "456",
+            "private_key": "private-key",
+        }
+    )
+
+    request, timeout = requests[0]
+    assert token == "installation-token"
+    assert request.full_url.endswith("/app/installations/456/access_tokens")
+    assert timeout == REQUEST_TIMEOUT_SECONDS
 
 
 COLUMN_CSV_FIELDNAMES = ["dataset", "resource", "column", "field"]

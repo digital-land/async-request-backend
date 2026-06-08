@@ -1,13 +1,20 @@
+import base64
 import csv
 import datetime
 import hashlib
 import json
 import os
-
 from pathlib import Path
-import urllib
+import socket
+import time
+import urllib.parse
+import urllib.request
+from urllib.error import HTTPError, URLError
+import warnings
+
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 import yaml
-from urllib.error import HTTPError
 
 from application.core.utils import (
     detect_encoding,
@@ -23,9 +30,134 @@ from application.core.pipeline import (
     run_task_pipeline,
 )
 from application.configurations.config import source_url, CONFIG_URL
-import warnings
 
 logger = get_logger(__name__)
+
+REQUEST_TIMEOUT_SECONDS = 30
+_GITHUB_CONFIG_TOKEN_CACHE = {"token": None, "expires_at": 0}
+
+
+def _base64url_encode(value):
+    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+def is_github_url(url):
+    parsed_url = urllib.parse.urlparse(url)
+    return parsed_url.netloc == "raw.githubusercontent.com"
+
+
+def _github_credentials():
+    credentials = {
+        "app_id": os.getenv("GITHUB_CONFIG_APP_ID"),
+        "installation_id": os.getenv("GITHUB_CONFIG_INSTALLATION_ID"),
+        "private_key": os.getenv("GITHUB_CONFIG_PRIVATE_KEY"),
+    }
+    configured_values = [value for value in credentials.values() if value]
+
+    if not configured_values:
+        logger.warning(
+            "GitHub credentials not configured. If you want to enable authenticated config downloads, please set GITHUB_CONFIG_APP_ID, GITHUB_CONFIG_INSTALLATION_ID, and GITHUB_CONFIG_PRIVATE_KEY environment variables."
+        )
+        return None
+
+    if len(configured_values) != len(credentials):
+        logger.warning(
+            "Incomplete GitHub credentials configuration. All of GITHUB_CONFIG_APP_ID, GITHUB_CONFIG_INSTALLATION_ID, and GITHUB_CONFIG_PRIVATE_KEY must be set to authenticate config downloads."
+        )
+        raise RuntimeError(
+            "GITHUB_CONFIG_APP_ID, GITHUB_CONFIG_INSTALLATION_ID, and "
+            "GITHUB_CONFIG_PRIVATE_KEY must all be set to authenticate config downloads"
+        )
+
+    return credentials
+
+
+def _github_config_jwt(app_id, private_key_base64):
+    private_key_pem = base64.b64decode(private_key_base64).decode("utf-8")
+    private_key = serialization.load_pem_private_key(
+        private_key_pem.encode("utf-8"),
+        password=None,
+    )
+
+    now = int(time.time())
+    header = {"alg": "RS256", "typ": "JWT"}
+    payload = {
+        "iat": now - 60,
+        "exp": now + 600,
+        "iss": app_id,
+    }
+    signing_input = ".".join(
+        [
+            _base64url_encode(json.dumps(header).encode("utf-8")),
+            _base64url_encode(json.dumps(payload).encode("utf-8")),
+        ]
+    ).encode("ascii")
+    signature = private_key.sign(signing_input, padding.PKCS1v15(), hashes.SHA256())
+
+    return f"{signing_input.decode('ascii')}.{_base64url_encode(signature)}"
+
+
+def _github_installation_token(credentials):
+    if _GITHUB_CONFIG_TOKEN_CACHE["expires_at"] > time.time() + 300:
+        return _GITHUB_CONFIG_TOKEN_CACHE["token"]
+
+    app_jwt = _github_config_jwt(credentials["app_id"], credentials["private_key"])
+    request = urllib.request.Request(
+        "https://api.github.com/app/installations/"
+        f"{credentials['installation_id']}/access_tokens",
+        method="POST",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {app_jwt}",
+            "User-Agent": "async-request-backend",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request, timeout=REQUEST_TIMEOUT_SECONDS
+        ) as response:
+            response_data = json.loads(response.read().decode("utf-8"))
+    except (socket.timeout, URLError) as e:
+        logger.error(f"Failed to retrieve GitHub App installation token: {e}")
+        raise
+
+    expires_at = datetime.datetime.fromisoformat(
+        response_data["expires_at"].replace("Z", "+00:00")
+    ).timestamp()
+    _GITHUB_CONFIG_TOKEN_CACHE["token"] = response_data["token"]
+    _GITHUB_CONFIG_TOKEN_CACHE["expires_at"] = expires_at
+
+    return response_data["token"]
+
+
+def _download_headers(url):
+    headers = {}
+
+    if is_github_url(url):
+        credentials = _github_credentials()
+        if not credentials:
+            return headers
+        token = _github_installation_token(credentials)
+        headers["Authorization"] = f"Bearer {token}"
+        logger.info(f"Using GitHub App authentication for config download from {url}")
+
+    return headers
+
+
+def download_file(url, destination):
+    request = urllib.request.Request(url, headers=_download_headers(url))
+    try:
+        with urllib.request.urlopen(
+            request, timeout=REQUEST_TIMEOUT_SECONDS
+        ) as response:
+            with open(destination, "wb") as f:
+                f.write(response.read())
+    except (socket.timeout, URLError) as e:
+        logger.error(f"Failed to download {url}: {e}")
+        raise
+    return destination
 
 
 def run_workflow(
@@ -188,7 +320,7 @@ def fetch_pipeline_csvs(
             print(
                 f"{source_url}/{collection + '-collection'}/main/pipeline/{pipeline_csv}"
             )
-            urllib.request.urlretrieve(
+            download_file(
                 f"{source_url}/{collection + '-collection'}/main/pipeline/{pipeline_csv}",
                 csv_path,
             )
@@ -201,7 +333,7 @@ def fetch_pipeline_csvs(
                 f"{source_url}/{'config'}/main/pipeline/{collection}/{pipeline_csv}"
             )
             try:
-                urllib.request.urlretrieve(
+                download_file(
                     f"{source_url}/{'config'}/main/pipeline/{collection}/{pipeline_csv}",
                     csv_path,
                 )
@@ -524,9 +656,11 @@ def add_data_workflow(
             "pipeline-issues": pipeline_issues,
             "endpoint-summary": endpoint_summary,
             "source-summary": source_summary,
-            "converted-csv": csv_to_json(str(converted_path))
-            if converted_path.exists()
-            else csv_to_json(os.path.join(input_dir, file_name)),
+            "converted-csv": (
+                csv_to_json(str(converted_path))
+                if converted_path.exists()
+                else csv_to_json(os.path.join(input_dir, file_name))
+            ),
             "transformed-csv": csv_to_json(output_path),
         }
 
@@ -591,12 +725,17 @@ def fetch_add_data_pipeline_csvs(
         try:
             for csv_name in pipeline_csvs:
                 csv_path = os.path.join(pipeline_dir, csv_name)
-                branch_url = f"{source_url}config/refs/heads/{github_branch}/pipeline/{collection}/{csv_name}"
-                urllib.request.urlretrieve(branch_url, csv_path)
+                branch_url = (
+                    f"{source_url}config/refs/heads/{github_branch}/"
+                    f"pipeline/{collection}/{csv_name}"
+                )
+                download_file(branch_url, csv_path)
                 logger.info(
                     f"Downloaded {csv_name} from branch '{github_branch}': {branch_url}"
                 )
-        except HTTPError:
+        except HTTPError as e:
+            if e.code != 404:
+                raise
             logger.warning(f"Branch '{github_branch}' not found, falling back to main")
         else:
             column_csv_path = os.path.join(pipeline_dir, "column.csv")
@@ -622,7 +761,7 @@ def fetch_add_data_pipeline_csvs(
         csv_path = os.path.join(pipeline_dir, csv_name)
         url = f"{CONFIG_URL}pipeline/{collection}/{csv_name}"
         try:
-            urllib.request.urlretrieve(url, csv_path)
+            download_file(url, csv_path)
             logger.info(f"Downloaded {csv_name} from {url} to {csv_path}")
         except HTTPError as e:
             logger.warning(f"Failed to retrieve {csv_name}: {e}")
@@ -658,20 +797,25 @@ def fetch_add_data_collection_csvs(collection, config_dir, github_branch=None):
         try:
             for csv_name in config_csvs:
                 csv_path = os.path.join(config_dir, csv_name)
-                branch_url = f"{source_url}config/refs/heads/{github_branch}/collection/{collection}/{csv_name}"
-                urllib.request.urlretrieve(branch_url, csv_path)
+                branch_url = (
+                    f"{source_url}config/refs/heads/{github_branch}/"
+                    f"collection/{collection}/{csv_name}"
+                )
+                download_file(branch_url, csv_path)
                 logger.info(
                     f"Downloaded {csv_name} from branch '{github_branch}': {branch_url}"
                 )
             return True
-        except HTTPError:
+        except HTTPError as e:
+            if e.code != 404:
+                raise
             logger.warning(f"Branch '{github_branch}' not found, falling back to main")
 
     for csv_name in config_csvs:
         csv_path = os.path.join(config_dir, csv_name)
         url = f"{CONFIG_URL}collection/{collection}/{csv_name}"
         try:
-            urllib.request.urlretrieve(url, csv_path)
+            download_file(url, csv_path)
             logger.info(f"Downloaded {csv_name} from {url} to {csv_path}")
         except HTTPError as e:
             logger.warning(f"Failed to retrieve {csv_name}: {e}")
