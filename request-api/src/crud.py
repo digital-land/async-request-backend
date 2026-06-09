@@ -50,6 +50,52 @@ def get_response_details(
     )
 
 
+def get_response_geometries(db: Session, request_id: int):
+    transformed_rows = (
+        db.query(models.ResponseDetails.detail["transformed_row"])
+        .join(models.ResponseDetails.response)
+        .filter(models.Response.request_id == request_id)
+        .order_by(models.ResponseDetails.id)
+        .all()
+    )
+
+    geometry_key = None
+    for (transformed_row,) in transformed_rows:
+        if not transformed_row:
+            continue
+        geometry_field = next(
+            (
+                field
+                for field in transformed_row
+                if field.get("field") in ("geometry", "point")
+            ),
+            None,
+        )
+        if geometry_field is not None:
+            geometry_key = geometry_field.get("field")
+            break
+
+    geometries = []
+    if geometry_key is not None:
+        for (transformed_row,) in transformed_rows:
+            if not transformed_row:
+                continue
+            geometry = next(
+                (
+                    field.get("value")
+                    for field in transformed_row
+                    if field.get("field") == geometry_key
+                    and isinstance(field.get("value"), str)
+                    and field.get("value").strip()
+                ),
+                None,
+            )
+            if geometry:
+                geometries.append(geometry)
+
+    return geometries
+
+
 def create_request(db: Session, request: schemas.RequestCreate):
     db_request = models.Request(
         status="NEW", type=request.params.type, params=request.params.model_dump()
