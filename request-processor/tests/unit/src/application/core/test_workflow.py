@@ -459,6 +459,71 @@ def test_add_data_workflow_calls(monkeypatch):
     assert called["fetch_add_data_response"]["endpoint"] == expected_endpoint_hash
 
 
+def test_add_data_workflow_with_resource_endpoints(monkeypatch):
+    file_name = "resource-hash"
+    request_id = "req-resource"
+    collection = "test-collection"
+    dataset = "test-dataset"
+    organisation = "test-org"
+
+    class DummyDirectories:
+        PIPELINE_DIR = "/tmp/pipeline"
+        COLLECTION_DIR = "/tmp/collection"
+        CONVERTED_DIR = "/tmp/converted"
+        TRANSFORMED_DIR = "/tmp/transformed"
+        SPECIFICATION_DIR = "/tmp/specification"
+        CACHE_DIR = "/tmp/cache"
+
+    directories = DummyDirectories()
+    called = {}
+
+    monkeypatch.setattr(
+        "src.application.core.workflow.fetch_add_data_pipeline_csvs",
+        lambda *a, **kw: True,
+    )
+    monkeypatch.setattr(
+        "src.application.core.workflow.fetch_add_data_collection_csvs",
+        lambda *a, **kw: True,
+    )
+
+    def fake_fetch_add_data_response(*args, **kwargs):
+        called["endpoint"] = kwargs["endpoint"]
+        called["organisation_provider"] = kwargs["organisation_provider"]
+        return {"pipeline-issues": [], "result": "ok"}
+
+    monkeypatch.setattr(
+        "src.application.core.workflow.fetch_add_data_response",
+        fake_fetch_add_data_response,
+    )
+    monkeypatch.setattr(
+        "src.application.core.workflow.validate_endpoint",
+        lambda *args, **kwargs: {"endpoint_summary": "mocked"},
+    )
+    monkeypatch.setattr(
+        "src.application.core.workflow.validate_source",
+        lambda *args, **kwargs: {"source_summary": "mocked"},
+    )
+    monkeypatch.setattr("src.application.core.workflow.csv_to_json", lambda *_: [])
+
+    result = add_data_workflow(
+        file_name,
+        request_id,
+        collection,
+        dataset,
+        organisation,
+        "https://example.com/data.csv",
+        "https://example.com/docs",
+        directories,
+        licence="ogl3",
+        endpoints=["endpoint-1"],
+    )
+
+    assert called["endpoint"] == ["endpoint-1"]
+    assert called["organisation_provider"] == organisation
+    assert result["endpoint-summary"] == {"endpoint_summary": "mocked"}
+    assert result["source-summary"] == {"source_summary": "mocked"}
+
+
 def test_fetch_add_data_pipeline_csvs_from_url(monkeypatch, tmp_path):
     collection = "test-collection"
     pipeline_dir = tmp_path / "pipeline"

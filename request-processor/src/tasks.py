@@ -1,5 +1,6 @@
 import os
 from typing import Dict
+import urllib.parse
 
 import sentry_sdk
 from celery.utils.log import get_task_logger
@@ -24,6 +25,7 @@ from application.exceptions.customExceptions import (
     create_generic_error_log,
 )
 from pathlib import Path
+from digital_land.collection import Collection
 from digital_land.collect import Collector, FetchStatus
 
 logger = get_task_logger(__name__)
@@ -139,6 +141,103 @@ def handle_check_file(request_schema, request_data, tmp_dir):
         save_response_to_db(request_schema.id, log)
         raise CustomException(log)
     return fileName
+
+
+def _download_resource(resource_dir, collection, resource):
+    Path(resource_dir).mkdir(parents=True, exist_ok=True)
+    resource_url = (
+        f"https://files.planning.data.gov.uk/{collection}-collection/"
+        f"collection/resource/{urllib.parse.quote(resource)}"
+    )
+    destination = Path(resource_dir) / resource
+
+    try:
+        workflow.download_file(resource_url, destination)
+    except Exception as e:
+        logger.error(str(e))
+        log = {
+            "message": "The resource could not be downloaded",
+            "status": "",
+            "exception_type": type(e).__name__,
+            "resource": resource,
+            "resource-url": resource_url,
+        }
+        raise CustomException(log)
+
+    return resource, {
+        "resource": resource,
+        "resource-url": resource_url,
+        "fetch-status": FetchStatus.OK.name,
+    }
+
+
+def _get_resource_metadata(collection_dir, collection, dataset, resource):
+    Path(collection_dir).mkdir(parents=True, exist_ok=True)
+    try:
+        Collection.download(Path(collection_dir), collection)
+        collection_model = Collection(name=collection, directory=collection_dir)
+        collection_model.load()
+        endpoints = [
+            endpoint
+            for endpoint in collection_model.resource_endpoints(resource)
+            if endpoint
+        ]
+        organisations = [
+            organisation
+            for organisation in collection_model.resource_organisations(resource)
+            if organisation
+        ]
+        start_date = collection_model.resource_start_date(resource)
+        endpoint_urls = [
+            collection_model.endpoint.records[endpoint][-1].get("endpoint-url")
+            for endpoint in endpoints
+            if endpoint in collection_model.endpoint.records
+        ]
+        source_rows = [
+            source
+            for endpoint in endpoints
+            for source in collection_model.filtered_sources(
+                {"endpoint": endpoint, "pipelines": dataset}
+            )
+        ]
+        documentation_urls = [
+            source.get("documentation-url")
+            for source in source_rows
+            if source.get("documentation-url")
+        ]
+        licences = [
+            source.get("licence") for source in source_rows if source.get("licence")
+        ]
+    except Exception as e:
+        log = {
+            "message": "The resource metadata could not be found",
+            "status": "",
+            "exception_type": type(e).__name__,
+            "resource": resource,
+            "collection": collection,
+        }
+        raise CustomException(log)
+
+    if not endpoints or not organisations:
+        log = {
+            "message": "The resource metadata is missing endpoints or organisations",
+            "status": "",
+            "exception_type": "MissingResourceMetadata",
+            "resource": resource,
+            "collection": collection,
+            "endpoints": endpoints,
+            "organisations": organisations,
+        }
+        raise CustomException(log)
+
+    return {
+        "endpoints": endpoints,
+        "organisation": organisations[0],
+        "start_date": start_date,
+        "url": endpoint_urls[0] if endpoint_urls else None,
+        "documentation_url": documentation_urls[0] if documentation_urls else None,
+        "licence": licences[0] if licences else None,
+    }
 
 
 @celery.task(base=CheckDataUrlTask, name=CheckDataUrlTask.name)
@@ -268,11 +367,48 @@ def add_data_task(request: Dict, directories=None):
         resource_dir = os.path.join(
             directories.COLLECTION_DIR, "resource", request_schema.id
         )
-        file_name, log = _fetch_resource(
-            resource_dir,
-            request_data.url,
-            endpoint_parameters=request_data.endpoint_parameters,
-        )
+        if request_data.url:
+            file_name, log = _fetch_resource(
+                resource_dir,
+                request_data.url,
+                endpoint_parameters=request_data.endpoint_parameters,
+            )
+            organisations = request_data.organisation
+            endpoints = None
+            resource_start_date = request_data.start_date
+        elif request_data.resource:
+            file_name, log = _download_resource(
+                resource_dir, request_data.collection, request_data.resource
+            )
+            collection_dir = os.path.join(directories.COLLECTION_DIR, request_schema.id)
+            metadata = _get_resource_metadata(
+                collection_dir,
+                request_data.collection,
+                request_data.dataset,
+                request_data.resource,
+            )
+            organisations = metadata["organisation"]
+            endpoints = metadata["endpoints"]
+            resource_start_date = metadata["start_date"]
+            resource_url = request_data.url or metadata["url"]
+            documentation_url = (
+                request_data.documentation_url or metadata["documentation_url"]
+            )
+            licence = request_data.licence or metadata["licence"]
+        else:
+            log = {
+                "message": "Either url or resource must be supplied for add_data",
+                "status": "",
+                "exception_type": "MissingAddDataInput",
+            }
+            save_response_to_db(request_schema.id, log)
+            raise CustomException(log)
+
+        if request_data.url:
+            resource_url = request_data.url
+            documentation_url = request_data.documentation_url
+            licence = request_data.licence
+
         # Auto detect plugin needs to update request_data.plugin for downstream processing
         if "plugin" in log:
             request_data.plugin = log["plugin"]
@@ -285,17 +421,18 @@ def add_data_task(request: Dict, directories=None):
                 request_schema.id,
                 request_data.collection,
                 request_data.dataset,
-                request_data.organisation,
-                request_data.url,
-                request_data.documentation_url,
+                organisations,
+                resource_url,
+                documentation_url,
                 directories,
-                request_data.licence,
-                request_data.start_date,
+                licence,
+                resource_start_date,
                 request_data.plugin,
                 geom_type=getattr(request_data, "geom_type", ""),
                 column_mapping=getattr(request_data, "column_mapping", {}),
                 github_branch=request_data.github_branch,
                 endpoint_parameters=request_data.endpoint_parameters,
+                endpoints=endpoints,
             )
             if "plugin" in log:
                 response["plugin"] = log["plugin"]
