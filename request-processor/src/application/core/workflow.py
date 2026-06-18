@@ -594,9 +594,7 @@ def add_data_workflow(
         os.makedirs(converted_path.parent, exist_ok=True)
 
         resource = resource_from_path(os.path.join(input_dir, file_name))
-        endpoint_hash = (
-            hashlib.sha256(url.encode("utf-8")).hexdigest() if url else None
-        )
+        endpoint_hash = hashlib.sha256(url.encode("utf-8")).hexdigest() if url else None
         pipeline_endpoint = endpoints if endpoints is not None else endpoint_hash
 
         # Loads csvs for Pipeline and Config
@@ -611,16 +609,16 @@ def add_data_workflow(
             endpoint_hash=endpoint_hash,
             github_branch=github_branch,
         ):
-            response_data[
-                "message"
-            ] = f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
+            response_data["message"] = (
+                f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
+            )
             return response_data
         if not fetch_add_data_collection_csvs(
             collection, collection_dir, github_branch=github_branch
         ):
-            response_data[
-                "message"
-            ] = f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
+            response_data["message"] = (
+                f"Unable to find lookups for collection '{collection}', dataset '{dataset}'"
+            )
             return response_data
 
         # All processes around transforming the data and generating pipeline summary
