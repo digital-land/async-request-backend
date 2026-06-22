@@ -292,7 +292,12 @@ def fetch_add_data_response(
             if isinstance(organisation_provider, list)
             else [organisation_provider]
         )
+        organisations = [organisation for organisation in organisations if organisation]
+        if not organisations:
+            raise ValueError("At least one organisation is required for add_data")
+
         endpoints = endpoint if isinstance(endpoint, list) else [endpoint]
+        endpoints = [endpoint for endpoint in endpoints if endpoint]
 
         existing_entities = []
         new_entities = []

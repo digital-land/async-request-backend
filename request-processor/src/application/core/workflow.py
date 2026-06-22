@@ -595,7 +595,7 @@ def add_data_workflow(
 
         resource = resource_from_path(os.path.join(input_dir, file_name))
         endpoint_hash = hashlib.sha256(url.encode("utf-8")).hexdigest() if url else None
-        pipeline_endpoint = endpoints if endpoints is not None else endpoint_hash
+        pipeline_endpoint = endpoints or endpoint_hash
 
         # Loads csvs for Pipeline and Config
         if not fetch_add_data_pipeline_csvs(

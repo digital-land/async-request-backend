@@ -162,7 +162,7 @@ def _download_resource(resource_dir, collection, resource):
             "resource": resource,
             "resource-url": resource_url,
         }
-        raise CustomException(log)
+        raise CustomException(log) from e
 
     return resource, {
         "resource": resource,
@@ -216,7 +216,7 @@ def _get_resource_metadata(collection_dir, collection, dataset, resource):
             "resource": resource,
             "collection": collection,
         }
-        raise CustomException(log)
+        raise CustomException(log) from e
 
     if not endpoints or not organisations:
         log = {
@@ -376,6 +376,9 @@ def add_data_task(request: Dict, directories=None):
             organisations = request_data.organisation
             endpoints = None
             resource_start_date = request_data.start_date
+            resource_url = request_data.url
+            documentation_url = request_data.documentation_url
+            licence = request_data.licence
         elif request_data.resource:
             file_name, log = _download_resource(
                 resource_dir, request_data.collection, request_data.resource
@@ -403,11 +406,6 @@ def add_data_task(request: Dict, directories=None):
             }
             save_response_to_db(request_schema.id, log)
             raise CustomException(log)
-
-        if request_data.url:
-            resource_url = request_data.url
-            documentation_url = request_data.documentation_url
-            licence = request_data.licence
 
         # Auto detect plugin needs to update request_data.plugin for downstream processing
         if "plugin" in log:

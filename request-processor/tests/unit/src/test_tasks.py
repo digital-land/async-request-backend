@@ -284,6 +284,7 @@ def test_add_data_task_success_with_resource(monkeypatch):
     result = tasks.add_data_task(request, directories_json)
 
     assert result["id"] == "req-resource"
+    assert result["status"] == "COMPLETE"
     assert workflow_call["args"][4] == "org-1"
     assert workflow_call["args"][5] == "https://example.com/data.csv"
     assert workflow_call["args"][6] == "https://example.com/docs"
