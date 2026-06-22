@@ -618,16 +618,6 @@ def save_response_to_db(request_id, response_data):
 
                 elif "pipeline-summary" in response_data:
                     pipeline_issues = response_data.get("pipeline-issues", [])
-                    logger.info(
-                        "Saving add_data response details for request_id=%s with %s pipeline issues. Issue entry numbers: %s",
-                        request_id,
-                        len(pipeline_issues),
-                        [
-                            issue.get("entry-number")
-                            for issue in pipeline_issues
-                            if isinstance(issue, dict)
-                        ],
-                    )
                     data = {
                         "pipeline-summary": response_data.get("pipeline-summary"),
                         "endpoint-summary": response_data.get("endpoint-summary"),
