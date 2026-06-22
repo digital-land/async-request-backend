@@ -559,11 +559,15 @@ def _save_response_details(
     issue_log_by_entry = {}
     for issue in issue_log_data:
         key = issue.get("entry-number")
+        if key is not None:
+            key = str(key)
         issue_log_by_entry.setdefault(key, []).append(issue)
 
     transformed_by_entry = {}
     for row in transformed_data:
         key = row.get("entry-number")
+        if key is not None:
+            key = str(key)
         transformed_by_entry.setdefault(key, []).append(row)
 
     for entry_number, converted_row in enumerate(converted_row_data, start=1):
@@ -615,6 +619,17 @@ def save_response_to_db(request_id, response_data):
                     )
 
                 elif "pipeline-summary" in response_data:
+                    pipeline_issues = response_data.get("pipeline-issues", [])
+                    logger.info(
+                        "Saving add_data response details for request_id=%s with %s pipeline issues. Issue entry numbers: %s",
+                        request_id,
+                        len(pipeline_issues),
+                        [
+                            issue.get("entry-number")
+                            for issue in pipeline_issues
+                            if isinstance(issue, dict)
+                        ],
+                    )
                     data = {
                         "pipeline-summary": response_data.get("pipeline-summary"),
                         "endpoint-summary": response_data.get("endpoint-summary"),
@@ -627,7 +642,7 @@ def save_response_to_db(request_id, response_data):
                         session,
                         new_response.id,
                         response_data.get("converted-csv", []),
-                        response_data.get("pipeline-issues", []),
+                        pipeline_issues,
                         response_data.get("transformed-csv", []),
                     )
 

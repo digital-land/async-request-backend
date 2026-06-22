@@ -113,6 +113,66 @@ def test_save_response_to_db(
             ), "transformed_row should be present in data"
 
 
+def test_save_add_data_response_details_matches_integer_issue_entry_numbers(db):
+    request_model = models.Request(
+        type=schemas.RequestTypeEnum.add_data,
+        created=datetime.datetime.now(),
+        modified=datetime.datetime.now(),
+        status="NEW",
+        params=schemas.AddDataParams(
+            collection="article-4-direction",
+            dataset="article-4-direction-area",
+            resource="resource-hash",
+        ).model_dump(),
+    )
+    db_session = database.session_maker()
+    with db_session() as session:
+        session.add(request_model)
+        session.commit()
+        session.refresh(request_model)
+        request_id = request_model.id
+
+    save_response_to_db(
+        request_id,
+        {
+            "pipeline-summary": {},
+            "endpoint-summary": {},
+            "source-summary": {},
+            "converted-csv": [
+                {"reference": "ref-1"},
+                {"reference": "ref-2"},
+            ],
+            "pipeline-issues": [
+                {"entry-number": 1, "issue-type": "invalid geometry"},
+                {"entry-number": 2, "issue-type": "missing field"},
+            ],
+            "transformed-csv": [
+                {"entry-number": 1, "reference": "ref-1"},
+                {"entry-number": 2, "reference": "ref-2"},
+            ],
+        },
+    )
+
+    with db_session() as session:
+        response_query = (
+            session.query(models.Response).filter_by(request_id=request_id).first()
+        )
+        details = (
+            session.query(models.ResponseDetails)
+            .filter_by(response_id=response_query.id)
+            .order_by(models.ResponseDetails.id)
+            .all()
+        )
+
+    assert len(details) == 2
+    assert details[0].detail["issue_logs"] == [
+        {"entry-number": 1, "issue-type": "invalid geometry"}
+    ]
+    assert details[1].detail["issue_logs"] == [
+        {"entry-number": 2, "issue-type": "missing field"}
+    ]
+
+
 def test_add_data_task_success(monkeypatch):
     request = {
         "id": "req-123",
