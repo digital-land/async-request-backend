@@ -146,7 +146,7 @@ def handle_check_file(request_schema, request_data, tmp_dir):
 def _download_resource(resource_dir, collection, resource):
     Path(resource_dir).mkdir(parents=True, exist_ok=True)
     resource_url = (
-        f"{DATASTORE_URL.rstrip('/')}/{collection}-collection/"
+        f"{DATASTORE_URL}{collection}-collection/"
         f"collection/resource/{urllib.parse.quote(resource)}"
     )
     destination = Path(resource_dir) / resource
