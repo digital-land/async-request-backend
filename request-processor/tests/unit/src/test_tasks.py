@@ -173,6 +173,29 @@ def test_save_add_data_response_details_matches_integer_issue_entry_numbers(db):
     ]
 
 
+def test_download_resource_uses_datastore_url(monkeypatch, tmp_path):
+    downloaded = {}
+
+    def fake_download_file(url, destination):
+        downloaded["url"] = url
+        downloaded["destination"] = destination
+
+    monkeypatch.setattr(tasks, "DATASTORE_URL", "https://example.com/datastore/")
+    monkeypatch.setattr(tasks.workflow, "download_file", fake_download_file)
+
+    file_name, log = tasks._download_resource(
+        tmp_path, "article-4-direction", "resource hash"
+    )
+
+    assert file_name == "resource hash"
+    assert downloaded["url"] == (
+        "https://example.com/datastore/article-4-direction-collection/"
+        "collection/resource/resource%20hash"
+    )
+    assert downloaded["destination"] == tmp_path / "resource hash"
+    assert log["resource-url"] == downloaded["url"]
+
+
 def test_add_data_task_success(monkeypatch):
     request = {
         "id": "req-123",

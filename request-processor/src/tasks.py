@@ -18,7 +18,7 @@ from task_interface.base_tasks import (
 )
 import json
 from application.core import workflow
-from application.configurations.config import Directories
+from application.configurations.config import DATASTORE_URL, Directories
 import application.core.utils as utils
 from application.exceptions.customExceptions import (
     CustomException,
@@ -146,7 +146,7 @@ def handle_check_file(request_schema, request_data, tmp_dir):
 def _download_resource(resource_dir, collection, resource):
     Path(resource_dir).mkdir(parents=True, exist_ok=True)
     resource_url = (
-        f"https://files.planning.data.gov.uk/{collection}-collection/"
+        f"{DATASTORE_URL.rstrip('/')}/{collection}-collection/"
         f"collection/resource/{urllib.parse.quote(resource)}"
     )
     destination = Path(resource_dir) / resource
