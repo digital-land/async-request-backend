@@ -113,6 +113,89 @@ def test_save_response_to_db(
             ), "transformed_row should be present in data"
 
 
+def test_save_add_data_response_details_matches_integer_issue_entry_numbers(db):
+    request_model = models.Request(
+        type=schemas.RequestTypeEnum.add_data,
+        created=datetime.datetime.now(),
+        modified=datetime.datetime.now(),
+        status="NEW",
+        params=schemas.AddDataParams(
+            collection="article-4-direction",
+            dataset="article-4-direction-area",
+            resource="resource-hash",
+        ).model_dump(),
+    )
+    db_session = database.session_maker()
+    with db_session() as session:
+        session.add(request_model)
+        session.commit()
+        session.refresh(request_model)
+        request_id = request_model.id
+
+    save_response_to_db(
+        request_id,
+        {
+            "pipeline-summary": {},
+            "endpoint-summary": {},
+            "source-summary": {},
+            "converted-csv": [
+                {"reference": "ref-1"},
+                {"reference": "ref-2"},
+            ],
+            "pipeline-issues": [
+                {"entry-number": 1, "issue-type": "invalid geometry"},
+                {"entry-number": 2, "issue-type": "missing field"},
+            ],
+            "transformed-csv": [
+                {"entry-number": 1, "reference": "ref-1"},
+                {"entry-number": 2, "reference": "ref-2"},
+            ],
+        },
+    )
+
+    with db_session() as session:
+        response_query = (
+            session.query(models.Response).filter_by(request_id=request_id).first()
+        )
+        details = (
+            session.query(models.ResponseDetails)
+            .filter_by(response_id=response_query.id)
+            .order_by(models.ResponseDetails.id)
+            .all()
+        )
+
+    assert len(details) == 2
+    assert details[0].detail["issue_logs"] == [
+        {"entry-number": 1, "issue-type": "invalid geometry"}
+    ]
+    assert details[1].detail["issue_logs"] == [
+        {"entry-number": 2, "issue-type": "missing field"}
+    ]
+
+
+def test_download_resource_uses_datastore_url(monkeypatch, tmp_path):
+    downloaded = {}
+
+    def fake_download_file(url, destination):
+        downloaded["url"] = url
+        downloaded["destination"] = destination
+
+    monkeypatch.setattr(tasks, "DATASTORE_URL", "https://example.com/datastore/")
+    monkeypatch.setattr(tasks.workflow, "download_file", fake_download_file)
+
+    file_name, log = tasks._download_resource(
+        tmp_path, "article-4-direction", "resource hash"
+    )
+
+    assert file_name == "resource hash"
+    assert downloaded["url"] == (
+        "https://example.com/datastore/article-4-direction-collection/"
+        "collection/resource/resource%20hash"
+    )
+    assert downloaded["destination"] == tmp_path / "resource hash"
+    assert log["resource-url"] == downloaded["url"]
+
+
 def test_add_data_task_success(monkeypatch):
     request = {
         "id": "req-123",
@@ -155,6 +238,82 @@ def test_add_data_task_success(monkeypatch):
 
     assert result["id"] == "req-123"
     assert result["status"] == "COMPLETE"
+
+
+def test_add_data_task_success_with_resource(monkeypatch):
+    request = {
+        "id": "req-resource",
+        "status": "NEW",
+        "params": {
+            "collection": "col",
+            "dataset": "ds",
+            "resource": "resource-hash",
+        },
+    }
+    directories_dict = {
+        "COLLECTION_DIR": "/tmp/collection",
+        "PIPELINE_DIR": "/tmp/pipeline",
+    }
+    directories_json = json.dumps(directories_dict)
+    request_schema = MagicMock()
+    request_schema.status = "NEW"
+    request_schema.id = "req-resource"
+    request_schema.params = MagicMock()
+    request_schema.params.collection = "col"
+    request_schema.params.dataset = "ds"
+    request_schema.params.organisation = None
+    request_schema.params.url = None
+    request_schema.params.resource = "resource-hash"
+    request_schema.params.documentation_url = None
+    request_schema.params.licence = None
+    request_schema.params.start_date = None
+    request_schema.params.plugin = None
+    request_schema.params.geom_type = None
+    request_schema.params.column_mapping = None
+    request_schema.params.github_branch = None
+    request_schema.params.endpoint_parameters = None
+
+    workflow_call = {}
+
+    def fake_add_data_workflow(*args, **kwargs):
+        workflow_call["args"] = args
+        workflow_call["kwargs"] = kwargs
+        return {"result": "ok"}
+
+    monkeypatch.setattr(
+        tasks.schemas.Request, "model_validate", lambda r: request_schema
+    )
+    monkeypatch.setattr(
+        tasks, "_download_resource", lambda *a, **kw: ("resource-hash", {})
+    )
+    monkeypatch.setattr(
+        tasks,
+        "_get_resource_metadata",
+        lambda *a, **kw: {
+            "organisation": "org-1",
+            "endpoints": ["endpoint-1"],
+            "start_date": "2024-01-01",
+            "url": "https://example.com/data.csv",
+            "documentation_url": "https://example.com/docs",
+            "licence": "ogl3",
+        },
+    )
+    monkeypatch.setattr(tasks.workflow, "add_data_workflow", fake_add_data_workflow)
+    monkeypatch.setattr(tasks, "save_response_to_db", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        tasks, "_get_request", lambda rid: {"id": rid, "status": "COMPLETE"}
+    )
+
+    result = tasks.add_data_task(request, directories_json)
+
+    assert result["id"] == "req-resource"
+    assert result["status"] == "COMPLETE"
+    assert workflow_call["args"][4] == "org-1"
+    assert workflow_call["args"][5] == "https://example.com/data.csv"
+    assert workflow_call["args"][6] == "https://example.com/docs"
+    assert workflow_call["args"][8] == "ogl3"
+    assert workflow_call["args"][9] == "2024-01-01"
+    assert workflow_call["kwargs"]["endpoints"] == ["endpoint-1"]
 
 
 def test_add_data_task_fail(monkeypatch):

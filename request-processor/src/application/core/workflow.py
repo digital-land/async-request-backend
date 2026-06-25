@@ -556,6 +556,7 @@ def add_data_workflow(
     column_mapping=None,
     github_branch=None,
     endpoint_parameters=None,
+    endpoints=None,
 ):
     """
     Setup directories and download required CSVs to manage add-data pipeline
@@ -576,6 +577,7 @@ def add_data_workflow(
         column_mapping (dict): Optional caller-supplied column mappings to append to column.csv
         github_branch (str): Optional branch name to indicate if the data should be appended to a specific branch
         endpoint_parameters: Optional opaque value stored as the parameters field in the endpoint entry
+        endpoints: Optional list of existing endpoint hashes associated with a resource
     """
     response_data = {}
 
@@ -592,7 +594,8 @@ def add_data_workflow(
         os.makedirs(converted_path.parent, exist_ok=True)
 
         resource = resource_from_path(os.path.join(input_dir, file_name))
-        endpoint_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()
+        endpoint_hash = hashlib.sha256(url.encode("utf-8")).hexdigest() if url else None
+        pipeline_endpoint = endpoints or endpoint_hash
 
         # Loads csvs for Pipeline and Config
         if not fetch_add_data_pipeline_csvs(
@@ -627,7 +630,7 @@ def add_data_workflow(
             output_path=output_path,
             specification_dir=directories.SPECIFICATION_DIR,
             cache_dir=directories.CACHE_DIR,
-            endpoint=endpoint_hash,
+            endpoint=pipeline_endpoint,
             converted_path=converted_path,
         )
 

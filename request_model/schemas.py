@@ -38,6 +38,7 @@ class CheckUrlParams(Params):
 class AddDataParams(Params):
     type: Literal[RequestTypeEnum.add_data] = RequestTypeEnum.add_data
     url: Optional[str] = None
+    resource: Optional[str] = None
     documentation_url: Optional[str] = None
     authoritative: Optional[bool] = None
     licence: Optional[str] = None

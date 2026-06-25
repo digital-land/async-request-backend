@@ -287,6 +287,17 @@ def fetch_add_data_response(
         valid_category_values = api.get_valid_category_values(dataset, pipeline)
 
         files_in_resource = os.listdir(input_dir)
+        organisations = (
+            organisation_provider
+            if isinstance(organisation_provider, list)
+            else [organisation_provider]
+        )
+        organisations = [organisation for organisation in organisations if organisation]
+        if not organisations:
+            raise ValueError("At least one organisation is required for add_data")
+
+        endpoints = endpoint if isinstance(endpoint, list) else [endpoint]
+        endpoints = [endpoint for endpoint in endpoints if endpoint]
 
         existing_entities = []
         new_entities = []
@@ -304,11 +315,11 @@ def fetch_add_data_response(
                     input_path=resource_file_path,
                     output_path=output_path,
                     organisation=organisation,
-                    organisations=[organisation_provider],
+                    organisations=organisations,
                     resource=resource_from_path(resource_file_path),
                     valid_category_values=valid_category_values,
                     disable_lookups=False,
-                    endpoints=[endpoint],
+                    endpoints=endpoints,
                     converted_path=converted_path,
                 )
 
@@ -331,11 +342,11 @@ def fetch_add_data_response(
                     new_lookups = _assign_entries(
                         resource_path=resource_file_path,
                         dataset=dataset,
-                        organisation=organisation_provider,
+                        organisation=organisations[0],
                         pipeline_dir=pipeline_dir,
                         specification=specification,
                         cache_dir=cache_dir,
-                        endpoints=[endpoint] if endpoint else None,
+                        endpoints=endpoints if endpoints else None,
                     )
                     logger.info(
                         f"Found {len(new_lookups)} unidentified lookups in {resource_file}"
@@ -344,7 +355,7 @@ def fetch_add_data_response(
 
                     # Default create a entity-organisation mapping, front end can use the 'authoritative' flag
                     entity_org_mapping = _create_entity_organisation(
-                        new_lookups, dataset, organisation_provider
+                        new_lookups, dataset, organisations[0]
                     )
                     # TODO, save to pipeline as well for rerun?
 
@@ -358,11 +369,11 @@ def fetch_add_data_response(
                         input_path=resource_file_path,
                         output_path=output_path,
                         organisation=organisation,
-                        organisations=[organisation_provider],
+                        organisations=organisations,
                         resource=resource_from_path(resource_file_path),
                         valid_category_values=valid_category_values,
                         disable_lookups=False,
-                        endpoints=[endpoint],
+                        endpoints=endpoints,
                         converted_path=converted_path,
                     )
                 else:
