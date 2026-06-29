@@ -38,6 +38,7 @@ jobs:
   publish-request-api:
     runs-on: ubuntu-22.04
     needs: [detect-environments, test]
+    if: ${{ always() && needs.detect-environments.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     strategy:
       matrix:
         environment: ${{ fromJSON(needs.detect-environments.outputs.environments) }}
@@ -91,6 +92,7 @@ jobs:
   publish-request-processor:
     runs-on: ubuntu-22.04
     needs: [detect-environments, test]
+    if: ${{ always() && needs.detect-environments.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     strategy:
       matrix:
         environment: ${{ fromJSON(needs.detect-environments.outputs.environments) }}
