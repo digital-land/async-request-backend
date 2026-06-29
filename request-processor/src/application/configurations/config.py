@@ -12,6 +12,7 @@ class Directories:
     TRANSFORMED_DIR = "/opt/transformed/"
     CONVERTED_DIR = "/opt/converted/"
     PIPELINE_DIR = "/opt/pipeline/"
+    S3_SPEC = os.getenv("SPECIFICATION_S3_PATH", "")
     SPECIFICATION_DIR = "specification/"
     DATASET_RESOURCE_DIR = "var/dataset-resource/"
     CACHE_DIR = "var/cache"

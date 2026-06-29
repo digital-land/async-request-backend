@@ -167,9 +167,7 @@ def fetch_response_data(
                 disable_lookups=True,
             )
             # Issue log needs severity column added, so manually added and saved here
-            issue_log.add_severity_column(
-                os.path.join(specification_dir, "issue-type.csv")
-            )
+            issue_log.add_severity_column(severity_mapping=specification.issue_type)
             issue_log.save(
                 os.path.join(issue_dir, dataset, request_id, resource + ".csv")
             )
@@ -389,9 +387,7 @@ def fetch_add_data_response(
         )
 
         if issues_log:
-            issues_log.add_severity_column(
-                os.path.join(specification_dir, "issue-type.csv")
-            )
+            issues_log.add_severity_column(severity_mapping=specification.issue_type)
 
         pipeline_summary = {
             "new-in-resource": len(new_entities),

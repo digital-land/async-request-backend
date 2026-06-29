@@ -7,7 +7,21 @@ import csv
 import json
 from datetime import datetime
 
+from digital_land.specification import Specification
+
 logger = get_logger(__name__)
+
+
+def load_specification(directories):
+    if directories.S3_SPEC:
+        try:
+            return Specification(directories.S3_SPEC)
+        except Exception as e:
+            logger.error(
+                f"Failed to load specification from {directories.S3_SPEC}, "
+                f"falling back to local: {e}"
+            )
+    return Specification(directories.SPECIFICATION_DIR)
 
 
 def get_request(url, verify_ssl=True):

@@ -18,7 +18,7 @@ import yaml
 
 from application.core.utils import (
     detect_encoding,
-    extract_dataset_field_rows,
+    load_specification,
     validate_endpoint,
     validate_source,
 )
@@ -174,6 +174,7 @@ def run_workflow(
     response_data = {}
 
     try:
+        specification = load_specification(directories)
         # pipeline directory structure & download
         pipeline_dir = os.path.join(directories.PIPELINE_DIR, dataset, request_id)
 
@@ -189,7 +190,7 @@ def run_workflow(
             geom_type,
             column_mapping,
             resource,
-            directories.SPECIFICATION_DIR,
+            specification,
         )
 
         # This manages the core workflow of transforming data to facts
@@ -204,7 +205,7 @@ def run_workflow(
             directories.TRANSFORMED_DIR,
             directories.DATASET_RESOURCE_DIR,
             pipeline_dir,
-            directories.SPECIFICATION_DIR,
+            directories.S3_SPEC or directories.SPECIFICATION_DIR,
             directories.CACHE_DIR,
             additional_col_mappings=column_mapping,
             additional_concats=additional_concats,
@@ -258,7 +259,7 @@ def run_workflow(
             ),
             dataset,
             required_fields,
-            directories.SPECIFICATION_DIR,
+            specification,
         )
 
         transformed_json = csv_to_json(
@@ -309,7 +310,7 @@ def fetch_pipeline_csvs(
     geom_type,
     column_mapping,
     resource,
-    specification_dir,
+    specification,
 ):
     os.makedirs(pipeline_dir, exist_ok=True)
     pipeline_csvs = ["column.csv", "transform.csv"]
@@ -350,7 +351,7 @@ def fetch_pipeline_csvs(
                             column_mapping,
                             dataset,
                             resource,
-                            specification_dir,
+                            specification,
                         )
                         return not_mapped_columns
                     if geom_type:
@@ -394,10 +395,10 @@ def add_extra_column_mappings(
     column_mapping,
     dataset,
     resource,
-    specification_dir,
+    specification,
     endpoint_hash=None,
 ):
-    filtered_rows = extract_dataset_field_rows(specification_dir, dataset)
+    field_names = specification.dataset_field.get(dataset, [])
     fieldnames = []
     not_mapped_columns = []
     with open(column_path) as f:
@@ -413,19 +414,16 @@ def add_extra_column_mappings(
     for key, value in column_mapping_json.items():
         mappings["column"] = key
         mappings["field"] = value
-        if filtered_rows is not None:
-            if mappings["field"] != "IGNORE" and mappings["field"] not in [
-                row["field"] for row in filtered_rows
-            ]:
-                logger.error(
-                    f"Error: Field '{mappings['field']}' does not exist in dataset-field.csv"
-                )
-                not_mapped_columns.append(mappings["field"])
-            else:
-                with open(column_path, "a", newline="") as f:
-                    f.write("\n")
-                    writer = csv.DictWriter(f, fieldnames=fieldnames)
-                    writer.writerow(mappings)
+        if mappings["field"] != "IGNORE" and mappings["field"] not in field_names:
+            logger.error(
+                f"Error: Field '{mappings['field']}' does not exist in dataset-field.csv"
+            )
+            not_mapped_columns.append(mappings["field"])
+        else:
+            with open(column_path, "a", newline="") as f:
+                f.write("\n")
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writerow(mappings)
     return not_mapped_columns
 
 
@@ -479,7 +477,8 @@ def csv_to_json(csv_file):
                 for row in data_list:
                     json_data.append(row)
         except Exception:
-            logger.error("Cannot process file as CSV ")
+            # TODO: Best way to show this in Sentry?
+            logger.exception("Cannot process file as CSV ")
 
     return json_data
 
@@ -495,7 +494,7 @@ def _is_mandatory(field_name, required_fields):
     return False
 
 
-def _get_column_mapping(column_field_path, dataset, required_fields, specification_dir):
+def _get_column_mapping(column_field_path, dataset, required_fields, specification):
     """Build the column-mapping attribute for the response.
 
     Starts from all fields defined for the dataset in specification/dataset-field.csv,
@@ -503,15 +502,12 @@ def _get_column_mapping(column_field_path, dataset, required_fields, specificati
     column-field log CSV.  Fields that appear in the log but not the specification
     are appended.  Every entry is annotated with 'mandatory' based on required_fields.
     """
-    spec_rows = extract_dataset_field_rows(specification_dir, dataset) or []
     field_dict = {}
-    for row in spec_rows:
-        field_name = row.get("field", "")
-        if field_name:
-            field_dict[field_name] = {
-                "field": field_name,
-                "mandatory": _is_mandatory(field_name, required_fields),
-            }
+    for field_name in specification.dataset_field.get(dataset, []):
+        field_dict[field_name] = {
+            "field": field_name,
+            "mandatory": _is_mandatory(field_name, required_fields),
+        }
 
     if os.path.isfile(column_field_path):
         with open(column_field_path, "r") as f:
@@ -582,6 +578,7 @@ def add_data_workflow(
     response_data = {}
 
     try:
+        specification = load_specification(directories)
         pipeline_dir = os.path.join(directories.PIPELINE_DIR, collection, request_id)
         input_dir = os.path.join(directories.COLLECTION_DIR, "resource", request_id)
         collection_dir = os.path.join(directories.COLLECTION_DIR, request_id)
@@ -605,7 +602,7 @@ def add_data_workflow(
             geom_type=geom_type,
             resource=resource,
             dataset=dataset,
-            specification_dir=directories.SPECIFICATION_DIR,
+            specification=specification,
             endpoint_hash=endpoint_hash,
             github_branch=github_branch,
         ):
@@ -628,7 +625,7 @@ def add_data_workflow(
             pipeline_dir=pipeline_dir,
             input_dir=input_dir,
             output_path=output_path,
-            specification_dir=directories.SPECIFICATION_DIR,
+            specification_dir=directories.S3_SPEC or directories.SPECIFICATION_DIR,
             cache_dir=directories.CACHE_DIR,
             endpoint=pipeline_endpoint,
             converted_path=converted_path,
@@ -699,7 +696,7 @@ def fetch_add_data_pipeline_csvs(
     geom_type=None,
     resource=None,
     dataset=None,
-    specification_dir=None,
+    specification=None,
     endpoint_hash=None,
     github_branch=None,
 ):
@@ -743,13 +740,13 @@ def fetch_add_data_pipeline_csvs(
         else:
             column_csv_path = os.path.join(pipeline_dir, "column.csv")
             try:
-                if column_mapping and resource and dataset and specification_dir:
+                if column_mapping and resource and dataset and specification:
                     add_extra_column_mappings(
                         column_csv_path,
                         column_mapping,
                         dataset,
                         resource,
-                        specification_dir,
+                        specification,
                         endpoint_hash=endpoint_hash,
                     )
                 elif geom_type and resource and dataset:
@@ -772,13 +769,13 @@ def fetch_add_data_pipeline_csvs(
 
         if csv_name == "column.csv":
             try:
-                if column_mapping and resource and dataset and specification_dir:
+                if column_mapping and resource and dataset and specification:
                     add_extra_column_mappings(
                         csv_path,
                         column_mapping,
                         dataset,
                         resource,
-                        specification_dir,
+                        specification,
                         endpoint_hash=endpoint_hash,
                     )
                 elif geom_type and resource and dataset:
