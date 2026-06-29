@@ -9,6 +9,10 @@ on:
       environment:
         type: environment
         description: The environment to deploy to.
+      skip_tests:
+        type: boolean
+        description: Skip tests before publishing.
+        default: false
 
 jobs:
   detect-environments:
@@ -28,6 +32,7 @@ jobs:
             return environments.map(e => e.name)
 
   test:
+    if: ${{ !inputs.skip_tests }}
     uses: ./.github/workflows/test.yml
 
   publish-request-api:
