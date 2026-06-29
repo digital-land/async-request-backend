@@ -4,7 +4,7 @@
 #
 #    pip-compile requirements/requirements.in
 #
--e git+https://github.com/digital-land/pipeline.git#egg=digital-land
+git+https://github.com/digital-land/digital-land-python.git@109-bug-refresh-async-files-if-spec-has-updated#egg=digital-land
     # via -r requirements/requirements.in
 aiofiles==24.1.0
     # via datasette

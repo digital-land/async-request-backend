@@ -14,6 +14,7 @@ logger = get_logger(__name__)
 
 def load_specification(directories):
     if directories.S3_SPEC:
+        logger.info(f"Loading specification from S3: {directories.S3_SPEC}")
         try:
             return Specification(directories.S3_SPEC)
         except Exception as e:
@@ -21,6 +22,7 @@ def load_specification(directories):
                 f"Failed to load specification from {directories.S3_SPEC}, "
                 f"falling back to local: {e}"
             )
+    logger.info(f"Loading specification from local: {directories.SPECIFICATION_DIR}")
     return Specification(directories.SPECIFICATION_DIR)
 
 
