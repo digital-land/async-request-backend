@@ -221,7 +221,6 @@ def test_fetch_add_data_response_success(monkeypatch, tmp_path):
     organisation = "test-org"
     pipeline_dir = tmp_path / "pipeline"
     input_path = tmp_path / "resource"
-    specification_dir = tmp_path / "specification"
     cache_dir = tmp_path / "cache"
     endpoint = "abc123hash"
 
@@ -284,7 +283,6 @@ def test_fetch_add_data_response_no_files(monkeypatch, tmp_path):
     organisation = "test-org"
     pipeline_dir = tmp_path / "pipeline"
     input_path = tmp_path / "resource"
-    specification_dir = tmp_path / "specification"
     cache_dir = tmp_path / "cache"
     endpoint = "abc123hash"
 
@@ -316,7 +314,6 @@ def test_fetch_add_data_response_file_not_found(monkeypatch, tmp_path):
     organisation = "test-org"
     pipeline_dir = tmp_path / "pipeline"
     input_path = tmp_path / "nonexistent"
-    specification_dir = tmp_path / "specification"
     cache_dir = tmp_path / "cache"
     endpoint = "abc123hash"
 
@@ -345,7 +342,6 @@ def test_fetch_add_data_response_handles_processing_error(monkeypatch, tmp_path)
     organisation = "test-org"
     pipeline_dir = tmp_path / "pipeline"
     input_path = tmp_path / "resource"
-    specification_dir = tmp_path / "specification"
     cache_dir = tmp_path / "cache"
     endpoint = "abc123hash"
 
@@ -384,7 +380,6 @@ def test_fetch_add_data_response_reraises_processing_error(monkeypatch, tmp_path
     organisation = "test-org"
     pipeline_dir = tmp_path / "pipeline"
     input_path = tmp_path / "resource"
-    specification_dir = tmp_path / "specification"
     cache_dir = tmp_path / "cache"
     endpoint = "abc123hash"
 
