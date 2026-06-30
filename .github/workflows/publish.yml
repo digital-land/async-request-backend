@@ -9,10 +9,6 @@ on:
       environment:
         type: environment
         description: The environment to deploy to.
-      skip_tests:
-        type: boolean
-        description: Skip tests before publishing.
-        default: false
 
 jobs:
   detect-environments:
@@ -32,13 +28,11 @@ jobs:
             return environments.map(e => e.name)
 
   test:
-    if: ${{ !inputs.skip_tests }}
     uses: ./.github/workflows/test.yml
 
   publish-request-api:
     runs-on: ubuntu-22.04
     needs: [detect-environments, test]
-    if: ${{ always() && needs.detect-environments.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     strategy:
       matrix:
         environment: ${{ fromJSON(needs.detect-environments.outputs.environments) }}
@@ -92,7 +86,6 @@ jobs:
   publish-request-processor:
     runs-on: ubuntu-22.04
     needs: [detect-environments, test]
-    if: ${{ always() && needs.detect-environments.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     strategy:
       matrix:
         environment: ${{ fromJSON(needs.detect-environments.outputs.environments) }}
