@@ -225,6 +225,10 @@ def test_fetch_pipelines(
     # Mock downloads (common to all tests)
     mocked_download_file = mocker.patch("src.application.core.workflow.download_file")
 
+    mock_spec = MagicMock(
+        dataset_field={dataset: ["entry-date", "geometry", "reference"]}
+    )
+
     # Call the function (common to all tests)
     fetch_pipeline_csvs(
         collection,
@@ -233,7 +237,7 @@ def test_fetch_pipelines(
         geom_type,
         column_mapping if column_mapping else {},
         resource,
-        mock_directories.SPECIFICATION_DIR,
+        mock_spec,
     )
 
     # Check that download_file was called with the expected URL and file path
@@ -312,6 +316,7 @@ def test_add_data_workflow(monkeypatch):
         TRANSFORMED_DIR = "/tmp/transformed"
         SPECIFICATION_DIR = "/tmp/specification"
         CACHE_DIR = "/tmp/cache"
+        S3_SPEC = ""
 
     directories = DummyDirectories()
 
@@ -325,6 +330,9 @@ def test_add_data_workflow(monkeypatch):
         "transformed-csv": [],
     }
 
+    monkeypatch.setattr(
+        "src.application.core.workflow.load_specification", lambda d: MagicMock()
+    )
     monkeypatch.setattr(
         "src.application.core.workflow.resource_from_path", lambda path: "resource-hash"
     )
@@ -379,8 +387,10 @@ def test_add_data_workflow_calls(monkeypatch):
         TRANSFORMED_DIR = "/tmp/transformed"
         SPECIFICATION_DIR = "/tmp/specification"
         CACHE_DIR = "/tmp/cache"
+        S3_SPEC = ""
 
     directories = DummyDirectories()
+    mock_spec = MagicMock()
 
     called = {}
 
@@ -398,7 +408,7 @@ def test_add_data_workflow_calls(monkeypatch):
         pipeline_dir,
         input_dir,
         output_path,
-        specification_dir,
+        specification,
         cache_dir,
         endpoint,
         converted_path=None,
@@ -409,12 +419,15 @@ def test_add_data_workflow_calls(monkeypatch):
             "pipeline_dir": pipeline_dir,
             "input_dir": input_dir,
             "output_path": output_path,
-            "specification_dir": specification_dir,
+            "specification": specification,
             "cache_dir": cache_dir,
             "endpoint": endpoint,
         }
         return {"result": "ok"}
 
+    monkeypatch.setattr(
+        "src.application.core.workflow.load_specification", lambda d: mock_spec
+    )
     monkeypatch.setattr(
         "src.application.core.workflow.fetch_add_data_pipeline_csvs",
         fake_fetch_add_data_pipeline_csvs,
@@ -457,10 +470,7 @@ def test_add_data_workflow_calls(monkeypatch):
     assert called["fetch_add_data_response"]["pipeline_dir"] == expected_pipeline_dir
     assert called["fetch_add_data_response"]["input_dir"] == expected_input_dir
     assert called["fetch_add_data_response"]["output_path"] == expected_output_path
-    assert (
-        called["fetch_add_data_response"]["specification_dir"]
-        == directories.SPECIFICATION_DIR
-    )
+    assert called["fetch_add_data_response"]["specification"] is mock_spec
     assert called["fetch_add_data_response"]["cache_dir"] == directories.CACHE_DIR
     expected_endpoint_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()
     assert called["fetch_add_data_response"]["endpoint"] == expected_endpoint_hash
@@ -480,10 +490,14 @@ def test_add_data_workflow_with_resource_endpoints(monkeypatch):
         TRANSFORMED_DIR = "/tmp/transformed"
         SPECIFICATION_DIR = "/tmp/specification"
         CACHE_DIR = "/tmp/cache"
+        S3_SPEC = ""
 
     directories = DummyDirectories()
     called = {}
 
+    monkeypatch.setattr(
+        "src.application.core.workflow.load_specification", lambda d: MagicMock()
+    )
     monkeypatch.setattr(
         "src.application.core.workflow.fetch_add_data_pipeline_csvs",
         lambda *a, **kw: True,
