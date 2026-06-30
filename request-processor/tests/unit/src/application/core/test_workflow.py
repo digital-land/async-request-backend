@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import MagicMock
 from src.application.core.workflow import (
     run_workflow,
     csv_to_json,
@@ -57,8 +58,14 @@ def test_get_column_mapping(test_dir, tmp_path):
             }
         )
 
+    mock_spec = MagicMock(
+        dataset_field={
+            dataset: ["reference", "geometry", "name"],
+            "other-dataset": ["other-field"],
+        }
+    )
     result = _get_column_mapping(
-        str(col_field_csv), dataset, required_fields, str(spec_dir)
+        str(col_field_csv), dataset, required_fields, mock_spec
     )
 
     by_field = {entry["field"]: entry for entry in result}
@@ -755,12 +762,13 @@ def test_add_extra_column_mappings_ignore_field_not_in_not_mapped(tmp_path):
         writer.writerow({"dataset": "test-dataset", "field": "name"})
     _write_column_csv(column_csv)
 
+    mock_spec = MagicMock(dataset_field={"test-dataset": ["name"]})
     not_mapped = add_extra_column_mappings(
         str(column_csv),
         {"MyColumn": "IGNORE"},
         "test-dataset",
         "resource-hash",
-        str(spec_dir),
+        mock_spec,
     )
 
     assert "IGNORE" not in not_mapped
@@ -781,12 +789,13 @@ def test_add_extra_column_mappings_mix_valid_ignore_invalid(tmp_path):
         writer.writerow({"dataset": "test-dataset", "field": "name"})
     _write_column_csv(column_csv)
 
+    mock_spec = MagicMock(dataset_field={"test-dataset": ["name"]})
     not_mapped = add_extra_column_mappings(
         str(column_csv),
         {"ColA": "name", "ColB": "IGNORE", "ColC": "nonexistent-field"},
         "test-dataset",
         "resource-hash",
-        str(spec_dir),
+        mock_spec,
     )
 
     assert not_mapped == ["nonexistent-field"]
@@ -799,12 +808,13 @@ def test_add_extra_column_mappings_ignore_with_no_filtered_rows(tmp_path):
     empty_spec_dir = tmp_path / "spec"
     empty_spec_dir.mkdir()
 
+    mock_spec = MagicMock(dataset_field={})
     not_mapped = add_extra_column_mappings(
         str(column_csv),
         {"MyColumn": "IGNORE"},
         "test-dataset",
         "resource-hash",
-        str(empty_spec_dir),
+        mock_spec,
     )
 
     assert not_mapped == []
