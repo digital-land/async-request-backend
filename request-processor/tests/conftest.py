@@ -82,6 +82,7 @@ def mock_directories(tmpdir, project_dir):
             "PIPELINE_DIR",
             "SPECIFICATION_DIR",
             "CACHE_DIR",
+            "S3_SPEC",
         ],
     )
     var_dir = tmpdir.mkdir("var")
@@ -95,6 +96,7 @@ def mock_directories(tmpdir, project_dir):
         PIPELINE_DIR=tmpdir.mkdir("pipeline"),
         SPECIFICATION_DIR="tests/data/specification",
         CACHE_DIR=var_dir.mkdir("cache"),
+        S3_SPEC="",
     )
 
 

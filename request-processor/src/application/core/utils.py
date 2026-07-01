@@ -7,7 +7,24 @@ import csv
 import json
 from datetime import datetime
 
+from botocore.exceptions import BotoCoreError
+from digital_land.specification import Specification
+
 logger = get_logger(__name__)
+
+
+def load_specification(directories):
+    if directories.S3_SPEC:
+        logger.info(f"Loading specification from S3: {directories.S3_SPEC}")
+        try:
+            return Specification(directories.S3_SPEC)
+        except (OSError, BotoCoreError):
+            logger.exception(
+                f"Failed to load specification from {directories.S3_SPEC}, "
+                f"falling back to local"
+            )
+    logger.info(f"Loading specification from local: {directories.SPECIFICATION_DIR}")
+    return Specification(directories.SPECIFICATION_DIR)
 
 
 def get_request(url, verify_ssl=True):

@@ -3,7 +3,6 @@ import csv
 import json
 import yaml
 from application.logging.logger import get_logger
-from digital_land.specification import Specification
 from digital_land.organisation import Organisation
 from digital_land.api import API
 
@@ -96,13 +95,11 @@ def fetch_response_data(
     transformed_dir,
     dataset_resource_dir,
     pipeline_dir,
-    specification_dir,
+    specification,
     cache_dir,
     additional_col_mappings,
     additional_concats,
 ):
-    # define variables for Pipeline Execution
-    specification = Specification(specification_dir)
     pipeline = Pipeline(pipeline_dir, dataset, specification=specification)
     api = API(specification=specification)
 
@@ -167,9 +164,7 @@ def fetch_response_data(
                 disable_lookups=True,
             )
             # Issue log needs severity column added, so manually added and saved here
-            issue_log.add_severity_column(
-                os.path.join(specification_dir, "issue-type.csv")
-            )
+            issue_log.add_severity_column(severity_mapping=specification.issue_type)
             issue_log.save(
                 os.path.join(issue_dir, dataset, request_id, resource + ".csv")
             )
@@ -265,7 +260,7 @@ def fetch_add_data_response(
     pipeline_dir,
     input_dir,
     output_path,
-    specification_dir,
+    specification,
     cache_dir,
     endpoint,
     converted_path=None,
@@ -278,7 +273,6 @@ def fetch_add_data_response(
     add_data_workflow can return them in the standard async error response.
     """
     try:
-        specification = Specification(specification_dir)
         pipeline = Pipeline(pipeline_dir, dataset, specification=specification)
         organisation = Organisation(
             os.path.join(cache_dir, "organisation.csv"), Path(pipeline.path)
@@ -389,9 +383,7 @@ def fetch_add_data_response(
         )
 
         if issues_log:
-            issues_log.add_severity_column(
-                os.path.join(specification_dir, "issue-type.csv")
-            )
+            issues_log.add_severity_column(severity_mapping=specification.issue_type)
 
         pipeline_summary = {
             "new-in-resource": len(new_entities),
