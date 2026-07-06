@@ -198,12 +198,9 @@ def _build_candidate(
 ) -> dict:
     existing_name = str(old_entity.get("name", "") or "")
     new_name = str(new_entity.get("name", "") or "")
-    new_organisation = (
-        _organisation_row_for_provider(organisation_index, organisation_provider).get(
-            "organisation", ""
-        )
-        or str(new_entity.get("organisation", "") or "")
-    )
+    new_organisation = _organisation_row_for_provider(
+        organisation_index, organisation_provider
+    ).get("organisation", "") or str(new_entity.get("organisation", "") or "")
     old_organisation_entity = str(
         old_entity.get("organisation_entity", "")
         or old_organisation_entity

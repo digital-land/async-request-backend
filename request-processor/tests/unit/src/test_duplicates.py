@@ -225,9 +225,7 @@ def test_fetch_platform_entities_reads_datasette_without_pagination(monkeypatch)
 
 def test_name_similarity_uses_partial_ratio_for_added_words():
     assert (
-        duplicates._name_similarity(
-            "South Jesmond", "South Jesmond Conservation Area"
-        )
+        duplicates._name_similarity("South Jesmond", "South Jesmond Conservation Area")
         == "100%"
     )
 
