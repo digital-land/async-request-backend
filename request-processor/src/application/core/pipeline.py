@@ -11,6 +11,8 @@ from digital_land.pipeline.task import TaskPipeline, TaskPipelineStatus
 from digital_land.commands import get_resource_unidentified_lookups
 from pathlib import Path
 
+from application.core.duplicates import find_duplicate_redirect_candidates
+
 logger = get_logger(__name__)
 
 
@@ -381,6 +383,19 @@ def fetch_add_data_response(
         existing_entities_breakdown = _get_existing_entities_breakdown(
             existing_entities
         )
+        try:
+            duplicate_candidates = find_duplicate_redirect_candidates(
+                dataset=dataset,
+                specification=specification,
+                transformed_csv_path=output_path,
+                organisation_provider=organisations[0],
+                organisation_index=organisation,
+            )
+        except Exception as err:
+            logger.exception(
+                "Duplicate analysis failed for dataset %s: %s", dataset, err
+            )
+            duplicate_candidates = []
 
         if issues_log:
             issues_log.add_severity_column(severity_mapping=specification.issue_type)
@@ -391,6 +406,7 @@ def fetch_add_data_response(
             "new-entities": new_entities_breakdown,
             "existing-entities": existing_entities_breakdown,
             "entity-organisation": entity_org_mapping,
+            "duplicate-candidates": duplicate_candidates,
             "pipeline-issues": (
                 [dict(issue) for issue in issues_log.rows] if issues_log else []
             ),
