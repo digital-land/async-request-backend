@@ -1,5 +1,4 @@
 import csv
-import json
 import os
 import sqlite3
 import tempfile
@@ -58,7 +57,9 @@ def _read_provision_entities(transformed_csv_path: str) -> list:
     return list(entities.values())
 
 
-def _organisation_row_for_provider(organisation_index, organisation_provider: str) -> dict:
+def _organisation_row_for_provider(
+    organisation_index, organisation_provider: str
+) -> dict:
     if not organisation_index or not organisation_provider:
         return {}
 
@@ -79,7 +80,9 @@ def _resolve_organisation_entity(organisation_index, organisation_provider: str)
     )
 
 
-def _organisation_identifier_for_entity(organisation_index, organisation_entity: str) -> str:
+def _organisation_identifier_for_entity(
+    organisation_index, organisation_entity: str
+) -> str:
     if not organisation_index or not organisation_entity:
         return ""
 
@@ -156,21 +159,24 @@ def _run_duplicate_check(rows: list, spatial_field: str) -> dict:
 
     fd, path = tempfile.mkstemp(suffix=".sqlite3")
     os.close(fd)
+    conn = None
     try:
         import spatialite
         from digital_land.expectations.operations.dataset import (
             duplicate_geometry_check,
         )
 
-        with spatialite.connect(path) as conn:
-            _create_entity_table(conn, rows)
-            conn.commit()
-            _, _, details = duplicate_geometry_check(conn, spatial_field)
-            return {
-                "complete_matches": details.get("complete_matches", []),
-                "single_matches": details.get("single_matches", []),
-            }
+        conn = spatialite.connect(path)
+        _create_entity_table(conn, rows)
+        conn.commit()
+        _, _, details = duplicate_geometry_check(conn, spatial_field)
+        return {
+            "complete_matches": details.get("complete_matches", []),
+            "single_matches": details.get("single_matches", []),
+        }
     finally:
+        if conn is not None:
+            conn.close()
         try:
             os.unlink(path)
         except OSError:
@@ -185,6 +191,8 @@ def _build_candidate(
     old_entity: dict,
     new_entity: dict,
     dataset: str,
+    old_organisation_entity: str = "",
+    new_organisation_entity: str = "",
     organisation_index=None,
     organisation_provider: str = "",
 ) -> dict:
@@ -198,6 +206,7 @@ def _build_candidate(
     )
     old_organisation_entity = str(
         old_entity.get("organisation_entity", "")
+        or old_organisation_entity
         or match.get("organisation_entity_a", "")
     )
     old_organisation = _organisation_identifier_for_entity(
@@ -241,11 +250,11 @@ def _build_candidate(
         "old_organisation_entity": old_organisation_entity,
         "new_organisation_entity": str(
             new_entity.get("organisation_entity", "")
+            or new_organisation_entity
             or match.get("organisation_entity_b", "")
         ),
         "evidence": ", ".join(evidence),
         "name_similarity": similarity,
-        "form_value": json.dumps(redirect, separators=(",", ":")),
     }
 
 
@@ -303,9 +312,13 @@ def find_duplicate_redirect_candidates(
         if entity_a in provision_by_id and entity_b in platform_by_id:
             new_entity = provision_by_id[entity_a]
             old_entity = platform_by_id[entity_b]
+            old_organisation_entity = match.get("organisation_entity_b", "")
+            new_organisation_entity = match.get("organisation_entity_a", "")
         elif entity_b in provision_by_id and entity_a in platform_by_id:
             new_entity = provision_by_id[entity_b]
             old_entity = platform_by_id[entity_a]
+            old_organisation_entity = match.get("organisation_entity_a", "")
+            new_organisation_entity = match.get("organisation_entity_b", "")
         else:
             continue
 
@@ -324,6 +337,8 @@ def find_duplicate_redirect_candidates(
                 old_entity=old_entity,
                 new_entity=new_entity,
                 dataset=dataset,
+                old_organisation_entity=old_organisation_entity,
+                new_organisation_entity=new_organisation_entity,
                 organisation_index=organisation_index,
                 organisation_provider=organisation_provider,
             )

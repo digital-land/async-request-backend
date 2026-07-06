@@ -129,7 +129,57 @@ def test_duplicate_candidates_are_provision_entities_against_existing_platform(
     assert candidates[0]["new_end_date"] == ""
     assert candidates[0]["old_organisation"] == "local-authority:STH"
     assert candidates[0]["new_organisation"] == "local-authority:STH"
+    assert candidates[0]["old_organisation_entity"] == "318"
+    assert candidates[0]["new_organisation_entity"] == ""
     assert candidates[0]["match_type"] == "complete_match"
+
+
+def test_duplicate_candidates_map_organisation_entities_when_new_entity_is_a(
+    tmp_path, monkeypatch
+):
+    transformed_path = tmp_path / "transformed.csv"
+    _write_transformed_csv(transformed_path)
+
+    def fake_run_duplicate_check(rows, spatial_field):
+        if spatial_field == "point":
+            return {"complete_matches": [], "single_matches": []}
+        return {
+            "complete_matches": [
+                {
+                    "entity_a": "200",
+                    "organisation_entity_a": "",
+                    "entity_b": "100",
+                    "organisation_entity_b": "318",
+                },
+            ],
+            "single_matches": [],
+        }
+
+    def fake_fetch_platform_entities(dataset, organisation_entity):
+        return [
+            {
+                "entity": "100",
+                "reference": "old-ref",
+                "name": "Old name",
+                "geometry": "POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))",
+            },
+        ]
+
+    monkeypatch.setattr(duplicates, "_run_duplicate_check", fake_run_duplicate_check)
+
+    candidates = duplicates.find_duplicate_redirect_candidates(
+        dataset="conservation-area",
+        specification=FakeSpecification(),
+        transformed_csv_path=str(transformed_path),
+        organisation_provider="local-authority:STH",
+        organisation_index=FakeOrganisationIndex(),
+        fetch_platform_entities=fake_fetch_platform_entities,
+    )
+
+    assert candidates[0]["old_entity"] == "100"
+    assert candidates[0]["entity"] == "200"
+    assert candidates[0]["old_organisation_entity"] == "318"
+    assert candidates[0]["new_organisation_entity"] == ""
 
 
 def test_fetch_platform_entities_reads_datasette_without_pagination(monkeypatch):
@@ -217,9 +267,9 @@ def test_duplicate_candidates_skip_non_conservation_area(tmp_path, monkeypatch):
         transformed_csv_path=str(transformed_path),
         organisation_provider="local-authority:STH",
         organisation_index=FakeOrganisationIndex(),
-        fetch_platform_entities=lambda dataset, organisation_entity: (_ for _ in ()).throw(
-            AssertionError()
-        ),
+        fetch_platform_entities=lambda dataset, organisation_entity: (
+            _ for _ in ()
+        ).throw(AssertionError()),
     )
 
     assert candidates == []
