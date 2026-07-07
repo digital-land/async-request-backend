@@ -614,6 +614,43 @@ def test_run_task_pipeline_raises_on_failed_status(tmp_path, monkeypatch):
         )
 
 
+def test_run_task_pipeline_passes_column_field_path_and_mandatory_fields(
+    tmp_path, monkeypatch
+):
+    from digital_land.pipeline.task import TaskPipelineStatus
+
+    mock_pipeline = MagicMock()
+    mock_pipeline.run.return_value = TaskPipelineStatus.COMPLETE
+    monkeypatch.setattr(
+        "src.application.core.pipeline.TaskPipeline", lambda: mock_pipeline
+    )
+    monkeypatch.setattr("src.application.core.pipeline.load_mappings", lambda: {})
+
+    task_log_path = str(tmp_path / "tasks.csv")
+    issue_path = str(tmp_path / "issues.csv")
+    column_field_path = str(tmp_path / "column-field.csv")
+    mandatory_fields = ["reference", "name"]
+
+    result = run_task_pipeline(
+        task_log_path=task_log_path,
+        dataset="conservation-area",
+        organisation="local-authority:CTY",
+        issue_path=issue_path,
+        column_field_path=column_field_path,
+        mandatory_fields=mandatory_fields,
+    )
+
+    mock_pipeline.run.assert_called_once_with(
+        output_path=task_log_path,
+        dataset="conservation-area",
+        organisation="local-authority:CTY",
+        issue_path=issue_path,
+        column_field_path=column_field_path,
+        mandatory_fields=mandatory_fields,
+    )
+    assert result == []
+
+
 def test_run_task_pipeline_empty_issue_path_returns_empty(tmp_path, monkeypatch):
     task_log_path = str(tmp_path / "tasks.csv")
     monkeypatch.setattr("src.application.core.pipeline.load_mappings", lambda: {})
