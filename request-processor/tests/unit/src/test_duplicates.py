@@ -12,13 +12,14 @@ class FakeSpecification:
 
 
 class FakeOrganisationIndex:
-    organisation = {
-        "local-authority:STH": {
-            "entity": "318",
-            "reference": "STH",
-            "organisation": "local-authority:STH",
+    def __init__(self):
+        self.organisation = {
+            "local-authority:STH": {
+                "entity": "318",
+                "reference": "STH",
+                "organisation": "local-authority:STH",
+            }
         }
-    }
 
     def lookup(self, organisation):
         return organisation
@@ -70,6 +71,9 @@ def test_duplicate_candidates_are_provision_entities_against_existing_platform(
     _write_transformed_csv(transformed_path)
 
     def fake_run_duplicate_check(rows, spatial_field):
+        provision_row = next(row for row in rows if row["entity"] == "200")
+        assert provision_row["organisation_entity"] == "318"
+
         if spatial_field == "point":
             return {"complete_matches": [], "single_matches": []}
         return {
@@ -130,7 +134,7 @@ def test_duplicate_candidates_are_provision_entities_against_existing_platform(
     assert candidates[0]["old_organisation"] == "local-authority:STH"
     assert candidates[0]["new_organisation"] == "local-authority:STH"
     assert candidates[0]["old_organisation_entity"] == "318"
-    assert candidates[0]["new_organisation_entity"] == ""
+    assert candidates[0]["new_organisation_entity"] == "318"
     assert candidates[0]["match_type"] == "complete_match"
 
 
@@ -141,6 +145,9 @@ def test_duplicate_candidates_map_organisation_entities_when_new_entity_is_a(
     _write_transformed_csv(transformed_path)
 
     def fake_run_duplicate_check(rows, spatial_field):
+        provision_row = next(row for row in rows if row["entity"] == "200")
+        assert provision_row["organisation_entity"] == "318"
+
         if spatial_field == "point":
             return {"complete_matches": [], "single_matches": []}
         return {
@@ -179,7 +186,7 @@ def test_duplicate_candidates_map_organisation_entities_when_new_entity_is_a(
     assert candidates[0]["old_entity"] == "100"
     assert candidates[0]["entity"] == "200"
     assert candidates[0]["old_organisation_entity"] == "318"
-    assert candidates[0]["new_organisation_entity"] == ""
+    assert candidates[0]["new_organisation_entity"] == "318"
 
 
 def test_fetch_platform_entities_reads_datasette_without_pagination(monkeypatch):

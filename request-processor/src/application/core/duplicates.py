@@ -40,6 +40,8 @@ def _read_provision_entities(transformed_csv_path: str) -> list:
         "geometry",
         "point",
         "organisation",
+        "organisation_entity",
+        "organisation-entity",
         "entry-date",
         "end-date",
     }
@@ -255,6 +257,28 @@ def _build_candidate(
     }
 
 
+def _entities_for_match(match: dict, provision_by_id: dict, platform_by_id: dict):
+    entity_a = _normalise_entity_id(match.get("entity_a"))
+    entity_b = _normalise_entity_id(match.get("entity_b"))
+    if entity_a in provision_by_id and entity_b in platform_by_id:
+        return {
+            "new_entity": provision_by_id[entity_a],
+            "old_entity": platform_by_id[entity_b],
+            "old_organisation_entity": match.get("organisation_entity_b", ""),
+            "new_organisation_entity": match.get("organisation_entity_a", ""),
+        }
+
+    if entity_b in provision_by_id and entity_a in platform_by_id:
+        return {
+            "new_entity": provision_by_id[entity_b],
+            "old_entity": platform_by_id[entity_a],
+            "old_organisation_entity": match.get("organisation_entity_a", ""),
+            "new_organisation_entity": match.get("organisation_entity_b", ""),
+        }
+
+    return None
+
+
 def find_duplicate_redirect_candidates(
     *,
     dataset: str,
@@ -277,6 +301,9 @@ def find_duplicate_redirect_candidates(
     organisation_entity = _resolve_organisation_entity(
         organisation_index, organisation_provider
     )
+    for row in provision_rows:
+        row.setdefault("organisation_entity", organisation_entity)
+
     platform_rows = fetch_platform_entities(dataset, organisation_entity)
     if not platform_rows:
         return []
@@ -304,20 +331,11 @@ def find_duplicate_redirect_candidates(
     candidates = []
     seen = set()
     for match, match_type, spatial_field in matches:
-        entity_a = _normalise_entity_id(match.get("entity_a"))
-        entity_b = _normalise_entity_id(match.get("entity_b"))
-        if entity_a in provision_by_id and entity_b in platform_by_id:
-            new_entity = provision_by_id[entity_a]
-            old_entity = platform_by_id[entity_b]
-            old_organisation_entity = match.get("organisation_entity_b", "")
-            new_organisation_entity = match.get("organisation_entity_a", "")
-        elif entity_b in provision_by_id and entity_a in platform_by_id:
-            new_entity = provision_by_id[entity_b]
-            old_entity = platform_by_id[entity_a]
-            old_organisation_entity = match.get("organisation_entity_a", "")
-            new_organisation_entity = match.get("organisation_entity_b", "")
-        else:
+        matched_entities = _entities_for_match(match, provision_by_id, platform_by_id)
+        if not matched_entities:
             continue
+        new_entity = matched_entities["new_entity"]
+        old_entity = matched_entities["old_entity"]
 
         key = (
             _normalise_entity_id(old_entity.get("entity")),
@@ -334,8 +352,8 @@ def find_duplicate_redirect_candidates(
                 old_entity=old_entity,
                 new_entity=new_entity,
                 dataset=dataset,
-                old_organisation_entity=old_organisation_entity,
-                new_organisation_entity=new_organisation_entity,
+                old_organisation_entity=matched_entities["old_organisation_entity"],
+                new_organisation_entity=matched_entities["new_organisation_entity"],
                 organisation_index=organisation_index,
                 organisation_provider=organisation_provider,
             )
