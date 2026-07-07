@@ -1,4 +1,7 @@
 import csv
+import sqlite3
+import sys
+import types
 
 from application.core import duplicates
 
@@ -237,7 +240,7 @@ def test_name_similarity_uses_partial_ratio_for_added_words():
     )
 
 
-def test_run_duplicate_check_commits_before_spatialite_metadata():
+def test_run_duplicate_check_commits_before_spatialite_metadata(monkeypatch):
     rows = [
         {
             "entity": "100",
@@ -250,6 +253,46 @@ def test_run_duplicate_check_commits_before_spatialite_metadata():
             "geometry": "POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))",
         },
     ]
+
+    class FakeConnection:
+        def __init__(self, path):
+            self.conn = sqlite3.connect(path)
+            self.committed = False
+
+        def execute(self, *args, **kwargs):
+            return self.conn.execute(*args, **kwargs)
+
+        def executemany(self, *args, **kwargs):
+            return self.conn.executemany(*args, **kwargs)
+
+        def commit(self):
+            self.committed = True
+            return self.conn.commit()
+
+        def close(self):
+            return self.conn.close()
+
+    def fake_duplicate_geometry_check(conn, spatial_field):
+        assert conn.committed
+        assert spatial_field == "geometry"
+        return (
+            None,
+            None,
+            {
+                "complete_matches": [{"entity_a": 100, "entity_b": 200}],
+                "single_matches": [],
+            },
+        )
+
+    monkeypatch.setitem(
+        sys.modules,
+        "spatialite",
+        types.SimpleNamespace(connect=lambda path: FakeConnection(path)),
+    )
+    monkeypatch.setattr(
+        "digital_land.expectations.operations.dataset.duplicate_geometry_check",
+        fake_duplicate_geometry_check,
+    )
 
     matches = duplicates._run_duplicate_check(rows, "geometry")
 
