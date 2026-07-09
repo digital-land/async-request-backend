@@ -452,26 +452,16 @@ def _get_existing_entities_breakdown(existing_entities):
     return breakdown
 
 
-def _create_entity_organisation(new_entities, dataset, organisation, pipeline_dir):
+def _create_entity_organisation(  # noqa: C901
+    new_entities, dataset, organisation, pipeline_dir
+):
     """
     Create entity-organisation mapping from new entities.
 
-    Loads the downloaded entity-organisation.csv from pipeline_dir and checks
-    whether the new entities already fall within an existing entity-minimum/
+    checks whether the new entities already fall within an existing entity-minimum/
     entity-maximum range for this dataset. If the CSV can't be loaded,
-    processing continues but the returned mapping is flagged with error=True.
+    processing continues but the returned mapping is flagged with error.
 
-    Args:
-        new_entities: List of entity dicts with 'entity' key
-        dataset: Dataset name
-        organisation: Organisation identifier
-        pipeline_dir: Directory containing the downloaded entity-organisation.csv
-
-    Returns:
-        List with single dict containing dataset, organisation, overlap and error.
-        entity-minimum/entity-maximum are only included when overlap and error
-        are both False, so a downstream consumer can't commit an untrustworthy
-        range to entity-organisation.csv.
     """
     if not new_entities:
         return []
