@@ -7,6 +7,7 @@ from src.application.core.pipeline import (
     _get_entities_breakdown,
     _get_existing_entities_breakdown,
     _format_task_summary,
+    _find_duplicate_candidates,
     run_task_pipeline,
 )
 
@@ -410,6 +411,31 @@ def test_fetch_add_data_response_reraises_processing_error(monkeypatch, tmp_path
             cache_dir=str(cache_dir),
             endpoint=endpoint,
         )
+
+
+def test_find_duplicate_candidates_passes_redirect_lookups(monkeypatch, tmp_path):
+    calls = {}
+
+    def fake_find_duplicate_redirect_candidates(**kwargs):
+        calls.update(kwargs)
+        return [{"old_entity": "100"}]
+
+    monkeypatch.setattr(
+        "src.application.core.pipeline.find_duplicate_redirect_candidates",
+        fake_find_duplicate_redirect_candidates,
+    )
+
+    result = _find_duplicate_candidates(
+        dataset="conservation-area",
+        specification=MagicMock(),
+        output_path=str(tmp_path / "transformed.csv"),
+        redirect_lookups={"100": {"entity": "300", "status": "301"}},
+        organisation_provider="local-authority:STH",
+        organisation_index=MagicMock(),
+    )
+
+    assert result == [{"old_entity": "100"}]
+    assert calls["redirect_lookups"] == {"100": {"entity": "300", "status": "301"}}
 
 
 def test_get_entities_breakdown_success():

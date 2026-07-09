@@ -336,13 +336,19 @@ def _process_add_data_resource(resource_file, **kwargs):
 
 
 def _find_duplicate_candidates(
-    dataset, specification, output_path, organisation_provider, organisation_index
+    dataset,
+    specification,
+    output_path,
+    redirect_lookups,
+    organisation_provider,
+    organisation_index,
 ):
     try:
         return find_duplicate_redirect_candidates(
             dataset=dataset,
             specification=specification,
             transformed_csv_path=output_path,
+            redirect_lookups=redirect_lookups,
             organisation_provider=organisation_provider,
             organisation_index=organisation_index,
         )
@@ -437,7 +443,12 @@ def fetch_add_data_response(
             existing_entities
         )
         duplicate_candidates = _find_duplicate_candidates(
-            dataset, specification, output_path, organisations[0], organisation
+            dataset,
+            specification,
+            output_path,
+            pipeline.redirect_lookups(),
+            organisations[0],
+            organisation,
         )
 
         if issues_log:

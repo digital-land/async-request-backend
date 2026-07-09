@@ -284,6 +284,7 @@ def find_duplicate_redirect_candidates(
     dataset: str,
     specification,
     transformed_csv_path: str,
+    redirect_lookups: dict | None = None,
     organisation_provider: str = "",
     organisation_index=None,
     fetch_platform_entities=_fetch_platform_entities,
@@ -315,6 +316,7 @@ def find_duplicate_redirect_candidates(
         _normalise_entity_id(row.get("entity")): row for row in platform_rows
     }
     combined_rows = platform_rows + provision_rows
+    redirect_lookups = redirect_lookups or {}
 
     matches = []
     for spatial_field in ("geometry", "point"):
@@ -344,19 +346,22 @@ def find_duplicate_redirect_candidates(
         if key in seen or key[0] == key[1]:
             continue
         seen.add(key)
-        candidates.append(
-            _build_candidate(
-                match=match,
-                match_type=match_type,
-                spatial_field=spatial_field,
-                old_entity=old_entity,
-                new_entity=new_entity,
-                dataset=dataset,
-                old_organisation_entity=matched_entities["old_organisation_entity"],
-                new_organisation_entity=matched_entities["new_organisation_entity"],
-                organisation_index=organisation_index,
-                organisation_provider=organisation_provider,
-            )
+        candidate = _build_candidate(
+            match=match,
+            match_type=match_type,
+            spatial_field=spatial_field,
+            old_entity=old_entity,
+            new_entity=new_entity,
+            dataset=dataset,
+            old_organisation_entity=matched_entities["old_organisation_entity"],
+            new_organisation_entity=matched_entities["new_organisation_entity"],
+            organisation_index=organisation_index,
+            organisation_provider=organisation_provider,
         )
+        existing_redirect = redirect_lookups.get(key[0])
+        candidate["old_entity_redirects"] = (
+            [{"old-entity": key[0], **existing_redirect}] if existing_redirect else []
+        )
+        candidates.append(candidate)
 
     return candidates

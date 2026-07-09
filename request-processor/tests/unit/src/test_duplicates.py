@@ -120,6 +120,10 @@ def test_duplicate_candidates_are_provision_entities_against_existing_platform(
         dataset="conservation-area",
         specification=FakeSpecification(),
         transformed_csv_path=str(transformed_path),
+        redirect_lookups={
+            "100": {"entity": "300", "status": "301"},
+            "999": {"entity": "998", "status": "301"},
+        },
         organisation_provider="local-authority:STH",
         organisation_index=FakeOrganisationIndex(),
         fetch_platform_entities=fake_fetch_platform_entities,
@@ -139,6 +143,13 @@ def test_duplicate_candidates_are_provision_entities_against_existing_platform(
     assert candidates[0]["old_organisation_entity"] == "318"
     assert candidates[0]["new_organisation_entity"] == "318"
     assert candidates[0]["match_type"] == "complete_match"
+    assert candidates[0]["old_entity_redirects"] == [
+        {
+            "old-entity": "100",
+            "status": "301",
+            "entity": "300",
+        }
+    ]
 
 
 def test_duplicate_candidates_map_organisation_entities_when_new_entity_is_a(
