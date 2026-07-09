@@ -359,7 +359,7 @@ def fetch_pipeline_csvs(
                             dataset, pipeline_dir, geom_type, resource, pipeline_csv
                         )
             except Exception as e:
-                logger.error(f"Error saving new mapping: {e}")
+                logger.error(f"Error saving new csv mapping: {e}")
     return {}
 
 
