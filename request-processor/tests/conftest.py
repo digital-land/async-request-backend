@@ -167,6 +167,13 @@ def mock_extract_dataset_field_rows(mock_directories):
                 "guidance": "",
                 "hint": "",
             },
+            {
+                "dataset": dataset_name,
+                "field": "start-date",
+                "field-dataset": "",
+                "guidance": "",
+                "hint": "",
+            },
         ]
         fieldnames = rows[0].keys()
         with open(mock_field_csv, "w") as f:

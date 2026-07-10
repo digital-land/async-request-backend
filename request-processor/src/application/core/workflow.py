@@ -314,8 +314,9 @@ def fetch_pipeline_csvs(
 ):
     os.makedirs(pipeline_dir, exist_ok=True)
     pipeline_csvs = ["column.csv", "transform.csv"]
-    downloaded = False
+    not_mapped_columns = []
     for pipeline_csv in pipeline_csvs:
+        downloaded = False
         try:
             csv_path = os.path.join(pipeline_dir, pipeline_csv)
             print(
@@ -345,6 +346,10 @@ def fetch_pipeline_csvs(
         if downloaded:
             try:
                 if pipeline_csv == "column.csv":
+                    if geom_type:
+                        add_geom_mapping(
+                            dataset, pipeline_dir, geom_type, resource, pipeline_csv
+                        )
                     if column_mapping:
                         not_mapped_columns = add_extra_column_mappings(
                             csv_path,
@@ -353,14 +358,9 @@ def fetch_pipeline_csvs(
                             resource,
                             specification,
                         )
-                        return not_mapped_columns
-                    if geom_type:
-                        add_geom_mapping(
-                            dataset, pipeline_dir, geom_type, resource, pipeline_csv
-                        )
             except Exception as e:
                 logger.error(f"Error saving new csv mapping: {e}")
-    return {}
+    return not_mapped_columns
 
 
 def add_geom_mapping(dataset, pipeline_dir, geom_type, resource, pipeline_csv):
@@ -740,6 +740,10 @@ def fetch_add_data_pipeline_csvs(
         else:
             column_csv_path = os.path.join(pipeline_dir, "column.csv")
             try:
+                if geom_type and resource and dataset:
+                    add_geom_mapping(
+                        dataset, pipeline_dir, geom_type, resource, "column.csv"
+                    )
                 if column_mapping and resource and dataset and specification:
                     add_extra_column_mappings(
                         column_csv_path,
@@ -748,10 +752,6 @@ def fetch_add_data_pipeline_csvs(
                         resource,
                         specification,
                         endpoint_hash=endpoint_hash,
-                    )
-                elif geom_type and resource and dataset:
-                    add_geom_mapping(
-                        dataset, pipeline_dir, geom_type, resource, "column.csv"
                     )
             except Exception as e:
                 logger.error(f"Error saving column mappings to column.csv: {e}")
@@ -769,6 +769,10 @@ def fetch_add_data_pipeline_csvs(
 
         if csv_name == "column.csv":
             try:
+                if geom_type and resource and dataset:
+                    add_geom_mapping(
+                        dataset, pipeline_dir, geom_type, resource, csv_name
+                    )
                 if column_mapping and resource and dataset and specification:
                     add_extra_column_mappings(
                         csv_path,
@@ -777,10 +781,6 @@ def fetch_add_data_pipeline_csvs(
                         resource,
                         specification,
                         endpoint_hash=endpoint_hash,
-                    )
-                elif geom_type and resource and dataset:
-                    add_geom_mapping(
-                        dataset, pipeline_dir, geom_type, resource, csv_name
                     )
             except Exception as e:
                 logger.error(f"Error saving column mappings to column.csv: {e}")
