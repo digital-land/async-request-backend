@@ -8,6 +8,7 @@ from src.application.core.pipeline import (
     _get_existing_entities_breakdown,
     _create_entity_organisation,
     _format_task_summary,
+    _find_duplicate_candidates,
     run_task_pipeline,
 )
 
@@ -413,6 +414,31 @@ def test_fetch_add_data_response_reraises_processing_error(monkeypatch, tmp_path
         )
 
 
+def test_find_duplicate_candidates_passes_redirect_lookups(monkeypatch, tmp_path):
+    calls = {}
+
+    def fake_find_duplicate_redirect_candidates(**kwargs):
+        calls.update(kwargs)
+        return [{"old_entity": "100"}]
+
+    monkeypatch.setattr(
+        "src.application.core.pipeline.find_duplicate_redirect_candidates",
+        fake_find_duplicate_redirect_candidates,
+    )
+
+    result = _find_duplicate_candidates(
+        dataset="conservation-area",
+        specification=MagicMock(),
+        output_path=str(tmp_path / "transformed.csv"),
+        redirect_lookups={"100": {"entity": "300", "status": "301"}},
+        organisation_provider="local-authority:STH",
+        organisation_index=MagicMock(),
+    )
+
+    assert result == [{"old_entity": "100"}]
+    assert calls["redirect_lookups"] == {"100": {"entity": "300", "status": "301"}}
+
+
 def test_get_entities_breakdown_success():
     """Test converting entities to breakdown format"""
     new_entities = [
@@ -696,6 +722,43 @@ def test_run_task_pipeline_raises_on_failed_status(tmp_path, monkeypatch):
             organisation="local-authority:CTY",
             issue_path=str(tmp_path / "nonexistent.csv"),
         )
+
+
+def test_run_task_pipeline_passes_column_field_path_and_mandatory_fields(
+    tmp_path, monkeypatch
+):
+    from digital_land.pipeline.task import TaskPipelineStatus
+
+    mock_pipeline = MagicMock()
+    mock_pipeline.run.return_value = TaskPipelineStatus.COMPLETE
+    monkeypatch.setattr(
+        "src.application.core.pipeline.TaskPipeline", lambda: mock_pipeline
+    )
+    monkeypatch.setattr("src.application.core.pipeline.load_mappings", lambda: {})
+
+    task_log_path = str(tmp_path / "tasks.csv")
+    issue_path = str(tmp_path / "issues.csv")
+    column_field_path = str(tmp_path / "column-field.csv")
+    mandatory_fields = ["reference", "name"]
+
+    result = run_task_pipeline(
+        task_log_path=task_log_path,
+        dataset="conservation-area",
+        organisation="local-authority:CTY",
+        issue_path=issue_path,
+        column_field_path=column_field_path,
+        mandatory_fields=mandatory_fields,
+    )
+
+    mock_pipeline.run.assert_called_once_with(
+        output_path=task_log_path,
+        dataset="conservation-area",
+        organisation="local-authority:CTY",
+        issue_path=issue_path,
+        column_field_path=column_field_path,
+        mandatory_fields=mandatory_fields,
+    )
+    assert result == []
 
 
 def test_run_task_pipeline_empty_issue_path_returns_empty(tmp_path, monkeypatch):

@@ -292,7 +292,7 @@ def test_run_workflow_brownfield_land(
     dataset = "brownfield-land"
     organisation = "local-authority:CTY"
     geom_type = ""
-    column_mapping = {"ref": "reference"}
+    column_mapping = {"ref": "reference", "start_date": "start-date"}
     fileName = uploaded_csv_brownfield_land
     source_organisation_csv = f"{test_data_dir}/csvs/organisation.csv"
     destination_organisation_csv = os.path.join(

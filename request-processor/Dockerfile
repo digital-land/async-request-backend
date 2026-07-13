@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir cython
 
 RUN apt update && apt install -y --no-install-recommends \
     gcc g++ make git libc-dev curl proj-bin libproj-dev procps\
-    gdal-bin gdal-data awscli postgresql-client jq && \
+    gdal-bin gdal-data awscli postgresql-client jq libsqlite3-mod-spatialite && \
     rm -rf /var/lib/apt/lists/*
 
 
