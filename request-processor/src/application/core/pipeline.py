@@ -307,7 +307,7 @@ def _transform_add_data_resource(
         endpoints=endpoints if endpoints else None,
     )
     entity_org_mapping = _create_entity_organisation(
-        new_lookups, dataset, organisations[0]
+        new_lookups, dataset, organisations[0], pipeline_dir
     )
 
     # Reload pipeline to pick up newly saved lookups before rerunning transform.
@@ -522,36 +522,66 @@ def _get_existing_entities_breakdown(existing_entities):
     return breakdown
 
 
-def _create_entity_organisation(new_entities, dataset, organisation):
+def _create_entity_organisation(  # noqa: C901
+    new_entities, dataset, organisation, pipeline_dir
+):
     """
     Create entity-organisation mapping from new entities.
 
-    Args:
-        new_entities: List of entity dicts with 'entity' key
-        dataset: Dataset name
-        organisation: Organisation identifier
+    checks whether the new entities already fall within an existing entity-minimum/
+    entity-maximum range for this dataset. If the CSV can't be loaded,
+    processing continues but the returned mapping is flagged with error.
 
-    Returns:
-        List with single dict containing dataset, entity-minimum, entity-maximum, organisation
     """
     if not new_entities:
         return []
 
     entity_values = [
-        entry.get("entity") for entry in new_entities if entry.get("entity")
+        int(entry.get("entity"))
+        for entry in new_entities
+        if entry.get("entity") is not None
     ]
 
     if not entity_values:
         return []
 
-    return [
-        {
-            "dataset": dataset,
-            "entity-minimum": min(entity_values),
-            "entity-maximum": max(entity_values),
-            "organisation": organisation,
-        }
-    ]
+    entity_org_csv_path = os.path.join(pipeline_dir, "entity-organisation.csv")
+    try:
+        with open(entity_org_csv_path, "r", encoding="utf-8") as f:
+            existing_rows = list(csv.DictReader(f))
+        error = False
+    except (OSError, csv.Error) as err:
+        logger.warning(f"Unable to load entity-organisation.csv: {err}")
+        existing_rows = []
+        error = True
+
+    overlap = False
+    if not error:
+        for row in existing_rows:
+            if row.get("dataset") != dataset:
+                continue
+            try:
+                row_min = int(row.get("entity-minimum"))
+                row_max = int(row.get("entity-maximum"))
+            except (TypeError, ValueError):
+                continue
+            if all(row_min <= value <= row_max for value in entity_values):
+                overlap = True
+                break
+
+    entry = {
+        "dataset": dataset,
+        "organisation": organisation,
+        "overlap": overlap,
+        "error": error,
+    }
+    # Omit the range when it can't be trusted, so a downstream consumer
+    # can't blindly commit it to entity-organisation.csv
+    if not overlap and not error:
+        entry["entity-minimum"] = min(entity_values)
+        entry["entity-maximum"] = max(entity_values)
+
+    return [entry]
 
 
 def _map_transformed_entities(transformed_csv_path, pipeline_dir):  # noqa: C901

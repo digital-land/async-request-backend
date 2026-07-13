@@ -6,6 +6,7 @@ from src.application.core.pipeline import (
     fetch_add_data_response,
     _get_entities_breakdown,
     _get_existing_entities_breakdown,
+    _create_entity_organisation,
     _format_task_summary,
     _find_duplicate_candidates,
     run_task_pipeline,
@@ -484,6 +485,89 @@ def test_get_entities_breakdown_missing_fields():
     assert result[0]["entity"] == "1000001"
     assert result[0]["reference"] == ""
     assert result[0]["organisation"] == ""
+
+
+# --- _create_entity_organisation ---
+
+
+def test_create_entity_organisation_sets_overlap_true_when_range_already_present(
+    tmp_path,
+):
+    """New entities that already fall within an existing range should flag overlap"""
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+    (pipeline_dir / "entity-organisation.csv").write_text(
+        "dataset,entity-minimum,entity-maximum,organisation\n"
+        "nature-improvement-area,10100000,10100011,government-organisation:PB202\n"
+    )
+
+    new_entities = [{"entity": "10100002"}, {"entity": "10100005"}]
+
+    result = _create_entity_organisation(
+        new_entities,
+        "nature-improvement-area",
+        "government-organisation:PB202",
+        str(pipeline_dir),
+    )
+
+    assert len(result) == 1
+    assert result[0]["overlap"] is True
+    assert result[0]["error"] is False
+    assert "entity-minimum" not in result[0]
+    assert "entity-maximum" not in result[0]
+
+
+def test_create_entity_organisation_no_overlap_when_range_not_present(tmp_path):
+    """New entities outside all existing ranges should not flag overlap"""
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+    (pipeline_dir / "entity-organisation.csv").write_text(
+        "dataset,entity-minimum,entity-maximum,organisation\n"
+        "nature-improvement-area,10100000,10100011,government-organisation:PB202\n"
+    )
+
+    new_entities = [{"entity": "10200000"}, {"entity": "10200001"}]
+
+    result = _create_entity_organisation(
+        new_entities,
+        "nature-improvement-area",
+        "government-organisation:PB202",
+        str(pipeline_dir),
+    )
+
+    assert len(result) == 1
+    assert result[0]["overlap"] is False
+    assert result[0]["error"] is False
+    assert result[0]["entity-minimum"] == 10200000
+    assert result[0]["entity-maximum"] == 10200001
+
+
+def test_create_entity_organisation_missing_csv_sets_error_true(tmp_path):
+    """Missing entity-organisation.csv should set error but still return a mapping"""
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+
+    new_entities = [{"entity": "10100002"}]
+
+    result = _create_entity_organisation(
+        new_entities,
+        "nature-improvement-area",
+        "government-organisation:PB202",
+        str(pipeline_dir),
+    )
+
+    assert len(result) == 1
+    assert result[0]["error"] is True
+    assert result[0]["overlap"] is False
+    assert "entity-minimum" not in result[0]
+    assert "entity-maximum" not in result[0]
+
+
+def test_create_entity_organisation_empty_entities_returns_empty_list(tmp_path):
+    result = _create_entity_organisation(
+        [], "nature-improvement-area", "government-organisation:PB202", str(tmp_path)
+    )
+    assert result == []
 
 
 def test_get_existing_entities_breakdown_success():
