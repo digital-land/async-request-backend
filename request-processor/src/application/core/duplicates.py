@@ -10,7 +10,9 @@ from application.logging.logger import get_logger
 
 logger = get_logger(__name__)
 
-DATASETTE_BASE_URL = "https://datasette.planning.data.gov.uk"
+DATASETTE_BASE_URL = os.getenv(
+    "DATASETTE_BASE_URL", "https://datasette.planning.data.gov.uk"
+)
 REDIRECT_NOTE = "Redirect duplicate entity selected in Assign Entities"
 
 

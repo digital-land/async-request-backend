@@ -1,4 +1,5 @@
 import csv
+import importlib
 import sqlite3
 import sys
 import types
@@ -242,6 +243,22 @@ def test_fetch_platform_entities_reads_datasette_without_pagination(monkeypatch)
             "timeout": 120,
         }
     ]
+
+
+def test_datasette_base_url_can_be_configured(monkeypatch):
+    monkeypatch.setenv(
+        "DATASETTE_BASE_URL", "https://datasette.staging.planning.data.gov.uk"
+    )
+    reloaded = importlib.reload(duplicates)
+
+    try:
+        assert (
+            reloaded.DATASETTE_BASE_URL
+            == "https://datasette.staging.planning.data.gov.uk"
+        )
+    finally:
+        monkeypatch.delenv("DATASETTE_BASE_URL")
+        importlib.reload(duplicates)
 
 
 def test_name_similarity_uses_partial_ratio_for_added_words():
