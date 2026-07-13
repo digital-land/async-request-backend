@@ -588,6 +588,58 @@ def test_fetch_add_data_pipeline_csvs_handles_http_error(monkeypatch, tmp_path):
     assert os.path.exists(pipeline_dir_str)
 
 
+def test_fetch_add_data_pipeline_csvs_applies_geom_and_column_mapping(
+    monkeypatch, tmp_path
+):
+    collection = "tree-collection"
+    pipeline_dir = tmp_path / "pipeline"
+    monkeypatch.setattr(
+        "src.application.core.workflow.CONFIG_URL", "http://example.com/config/"
+    )
+
+    def fake_download_file(url, path):
+        if path.endswith("column.csv"):
+            _write_column_csv(
+                path,
+                [
+                    {
+                        "dataset": "tree",
+                        "resource": "resource-hash",
+                        "column": "id",
+                        "field": "reference",
+                    }
+                ],
+            )
+        else:
+            with open(path, "w") as f:
+                f.write("dummy data")
+
+    monkeypatch.setattr(
+        "src.application.core.workflow.download_file", fake_download_file
+    )
+    mock_spec = MagicMock(dataset_field={"tree": ["geometry", "reference"]})
+
+    fetch_add_data_pipeline_csvs(
+        collection,
+        str(pipeline_dir),
+        column_mapping={"na": "IGNORE"},
+        geom_type="polygon",
+        resource="resource-hash",
+        dataset="tree",
+        specification=mock_spec,
+    )
+
+    with open(pipeline_dir / "column.csv", newline="") as f:
+        rows = list(csv.DictReader(f))
+
+    assert {
+        "dataset": "tree",
+        "resource": "resource-hash",
+        "column": "WKT",
+        "field": "geometry",
+    } in rows
+
+
 def test_download_file_does_not_add_auth_without_github_env(monkeypatch, tmp_path):
     destination = tmp_path / "column.csv"
     requests = []
