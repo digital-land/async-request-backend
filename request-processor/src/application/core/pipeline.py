@@ -11,6 +11,8 @@ from digital_land.pipeline.task import TaskPipeline, TaskPipelineStatus
 from digital_land.commands import get_resource_unidentified_lookups
 from pathlib import Path
 
+from application.core.duplicates import find_duplicate_redirect_candidates
+
 logger = get_logger(__name__)
 
 
@@ -254,6 +256,107 @@ def _assign_entries(
     return []
 
 
+def _transform_add_data_resource(
+    *,
+    pipeline,
+    resource_file_path,
+    output_path,
+    organisation,
+    organisations,
+    valid_category_values,
+    converted_path,
+    endpoints,
+    dataset,
+    pipeline_dir,
+    specification,
+    cache_dir,
+):
+    issues_log = pipeline.transform(
+        input_path=resource_file_path,
+        output_path=output_path,
+        organisation=organisation,
+        organisations=organisations,
+        resource=resource_from_path(resource_file_path),
+        valid_category_values=valid_category_values,
+        disable_lookups=False,
+        endpoints=endpoints,
+        converted_path=converted_path,
+    )
+
+    existing_entities = _map_transformed_entities(output_path, pipeline_dir)
+    unknown_issue_types = {
+        "unknown entity",
+        "unknown entity - missing reference",
+    }
+    has_unknown = any(
+        row.get("issue-type") in unknown_issue_types
+        for row in issues_log.rows
+        if isinstance(row, dict)
+    )
+
+    if not has_unknown:
+        return pipeline, issues_log, existing_entities, [], []
+
+    new_lookups = _assign_entries(
+        resource_path=resource_file_path,
+        dataset=dataset,
+        organisation=organisations[0],
+        pipeline_dir=pipeline_dir,
+        specification=specification,
+        cache_dir=cache_dir,
+        endpoints=endpoints if endpoints else None,
+    )
+    entity_org_mapping = _create_entity_organisation(
+        new_lookups, dataset, organisations[0]
+    )
+
+    # Reload pipeline to pick up newly saved lookups before rerunning transform.
+    pipeline = Pipeline(pipeline_dir, dataset, specification=specification)
+    issues_log = pipeline.transform(
+        input_path=resource_file_path,
+        output_path=output_path,
+        organisation=organisation,
+        organisations=organisations,
+        resource=resource_from_path(resource_file_path),
+        valid_category_values=valid_category_values,
+        disable_lookups=False,
+        endpoints=endpoints,
+        converted_path=converted_path,
+    )
+
+    return pipeline, issues_log, existing_entities, new_lookups, entity_org_mapping
+
+
+def _process_add_data_resource(resource_file, **kwargs):
+    try:
+        return _transform_add_data_resource(**kwargs)
+    except Exception as err:
+        logger.exception(f"Error processing {resource_file}: {err}")
+        raise
+
+
+def _find_duplicate_candidates(
+    dataset,
+    specification,
+    output_path,
+    redirect_lookups,
+    organisation_provider,
+    organisation_index,
+):
+    try:
+        return find_duplicate_redirect_candidates(
+            dataset=dataset,
+            specification=specification,
+            transformed_csv_path=output_path,
+            redirect_lookups=redirect_lookups,
+            organisation_provider=organisation_provider,
+            organisation_index=organisation_index,
+        )
+    except Exception as err:
+        logger.exception("Duplicate analysis failed for dataset %s: %s", dataset, err)
+        return []
+
+
 def fetch_add_data_response(
     dataset,
     organisation_provider,
@@ -303,83 +406,49 @@ def fetch_add_data_response(
             logger.info(
                 f"Processing file {idx + 1}/{len(files_in_resource)}: {resource_file}"
             )
-            try:
-                # Try add data with pipeline transform to see if no entities found
-                issues_log = pipeline.transform(
-                    input_path=resource_file_path,
-                    output_path=output_path,
-                    organisation=organisation,
-                    organisations=organisations,
-                    resource=resource_from_path(resource_file_path),
-                    valid_category_values=valid_category_values,
-                    disable_lookups=False,
-                    endpoints=endpoints,
-                    converted_path=converted_path,
+            (
+                pipeline,
+                issues_log,
+                transformed_entities,
+                new_lookups,
+                new_entity_org_mapping,
+            ) = _process_add_data_resource(
+                resource_file,
+                pipeline=pipeline,
+                resource_file_path=resource_file_path,
+                output_path=output_path,
+                organisation=organisation,
+                organisations=organisations,
+                valid_category_values=valid_category_values,
+                converted_path=converted_path,
+                endpoints=endpoints,
+                dataset=dataset,
+                pipeline_dir=pipeline_dir,
+                specification=specification,
+                cache_dir=cache_dir,
+            )
+
+            existing_entities.extend(transformed_entities)
+            if new_lookups:
+                logger.info(
+                    f"Found {len(new_lookups)} unidentified lookups in {resource_file}"
                 )
-
-                existing_entities.extend(
-                    _map_transformed_entities(output_path, pipeline_dir)
-                )
-
-                # Check if there are unknown entity issues in the log
-                unknown_issue_types = {
-                    "unknown entity",
-                    "unknown entity - missing reference",
-                }
-                has_unknown = any(
-                    row.get("issue-type") in unknown_issue_types
-                    for row in issues_log.rows
-                    if isinstance(row, dict)
-                )
-
-                if has_unknown:
-                    new_lookups = _assign_entries(
-                        resource_path=resource_file_path,
-                        dataset=dataset,
-                        organisation=organisations[0],
-                        pipeline_dir=pipeline_dir,
-                        specification=specification,
-                        cache_dir=cache_dir,
-                        endpoints=endpoints if endpoints else None,
-                    )
-                    logger.info(
-                        f"Found {len(new_lookups)} unidentified lookups in {resource_file}"
-                    )
-                    new_entities.extend(new_lookups)
-
-                    # Default create a entity-organisation mapping, front end can use the 'authoritative' flag
-                    entity_org_mapping = _create_entity_organisation(
-                        new_lookups, dataset, organisations[0]
-                    )
-                    # TODO, save to pipeline as well for rerun?
-
-                    # Reload pipeline to pick up newly saved lookups
-                    pipeline = Pipeline(
-                        pipeline_dir, dataset, specification=specification
-                    )
-
-                    # Now re-run transform to check and return issue log
-                    issues_log = pipeline.transform(
-                        input_path=resource_file_path,
-                        output_path=output_path,
-                        organisation=organisation,
-                        organisations=organisations,
-                        resource=resource_from_path(resource_file_path),
-                        valid_category_values=valid_category_values,
-                        disable_lookups=False,
-                        endpoints=endpoints,
-                        converted_path=converted_path,
-                    )
-                else:
-                    logger.info(f"No unidentified lookups found in {resource_file}")
-
-            except Exception as err:
-                logger.exception(f"Error processing {resource_file}: {err}")
-                raise
+                new_entities.extend(new_lookups)
+                entity_org_mapping = new_entity_org_mapping
+            else:
+                logger.info(f"No unidentified lookups found in {resource_file}")
 
         new_entities_breakdown = _get_entities_breakdown(new_entities)
         existing_entities_breakdown = _get_existing_entities_breakdown(
             existing_entities
+        )
+        duplicate_candidates = _find_duplicate_candidates(
+            dataset,
+            specification,
+            output_path,
+            pipeline.redirect_lookups(),
+            organisations[0],
+            organisation,
         )
 
         if issues_log:
@@ -391,6 +460,7 @@ def fetch_add_data_response(
             "new-entities": new_entities_breakdown,
             "existing-entities": existing_entities_breakdown,
             "entity-organisation": entity_org_mapping,
+            "duplicate-candidates": duplicate_candidates,
             "pipeline-issues": (
                 [dict(issue) for issue in issues_log.rows] if issues_log else []
             ),
