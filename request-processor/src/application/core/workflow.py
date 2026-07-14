@@ -322,7 +322,7 @@ def fetch_pipeline_csvs(
         try:
             download_file(url, csv_path)
             downloaded = True
-        except HTTPError as e:
+        except (HTTPError, URLError, socket.timeout) as e:
             logger.warning(f"Failed to retrieve {pipeline_csv} from {url}: {e}")
 
         if downloaded:
