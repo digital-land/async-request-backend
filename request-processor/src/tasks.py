@@ -519,7 +519,7 @@ def _capture_sentry_event(
         request_id: The request ID for context
         handled: If True, this is an expected user error (e.g. an
             unreachable/unsupported URL submitted for checking) - recorded as
-            a metric plus a structured log entry, not a Sentry Issue, since
+            a metric plus a regular log entry, not a Sentry Issue, since
             it isn't an application bug. If False, treated as an unexpected
             error and captured as a Sentry Issue.
         task_name: Task name (defaults to "CheckURL")
@@ -538,12 +538,12 @@ def _capture_sentry_event(
                 "plugin": error_log.get("plugin") if is_dict else None,
             },
         )
-        attributes = {"request_id": request_id, "task": task_name}
-        if is_dict:
-            attributes.update(
-                {k: str(v) for k, v in error_log.items() if v is not None}
-            )
-        sentry_sdk.logger.warning(message, attributes=attributes)
+        logger.warning(
+            f"Check URL user error: {message}",
+            extra={"request_id": request_id, "task": task_name, **error_log}
+            if is_dict
+            else {"request_id": request_id, "task": task_name},
+        )
         return
 
     with sentry_sdk.new_scope() as scope:
