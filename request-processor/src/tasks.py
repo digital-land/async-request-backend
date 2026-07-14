@@ -525,9 +525,7 @@ def _capture_sentry_event(
         task_name: Task name (defaults to "CheckURL")
     """
     is_dict = isinstance(error_log, dict)
-    message = (
-        error_log.get("message", "Error occurred") if is_dict else str(error_log)
-    )
+    message = error_log.get("message", "Error occurred") if is_dict else str(error_log)
 
     if handled:
         sentry_sdk.metrics.count(
