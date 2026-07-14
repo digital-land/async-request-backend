@@ -241,8 +241,8 @@ def test_fetch_pipelines(
     )
 
     # Check that download_file was called with the expected URL and file path
-    source_url = "https://raw.githubusercontent.com/digital-land//"
-    expected_url = f"{source_url}{collection + '-collection'}/main/pipeline/column.csv"
+    config_url = "https://raw.githubusercontent.com/digital-land/config/refs/heads/main/"
+    expected_url = f"{config_url}pipeline/{collection}/column.csv"
     expected_file_path = os.path.join(pipeline_dir, "column.csv")
     mocked_download_file.assert_any_call(expected_url, expected_file_path)
     assert (
