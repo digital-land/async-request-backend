@@ -3,6 +3,7 @@ from typing import Dict
 import urllib.parse
 
 import sentry_sdk
+from sentry_sdk.integrations.logging import ignore_logger
 from celery.utils.log import get_task_logger
 from celery.signals import task_prerun, task_success, task_failure, celeryd_init
 import request_model.schemas as schemas
@@ -471,6 +472,10 @@ def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
 @celeryd_init.connect
 def init_sentry(**_kwargs):
     if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
+        # esridump logs ERROR-level on handled/expected failures (e.g. probing
+        # non-ArcGIS URLs with the arcgis fallback plugin), which would
+        # otherwise be captured as spurious Sentry issues.
+        ignore_logger("esridump.dumper")
         sentry_sdk.init(
             enable_tracing=os.environ.get("SENTRY_TRACING_ENABLED", "false").lower()
             == "true",
@@ -507,17 +512,43 @@ def _capture_sentry_event(
     task_name="CheckURL",
 ):
     """
-    Capture error logs in Sentry for CheckURL task.
+    Report CheckURL errors to Sentry.
 
     Args:
         error_log: A dict containing error details
         request_id: The request ID for context
-        handled: If True, treated as an expected/user error (warning). If False, treated as an unexpected error (error).
+        handled: If True, this is an expected user error (e.g. an
+            unreachable/unsupported URL submitted for checking) - recorded as
+            a metric plus a regular log entry, not a Sentry Issue, since
+            it isn't an application bug. If False, treated as an unexpected
+            error and captured as a Sentry Issue.
         task_name: Task name (defaults to "CheckURL")
     """
+    is_dict = isinstance(error_log, dict)
+    message = error_log.get("message", "Error occurred") if is_dict else str(error_log)
+
+    if handled:
+        sentry_sdk.metrics.count(
+            "async.check_url.user_error",
+            1,
+            attributes={
+                "task": task_name,
+                "exception": error_log.get("exception") if is_dict else None,
+                "status": error_log.get("status") if is_dict else None,
+                "plugin": error_log.get("plugin") if is_dict else None,
+            },
+        )
+        logger.warning(
+            f"Check URL user error: {message}",
+            extra={"request_id": request_id, "task": task_name, **error_log}
+            if is_dict
+            else {"request_id": request_id, "task": task_name},
+        )
+        return
+
     with sentry_sdk.new_scope() as scope:
         context = {"id": request_id}
-        if isinstance(error_log, dict):
+        if is_dict:
             if "endpoint-url" in error_log:
                 context["url"] = error_log["endpoint-url"]
             # Add all error_log fields as extra data
@@ -526,22 +557,11 @@ def _capture_sentry_event(
 
         scope.set_context("request", context)
         scope.set_tag("task", task_name)
-        scope.set_tag("handled", str(handled))
+        scope.set_tag("handled", "False")
 
-        message = (
-            error_log.get("message", "Error occurred")
-            if isinstance(error_log, dict)
-            else str(error_log)
+        sentry_sdk.capture_message(
+            "Check URL Unexpected Error: " + message, level="error"
         )
-
-        if handled:
-            title = "Check URL User Error: " + message
-            level = "warning"
-        else:
-            title = "Check URL Unexpected Error: " + message
-            level = "error"
-
-        sentry_sdk.capture_message(title, level=level)
 
 
 def _get_response(request_id):

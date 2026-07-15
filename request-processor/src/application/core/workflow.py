@@ -317,31 +317,13 @@ def fetch_pipeline_csvs(
     not_mapped_columns = []
     for pipeline_csv in pipeline_csvs:
         downloaded = False
+        csv_path = os.path.join(pipeline_dir, pipeline_csv)
+        url = f"{CONFIG_URL}pipeline/{collection}/{pipeline_csv}"
         try:
-            csv_path = os.path.join(pipeline_dir, pipeline_csv)
-            print(
-                f"{source_url}/{collection + '-collection'}/main/pipeline/{pipeline_csv}"
-            )
-            download_file(
-                f"{source_url}/{collection + '-collection'}/main/pipeline/{pipeline_csv}",
-                csv_path,
-            )
+            download_file(url, csv_path)
             downloaded = True
-        except HTTPError as e:
-            logger.warning(
-                f"Failed to retrieve pipeline CSV: {e}. Attempting to download from central config repository"
-            )
-            logger.info(
-                f"{source_url}/{'config'}/main/pipeline/{collection}/{pipeline_csv}"
-            )
-            try:
-                download_file(
-                    f"{source_url}/{'config'}/main/pipeline/{collection}/{pipeline_csv}",
-                    csv_path,
-                )
-                downloaded = True
-            except HTTPError as e:
-                logger.error(f"Failed to retrieve from config repository: {e}")
+        except (HTTPError, URLError, socket.timeout) as e:
+            logger.warning(f"Failed to retrieve {pipeline_csv} from {url}: {e}")
 
         if downloaded:
             try:
