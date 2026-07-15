@@ -40,6 +40,7 @@ boto3==1.37.29
     # via
     #   -r requirements/requirements.txt
     #   celery
+    #   cloudpathlib
     #   digital-land
     #   kombu
     #   moto
@@ -113,6 +114,8 @@ click-repl==0.3.0
     # via
     #   -r requirements/requirements.txt
     #   celery
+cloudpathlib[s3]==0.24.0
+    # via digital-land
 cloudpickle==3.1.1
     # via
     #   -r requirements/requirements.txt
@@ -191,7 +194,6 @@ greenlet==3.1.1
     # via
     #   -r requirements/requirements.txt
     #   eventlet
-    #   sqlalchemy
 h11==0.14.0
     # via
     #   -r requirements/requirements.txt
@@ -333,12 +335,20 @@ pluggy==1.5.0
     #   -r requirements/requirements.txt
     #   datasette
     #   pytest
+polars==1.42.1
+    # via digital-land
+polars-runtime-32==1.42.1
+    # via polars
 pre-commit==4.2.0
     # via -r requirements/requirements.txt
 prompt-toolkit==3.0.50
     # via
     #   -r requirements/requirements.txt
     #   click-repl
+psutil==7.2.2
+    # via
+    #   -r requirements/requirements.txt
+    #   digital-land
 psycopg2-binary==2.9.10
     # via
     #   -r requirements/requirements.txt
@@ -442,7 +452,7 @@ s3transfer==0.11.4
     # via
     #   -r requirements/requirements.txt
     #   boto3
-sentry-sdk[celery]==2.2.1
+sentry-sdk[celery]==2.44.0
     # via -r requirements/requirements.txt
 shapely==2.0.2
     # via
@@ -490,6 +500,7 @@ typing-extensions==4.13.1
     #   -r requirements/requirements.txt
     #   anyio
     #   asgiref
+    #   cloudpathlib
     #   datasette
     #   flexcache
     #   flexparser
