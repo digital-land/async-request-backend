@@ -2,6 +2,7 @@ import os
 import csv
 import json
 import yaml
+from datetime import date
 from application.logging.logger import get_logger
 from digital_land.organisation import Organisation
 from digital_land.api import API
@@ -14,6 +15,197 @@ from pathlib import Path
 from application.core.duplicates import find_duplicate_redirect_candidates
 
 logger = get_logger(__name__)
+
+
+def _selected_entity_keys(selected_entities):
+    """Return the stable keys used to match selected add-data rows."""
+    return {
+        (
+            str(entity.get("reference", "")).strip(),
+            str(entity.get("organisation", "")).strip(),
+        )
+        for entity in selected_entities or []
+        if entity.get("reference") and entity.get("organisation")
+    }
+
+
+def _filter_selected_entities(new_entities, selected_entities):
+    """
+    Return selected entities, treating a missing or empty selection as all entities.
+
+    This mirrors the add-data request contract: selected_entities=None or []
+    means process every new entity. A non-empty but invalid selection matches none.
+    """
+    if selected_entities is None or selected_entities == []:
+        return new_entities
+
+    selected_keys = _selected_entity_keys(selected_entities)
+    if not selected_keys:
+        return []
+
+    return [
+        entity
+        for entity in new_entities
+        if (
+            str(entity.get("reference", "")).strip(),
+            str(entity.get("organisation", "")).strip(),
+        )
+        in selected_keys
+    ]
+
+
+def _normalise_selection_list(selection):
+    """Normalise optional single-object/list request selections to a list."""
+    if selection is None or selection == []:
+        return []
+    if isinstance(selection, dict):
+        return [selection]
+    if not isinstance(selection, list):
+        return []
+    return selection
+
+
+def _create_old_entity_redirects(
+    new_entities,
+    selected_redirects,
+    selected_entities=None,
+    duplicate_candidates=None,
+):
+    """
+    Build old-entity rows from explicit redirect selections.
+
+    Redirects are only created for assigned entities matching the selected
+    reference and organisation. When duplicate evidence exists for the same
+    old/new entity pair, it is copied into the notes field.
+    """
+    selected_redirects = _normalise_selection_list(selected_redirects)
+    if not selected_redirects:
+        return []
+
+    selected_entity_keys = _selected_entity_keys(selected_entities)
+    new_entity_by_key = {
+        (
+            str(entity.get("reference", "")).strip(),
+            str(entity.get("organisation", "")).strip(),
+        ): entity
+        for entity in new_entities
+    }
+    evidence_by_redirect = {
+        (
+            str(candidate.get("old_entity", "")).strip(),
+            str(candidate.get("entity", "")).strip(),
+        ): str(candidate.get("evidence", "") or "")
+        for candidate in duplicate_candidates or []
+    }
+
+    old_entity_rows = []
+    seen = set()
+    for redirect in selected_redirects:
+        old_entity_number = str(redirect.get("old_entity_number", "")).strip()
+        key = (
+            str(redirect.get("reference", "")).strip(),
+            str(redirect.get("organisation", "")).strip(),
+        )
+        if selected_entity_keys and key not in selected_entity_keys:
+            continue
+
+        new_entity = new_entity_by_key.get(key)
+        if not old_entity_number or not new_entity or not new_entity.get("entity"):
+            continue
+
+        new_entity_number = new_entity.get("entity")
+        notes = evidence_by_redirect.get(
+            (old_entity_number, str(new_entity_number).strip()), ""
+        )
+        row = _old_entity_row(old_entity_number, new_entity_number, notes=notes)
+        if not row:
+            continue
+
+        row_key = (row["old-entity"], row["entity"])
+        if row_key in seen:
+            continue
+        seen.add(row_key)
+        old_entity_rows.append(row)
+
+    return old_entity_rows
+
+
+def _old_entity_row(old_entity, entity, notes=""):
+    """Return a valid old-entity redirect row, or None for incomplete ids."""
+    old_entity = str(old_entity or "").strip()
+    entity = str(entity or "").strip()
+    if not old_entity or not entity:
+        return None
+
+    return {
+        "old-entity": old_entity,
+        "status": "301",
+        "entity": entity,
+        "entry-date": date.today().isoformat(),
+        "notes": str(notes or ""),
+    }
+
+
+def _name_similarity_score(candidate):
+    """Parse a duplicate candidate name similarity value like '86%'."""
+    similarity = str(candidate.get("name_similarity", "") or "").strip()
+    if similarity.endswith("%"):
+        similarity = similarity[:-1]
+    try:
+        return int(float(similarity))
+    except ValueError:
+        return 0
+
+
+def _should_auto_redirect(candidate):
+    """Return True for duplicate candidates safe enough to redirect automatically."""
+    match_type = candidate.get("match_type")
+    if match_type == "complete_match":
+        return True
+    return match_type == "single_match" and _name_similarity_score(candidate) > 85
+
+
+def _create_auto_old_entity_redirects(duplicate_candidates, selected_entity_ids=None):
+    """
+    Build old-entity rows for duplicate matches that meet the auto-redirect rules.
+
+    Complete matches always qualify. Single matches qualify only above 85%.
+    Existing redirects are skipped, and selected_entity_ids limits redirects to
+    the user's selected new entities when a non-empty selection was supplied.
+    """
+    old_entity_rows = []
+    for candidate in duplicate_candidates:
+        entity = str(candidate.get("entity", "")).strip()
+        if selected_entity_ids is not None and entity not in selected_entity_ids:
+            continue
+        if candidate.get("old_entity_redirects"):
+            continue
+        if not _should_auto_redirect(candidate):
+            continue
+
+        row = _old_entity_row(
+            candidate.get("old_entity"),
+            entity,
+            notes=candidate.get("evidence", ""),
+        )
+        if row:
+            old_entity_rows.append(row)
+
+    return old_entity_rows
+
+
+def _merge_old_entity_rows(*row_groups):
+    """Merge old-entity row groups, keeping the first row for each old/new pair."""
+    rows = []
+    seen = set()
+    for row_group in row_groups:
+        for row in row_group:
+            key = (row.get("old-entity"), row.get("entity"))
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(row)
+    return rows
 
 
 def load_mappings():
@@ -195,7 +387,16 @@ def _assign_entries(
     specification,
     cache_dir,
     endpoints=None,
+    selected_entities=None,
 ):
+    selected_entity_order = {
+        (
+            str(entity.get("reference", "")).strip(),
+            str(entity.get("organisation", "")).strip(),
+        ): idx
+        for idx, entity in enumerate(selected_entities or [])
+        if entity.get("reference") and entity.get("organisation")
+    }
     pipeline = Pipeline(pipeline_dir, dataset)
     resource_lookups = get_resource_unidentified_lookups(
         resource_path,
@@ -223,10 +424,25 @@ def _assign_entries(
 
     # Track which entries are new by checking before adding
     new_entries_added = []
+    selected_entries = []
+    other_entries = []
     for new_lookup in unassigned_entries:
-        for idx, entry in enumerate(new_lookup):
-            lookups.add_entry(entry[0])
-            new_entries_added.append(entry[0])
+        for entry in new_lookup:
+            entry_key = (
+                str(entry[0].get("reference", "")).strip(),
+                str(entry[0].get("organisation", "")).strip(),
+            )
+            if entry_key in selected_entity_order:
+                selected_entries.append((selected_entity_order[entry_key], entry[0]))
+            else:
+                other_entries.append(entry[0])
+
+    for _, entry in sorted(selected_entries, key=lambda selected: selected[0]):
+        lookups.add_entry(entry)
+        new_entries_added.append(entry)
+    for entry in other_entries:
+        lookups.add_entry(entry)
+        new_entries_added.append(entry)
 
     # save edited csvs
     max_entity_num = lookups.get_max_entity(pipeline.name, specification)
@@ -270,7 +486,15 @@ def _transform_add_data_resource(
     pipeline_dir,
     specification,
     cache_dir,
+    selected_entities,
 ):
+    """
+    Transform one add-data resource and assign entities when unknown rows exist.
+
+    All new rows are assigned entity numbers, but selected rows are prioritised
+    and only selected rows are used for the entity-organisation summary when a
+    non-empty selection is supplied.
+    """
     issues_log = pipeline.transform(
         input_path=resource_file_path,
         output_path=output_path,
@@ -305,9 +529,13 @@ def _transform_add_data_resource(
         specification=specification,
         cache_dir=cache_dir,
         endpoints=endpoints if endpoints else None,
+        selected_entities=selected_entities,
     )
     entity_org_mapping = _create_entity_organisation(
-        new_lookups, dataset, organisations[0], pipeline_dir
+        _filter_selected_entities(new_lookups, selected_entities),
+        dataset,
+        organisations[0],
+        pipeline_dir,
     )
 
     # Reload pipeline to pick up newly saved lookups before rerunning transform.
@@ -367,6 +595,8 @@ def fetch_add_data_response(
     cache_dir,
     endpoint,
     converted_path=None,
+    selected_entities=None,
+    selected_redirects=None,
 ):
     """
     Run the add-data pipeline transform and build the pipeline summary response.
@@ -426,6 +656,7 @@ def fetch_add_data_response(
                 pipeline_dir=pipeline_dir,
                 specification=specification,
                 cache_dir=cache_dir,
+                selected_entities=selected_entities,
             )
 
             existing_entities.extend(transformed_entities)
@@ -438,7 +669,11 @@ def fetch_add_data_response(
             else:
                 logger.info(f"No unidentified lookups found in {resource_file}")
 
-        new_entities_breakdown = _get_entities_breakdown(new_entities)
+        selected_new_entities = _filter_selected_entities(
+            new_entities, selected_entities
+        )
+        new_entities_breakdown = _get_entities_breakdown(selected_new_entities)
+        all_entities_breakdown = _get_entities_breakdown(new_entities)
         existing_entities_breakdown = _get_existing_entities_breakdown(
             existing_entities
         )
@@ -450,6 +685,22 @@ def fetch_add_data_response(
             organisations[0],
             organisation,
         )
+        selected_entity_ids = (
+            {str(entity.get("entity")) for entity in selected_new_entities}
+            if selected_entities is not None and selected_entities != []
+            else None
+        )
+        old_entity_rows = _merge_old_entity_rows(
+            _create_auto_old_entity_redirects(
+                duplicate_candidates, selected_entity_ids=selected_entity_ids
+            ),
+            _create_old_entity_redirects(
+                new_entities,
+                selected_redirects,
+                selected_entities,
+                duplicate_candidates=duplicate_candidates,
+            ),
+        )
 
         if issues_log:
             issues_log.add_severity_column(severity_mapping=specification.issue_type)
@@ -458,8 +709,10 @@ def fetch_add_data_response(
             "new-in-resource": len(new_entities),
             "existing-in-resource": len(existing_entities),
             "new-entities": new_entities_breakdown,
+            "all-entities": all_entities_breakdown,
             "existing-entities": existing_entities_breakdown,
             "entity-organisation": entity_org_mapping,
+            "old-entity": old_entity_rows,
             "duplicate-candidates": duplicate_candidates,
             "pipeline-issues": (
                 [dict(issue) for issue in issues_log.rows] if issues_log else []

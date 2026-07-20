@@ -432,6 +432,8 @@ def add_data_task(request: Dict, directories=None):
                 github_branch=request_data.github_branch,
                 endpoint_parameters=request_data.endpoint_parameters,
                 endpoints=endpoints,
+                selected_entities=getattr(request_data, "selected_entities", None),
+                selected_redirects=getattr(request_data, "selected_redirects", None),
             )
             if "plugin" in log:
                 response["plugin"] = log["plugin"]

@@ -35,6 +35,7 @@ class CheckUrlParams(Params):
     type: Literal[RequestTypeEnum.check_url] = RequestTypeEnum.check_url
     url: str
 
+
 class AddDataParams(Params):
     type: Literal[RequestTypeEnum.add_data] = RequestTypeEnum.add_data
     url: Optional[str] = None
@@ -46,6 +47,8 @@ class AddDataParams(Params):
     organisation: Optional[str] = None
     plugin: Optional[PluginTypeEnum] = None
     github_branch: Optional[str] = None
+    selected_entities: Optional[List[Dict[str, str]]] = None
+    selected_redirects: Optional[Union[List[Dict[str, str]], Dict[str, str]]] = None
 
 
 class RequestBase(BaseModel):
