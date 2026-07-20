@@ -209,6 +209,7 @@ def _merge_old_entity_rows(*row_groups):
 
 
 def load_mappings():
+    """Load task summary templates keyed by field and issue type."""
     mappings_file_path = os.path.join(
         os.path.dirname(os.path.dirname(__file__)),
         "../application/configs/mapping.yaml",
@@ -220,6 +221,7 @@ def load_mappings():
 
 
 def _format_task_summary(details_str, task_source, mappings):
+    """Create a human-readable task summary from task log detail JSON."""
     try:
         details = json.loads(details_str)
     except (json.JSONDecodeError, TypeError):
@@ -253,6 +255,7 @@ def run_task_pipeline(
     column_field_path=None,
     mandatory_fields=None,
 ):
+    """Run the task pipeline and attach generated summary text to each task row."""
     task_pipeline = TaskPipeline()
     status = task_pipeline.run(
         output_path=task_log_path,
@@ -294,6 +297,13 @@ def fetch_response_data(
     additional_col_mappings,
     additional_concats,
 ):
+    """
+    Run the standard request pipeline and write transformed data plus issue logs.
+
+    This path is used by non-add-data workflows. It assigns unknown entities
+    before transforming, then saves issue, column-field, and dataset-resource
+    logs for each uploaded resource.
+    """
     pipeline = Pipeline(pipeline_dir, dataset, specification=specification)
     api = API(specification=specification)
 
@@ -376,6 +386,7 @@ def fetch_response_data(
 
 
 def resource_from_path(path):
+    """Return the resource hash/name from an uploaded resource file path."""
     return Path(path).stem
 
 
@@ -389,6 +400,14 @@ def _assign_entries(
     endpoints=None,
     selected_entities=None,
 ):
+    """
+    Assign entity numbers for unidentified lookups in a resource.
+
+    When selected_entities is supplied, matching rows are added to lookup.csv
+    first so they receive the lowest new entity numbers. Unselected rows are
+    still added afterwards; selection affects ordering, not whether a row is
+    assigned.
+    """
     selected_entity_order = {
         (
             str(entity.get("reference", "")).strip(),
@@ -556,6 +575,7 @@ def _transform_add_data_resource(
 
 
 def _process_add_data_resource(resource_file, **kwargs):
+    """Wrap one add-data resource transform with resource-specific logging."""
     try:
         return _transform_add_data_resource(**kwargs)
     except Exception as err:
@@ -571,6 +591,12 @@ def _find_duplicate_candidates(
     organisation_provider,
     organisation_index,
 ):
+    """
+    Find possible redirects for the transformed add-data output.
+
+    Duplicate analysis should not block add-data processing, so failures are
+    logged and returned as an empty candidate list.
+    """
     try:
         return find_duplicate_redirect_candidates(
             dataset=dataset,
@@ -604,6 +630,12 @@ def fetch_add_data_response(
     This is reached via POST /requests with type "add_data" through the
     AddDataTask and add_data_workflow. Processing exceptions are re-raised so
     add_data_workflow can return them in the standard async error response.
+
+    selected_entities controls summary filtering and assignment order:
+    None or [] means all new entities are reported as new-entities, while a
+    non-empty list reports only those selected rows there and keeps the full
+    assignment list in all-entities. selected_redirects is only used to create
+    explicit old-entity redirect rows; None or [] means no manual redirects.
     """
     try:
         pipeline = Pipeline(pipeline_dir, dataset, specification=specification)
