@@ -542,7 +542,7 @@ def _capture_sentry_event(
         )
         logger.warning(
             f"Check URL user error: {message}",
-            extra={"request_id": request_id, "task": task_name, **error_log}
+            extra={"request_id": request_id, "task": task_name, "error_log": error_log}
             if is_dict
             else {"request_id": request_id, "task": task_name},
         )
