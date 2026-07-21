@@ -414,7 +414,7 @@ def test_add_data_workflow_calls(monkeypatch):
         cache_dir,
         endpoint,
         converted_path=None,
-        selected_entities=None,
+        excluded_references=None,
         selected_redirects=None,
     ):
         called["fetch_add_data_response"] = {
@@ -426,7 +426,7 @@ def test_add_data_workflow_calls(monkeypatch):
             "specification": specification,
             "cache_dir": cache_dir,
             "endpoint": endpoint,
-            "selected_entities": selected_entities,
+            "excluded_references": excluded_references,
             "selected_redirects": selected_redirects,
         }
         return {"result": "ok"}
@@ -480,7 +480,7 @@ def test_add_data_workflow_calls(monkeypatch):
     assert called["fetch_add_data_response"]["cache_dir"] == directories.CACHE_DIR
     expected_endpoint_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()
     assert called["fetch_add_data_response"]["endpoint"] == expected_endpoint_hash
-    assert called["fetch_add_data_response"]["selected_entities"] is None
+    assert called["fetch_add_data_response"]["excluded_references"] is None
     assert called["fetch_add_data_response"]["selected_redirects"] is None
 
 

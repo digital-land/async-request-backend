@@ -272,7 +272,7 @@ def test_add_data_task_success_with_resource(monkeypatch):
     request_schema.params.column_mapping = None
     request_schema.params.github_branch = None
     request_schema.params.endpoint_parameters = None
-    request_schema.params.selected_entities = None
+    request_schema.params.excluded_references = None
     request_schema.params.selected_redirects = None
 
     workflow_call = {}

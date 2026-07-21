@@ -284,7 +284,9 @@ def test_fetch_add_data_response_success(monkeypatch, tmp_path):
     assert "existing-in-resource" in result
 
 
-def test_assign_entries_prioritises_selected_entities(monkeypatch, tmp_path):
+def test_assign_entries_prioritises_rows_not_in_excluded_references(
+    monkeypatch, tmp_path
+):
     pipeline_dir = tmp_path / "pipeline"
     pipeline_dir.mkdir()
     resource_path = tmp_path / "resource.csv"
@@ -341,9 +343,7 @@ def test_assign_entries_prioritises_selected_entities(monkeypatch, tmp_path):
         pipeline_dir=str(pipeline_dir),
         specification=mock_specification,
         cache_dir=str(tmp_path),
-        selected_entities=[
-            {"reference": "REF002", "organisation": "test-org"},
-        ],
+        excluded_references=["REF001"],
     )
 
     assert mock_lookups.add_entry.call_args_list == [
@@ -353,9 +353,9 @@ def test_assign_entries_prioritises_selected_entities(monkeypatch, tmp_path):
     assert result == assigned_lookups
 
 
-@pytest.mark.parametrize("selected_entities", [None, []])
-def test_assign_entries_assigns_all_when_selected_entities_empty_or_null(
-    monkeypatch, tmp_path, selected_entities
+@pytest.mark.parametrize("excluded_references", [None, []])
+def test_assign_entries_keeps_original_order_when_excluded_references_empty_or_null(
+    monkeypatch, tmp_path, excluded_references
 ):
     pipeline_dir = tmp_path / "pipeline"
     pipeline_dir.mkdir()
@@ -413,7 +413,7 @@ def test_assign_entries_assigns_all_when_selected_entities_empty_or_null(
         pipeline_dir=str(pipeline_dir),
         specification=mock_specification,
         cache_dir=str(tmp_path),
-        selected_entities=selected_entities,
+        excluded_references=excluded_references,
     )
 
     assert mock_lookups.add_entry.call_count == 2
@@ -485,6 +485,7 @@ def test_fetch_add_data_response_includes_selected_old_entity_redirects(
                     "old_entity": "900002",
                     "entity": "1000002",
                     "match_type": "complete_match",
+                    "new_reference": "REF002",
                     "name_similarity": "",
                     "evidence": "geometry complete_match, name similarity 100%",
                     "old_entity_redirects": [],
@@ -493,6 +494,7 @@ def test_fetch_add_data_response_includes_selected_old_entity_redirects(
                     "old_entity": "900001",
                     "entity": "1000002",
                     "match_type": "single_match",
+                    "new_reference": "REF002",
                     "name_similarity": "85%",
                     "evidence": "geometry single_match, name similarity 85%",
                     "old_entity_redirects": [],
@@ -535,13 +537,9 @@ def test_fetch_add_data_response_includes_selected_old_entity_redirects(
         specification=MagicMock(),
         cache_dir=str(cache_dir),
         endpoint=endpoint,
-        selected_entities=[{"reference": "REF002", "organisation": "test-org"}],
+        excluded_references=["REF001"],
         selected_redirects=[
-            {
-                "reference": "REF002",
-                "organisation": "test-org",
-                "old_entity_number": "900001",
-            }
+            {"reference": "REF002", "old_entity_number": "900001"},
         ],
     )
 
@@ -575,10 +573,7 @@ def test_fetch_add_data_response_includes_selected_old_entity_redirects(
             "organisation": "test-org",
         }
     ]
-    assert [entity["reference"] for entity in result["all-entities"]] == [
-        "REF001",
-        "REF002",
-    ]
+    assert "all-entities" not in result
 
 
 def test_fetch_add_data_response_file_not_found(monkeypatch, tmp_path):
@@ -761,7 +756,7 @@ def test_get_entities_breakdown_missing_fields():
 # --- _create_entity_organisation ---
 
 
-def test_filter_selected_entities_returns_only_selected_matches():
+def test_filter_selected_entities_excludes_requested_references():
     new_entities = [
         {"entity": "1000001", "reference": "REF001", "organisation": "test-org"},
         {"entity": "1000002", "reference": "REF002", "organisation": "test-org"},
@@ -769,30 +764,30 @@ def test_filter_selected_entities_returns_only_selected_matches():
 
     result = _filter_selected_entities(
         new_entities,
-        [{"reference": "REF002", "organisation": "test-org"}],
+        ["REF001"],
     )
 
     assert result == [new_entities[1]]
 
 
-@pytest.mark.parametrize("selected_entities", [None, []])
-def test_filter_selected_entities_returns_all_when_selection_empty_or_null(
-    selected_entities,
+@pytest.mark.parametrize("excluded_references", [None, []])
+def test_filter_selected_entities_returns_all_when_excluded_references_empty_or_null(
+    excluded_references,
 ):
     new_entities = [
         {"entity": "1000001", "reference": "REF001", "organisation": "test-org"},
         {"entity": "1000002", "reference": "REF002", "organisation": "test-org"},
     ]
 
-    assert _filter_selected_entities(new_entities, selected_entities) == new_entities
+    assert _filter_selected_entities(new_entities, excluded_references) == new_entities
 
 
-def test_filter_selected_entities_returns_empty_for_invalid_non_empty_selection():
+def test_filter_selected_entities_returns_all_for_non_matching_excluded_reference():
     new_entities = [
         {"entity": "1000001", "reference": "REF001", "organisation": "test-org"},
     ]
 
-    assert _filter_selected_entities(new_entities, [{"reference": "REF001"}]) == []
+    assert _filter_selected_entities(new_entities, ["REF999"]) == new_entities
 
 
 def test_create_entity_organisation_uses_selected_entity_subset(tmp_path):
@@ -809,7 +804,7 @@ def test_create_entity_organisation_uses_selected_entity_subset(tmp_path):
     result = _create_entity_organisation(
         _filter_selected_entities(
             new_entities,
-            [{"reference": "REF002", "organisation": "test-org"}],
+            ["REF001"],
         ),
         "test-dataset",
         "test-org",
@@ -828,17 +823,12 @@ def test_create_old_entity_redirects_from_selected_redirects():
 
     result = _create_old_entity_redirects(
         new_entities,
-        [
-            {
-                "reference": "REF002",
-                "organisation": "test-org",
-                "old_entity_number": "900001",
-            }
-        ],
+        [{"reference": "REF002", "old_entity_number": "900001"}],
         duplicate_candidates=[
             {
                 "old_entity": "900001",
                 "entity": "1000002",
+                "new_reference": "REF002",
                 "evidence": "geometry single_match, name similarity 85%",
             }
         ],
@@ -855,7 +845,7 @@ def test_create_old_entity_redirects_from_selected_redirects():
     ]
 
 
-def test_create_old_entity_redirects_ignores_redirects_for_unselected_entities():
+def test_create_old_entity_redirects_ignores_redirects_for_excluded_references():
     new_entities = [
         {"entity": "1000001", "reference": "REF001", "organisation": "test-org"},
         {"entity": "1000002", "reference": "REF002", "organisation": "test-org"},
@@ -863,14 +853,15 @@ def test_create_old_entity_redirects_ignores_redirects_for_unselected_entities()
 
     result = _create_old_entity_redirects(
         new_entities,
-        [
+        [{"reference": "REF001", "old_entity_number": "900001"}],
+        excluded_references=["REF001"],
+        duplicate_candidates=[
             {
-                "reference": "REF001",
-                "organisation": "test-org",
-                "old_entity_number": "900001",
+                "old_entity": "900001",
+                "entity": "1000001",
+                "new_reference": "REF001",
             }
         ],
-        selected_entities=[{"reference": "REF002", "organisation": "test-org"}],
     )
 
     assert result == []
@@ -934,7 +925,7 @@ def test_create_auto_old_entity_redirects_for_single_matches_above_85_percent():
     ]
 
 
-def test_create_auto_old_entity_redirects_ignores_existing_redirects_and_unselected_entities():
+def test_create_auto_old_entity_redirects_ignores_existing_redirects_and_unselected_ids():
     result = _create_auto_old_entity_redirects(
         [
             {
@@ -977,13 +968,10 @@ def test_create_old_entity_redirects_ignores_unassigned_or_invalid_redirects():
     result = _create_old_entity_redirects(
         new_entities,
         [
-            {
-                "reference": "REF001",
-                "organisation": "other-org",
-                "old_entity_number": "900001",
-            },
-            {"reference": "REF001", "organisation": "test-org"},
+            {"reference": "REF001"},
+            {"old_entity_number": "900001"},
         ],
+        duplicate_candidates=[],
     )
 
     assert result == []

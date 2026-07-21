@@ -535,7 +535,7 @@ def add_data_workflow(
     github_branch=None,
     endpoint_parameters=None,
     endpoints=None,
-    selected_entities=None,
+    excluded_references=None,
     selected_redirects=None,
 ):
     """
@@ -558,8 +558,8 @@ def add_data_workflow(
         github_branch (str): Optional branch name to indicate if the data should be appended to a specific branch
         endpoint_parameters: Optional opaque value stored as the parameters field in the endpoint entry
         endpoints: Optional list of existing endpoint hashes associated with a resource
-        selected_entities: Optional list of reference/organisation pairs to assign entity numbers first
-        selected_redirects: Optional list of reference/organisation/old entity number values to redirect
+        excluded_references: Optional list of references to exclude from selected entity outputs
+        selected_redirects: Optional list of reference/old entity number values to redirect
     """
     response_data = {}
 
@@ -615,7 +615,7 @@ def add_data_workflow(
             cache_dir=directories.CACHE_DIR,
             endpoint=pipeline_endpoint,
             converted_path=converted_path,
-            selected_entities=selected_entities,
+            excluded_references=excluded_references,
             selected_redirects=selected_redirects,
         )
 

@@ -47,8 +47,8 @@ class AddDataParams(Params):
     organisation: Optional[str] = None
     plugin: Optional[PluginTypeEnum] = None
     github_branch: Optional[str] = None
-    selected_entities: Optional[List[Dict[str, str]]] = None
-    selected_redirects: Optional[Union[List[Dict[str, str]], Dict[str, str]]] = None
+    excluded_references: Optional[List[str]] = None
+    selected_redirects: Optional[List[Dict[str, str]]] = None
 
 
 class RequestBase(BaseModel):
