@@ -21,18 +21,20 @@ made that a poor fit going forward:
 
 1. **The workload is becoming more CPU/DB-bound than I/O-bound now that add_data has been introduced.** eventlet's strength
    is cheap high-concurrency for network-bound work (many green threads in one
-   process). But these tasks spend most of their time on transforms and DB
-   writes, where the GIL and blocking C calls (`psycopg2`) mean green threads
-   don't add parallelism — they serialise. Adding compute (more vCPUs) does
-   nothing for an eventlet worker pinned by the GIL.
+   process). `psycopg2` can cooperate with the eventlet hub when greening is
+   enabled (e.g. `psycogreen`), but that isn't configured here. Either way,
+   eventlet runs green threads in a single OS thread, so the CPU-bound transforms
+   these tasks spend most of their time in don't execute in parallel — extra
+   vCPUs do little for an eventlet worker on this workload.
 2. **Its concurrency benefit was never even used.** `CELERY_WORKER_CONCURRENCY`
    has never been set (defaults to `1` via `${CELERY_WORKER_CONCURRENCY:-1}`),
    so the worker only ever ran one task at a time. There was no throughput to
    lose by moving off eventlet.
-3. **No enforced timeouts.** eventlet does not enforce Celery's
-   `task_time_limit` (it has no supervisor process to kill a running task), so
-   the configured 30-minute limit never fired — a liability that gets worse the
-   more concurrency we add.
+3. **No enforced timeouts.** On the deployed versions (Celery 5.3.6, eventlet
+   0.35.2), the eventlet pool did not enforce `task_time_limit`: in local
+   testing a blocking task ran well past a short limit with no supervisor
+   process to interrupt it, so the configured 30-minute limit did not fire — a
+   liability that gets worse the more concurrency we add.
 
 ## Decision
 
@@ -50,8 +52,8 @@ the model that lets us scale on this workload:
   child on hard-limit — even one blocked inside a C call like `psycopg2`. Safe
   ceilings are a prerequisite for turning concurrency up.
 
-Concurrency stays at `1` for now (no behavioural change), with headroom to
-increase deliberately (see roadmap).
+Configured task concurrency stays at `1` for now, with headroom to increase it
+deliberately (see roadmap).
 
 ## Consequences
 
