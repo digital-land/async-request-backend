@@ -66,9 +66,6 @@ def _create_old_entity_redirects(
         return []
 
     selected_new_entities = _filter_selected_entities(new_entities, excluded_references)
-    selected_entity_ids = {
-        str(entity.get("entity", "")).strip() for entity in selected_new_entities
-    }
 
     old_entity_rows = []
     seen = set()
