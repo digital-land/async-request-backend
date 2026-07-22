@@ -30,20 +30,6 @@ def _reference_set(references):
     }
 
 
-def _redirect_reference(redirect):
-    """Return the reference from a selected redirect object."""
-    if isinstance(redirect, dict):
-        return str(redirect.get("reference", "")).strip()
-    return str(redirect or "").strip()
-
-
-def _redirect_old_entity(redirect):
-    """Return the old entity number from a selected redirect object."""
-    if not isinstance(redirect, dict):
-        return ""
-    return str(redirect.get("old_entity_number", "")).strip()
-
-
 def _filter_selected_entities(new_entities, excluded_references):
     """
     Return entities not listed in excluded_references.
@@ -101,8 +87,8 @@ def _create_old_entity_redirects(
     }
 
     for redirect in selected_redirects:
-        reference = _redirect_reference(redirect)
-        old_entity = _redirect_old_entity(redirect)
+        reference = str(redirect.get("reference", "")).strip()
+        old_entity = str(redirect.get("old_entity_number", "")).strip()
         entity = entity_by_reference.get(reference, "")
         if not old_entity or not entity:
             continue
