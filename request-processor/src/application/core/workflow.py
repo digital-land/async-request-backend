@@ -535,6 +535,8 @@ def add_data_workflow(
     github_branch=None,
     endpoint_parameters=None,
     endpoints=None,
+    excluded_references=None,
+    selected_redirects=None,
 ):
     """
     Setup directories and download required CSVs to manage add-data pipeline
@@ -556,6 +558,8 @@ def add_data_workflow(
         github_branch (str): Optional branch name to indicate if the data should be appended to a specific branch
         endpoint_parameters: Optional opaque value stored as the parameters field in the endpoint entry
         endpoints: Optional list of existing endpoint hashes associated with a resource
+        excluded_references: Optional list of references to exclude from selected entity outputs
+        selected_redirects: Optional list of reference/old entity number values to redirect
     """
     response_data = {}
 
@@ -611,6 +615,8 @@ def add_data_workflow(
             cache_dir=directories.CACHE_DIR,
             endpoint=pipeline_endpoint,
             converted_path=converted_path,
+            excluded_references=excluded_references,
+            selected_redirects=selected_redirects,
         )
 
         # Create endpoint and source summaries in workflow

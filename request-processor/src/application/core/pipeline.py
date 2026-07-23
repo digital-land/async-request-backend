@@ -2,6 +2,7 @@ import os
 import csv
 import json
 import yaml
+from datetime import date
 from application.logging.logger import get_logger
 from digital_land.organisation import Organisation
 from digital_land.api import API
@@ -16,7 +17,177 @@ from application.core.duplicates import find_duplicate_redirect_candidates
 logger = get_logger(__name__)
 
 
+def _reference_set(references):
+    """Return normalised reference values from an optional request list."""
+    if isinstance(references, str):
+        references = [references]
+    return {
+        str(
+            reference.get("reference") if isinstance(reference, dict) else reference
+        ).strip()
+        for reference in references or []
+        if reference
+    }
+
+
+def _filter_selected_entities(new_entities, excluded_references):
+    """
+    Return entities not listed in excluded_references.
+
+    This mirrors the add-data request contract: excluded_references=None
+    or [] means every new entity is selected. A non-empty list removes only
+    entities with matching references from selected outputs.
+    """
+    excluded_references = _reference_set(excluded_references)
+    if not excluded_references:
+        return new_entities
+
+    return [
+        entity
+        for entity in new_entities
+        if str(entity.get("reference", "")).strip() not in excluded_references
+    ]
+
+
+def _create_old_entity_redirects(
+    new_entities,
+    selected_redirects,
+    excluded_references=None,
+    duplicate_candidates=None,
+):
+    """
+    Build old-entity rows from explicit redirect selections.
+
+    selected_redirects is a list of objects containing a new entity reference
+    and old entity number. Duplicate candidates provide the evidence note.
+    References excluded by excluded_references cannot be redirected.
+    """
+    if not selected_redirects:
+        return []
+
+    selected_new_entities = _filter_selected_entities(new_entities, excluded_references)
+
+    old_entity_rows = []
+    seen = set()
+    evidence_by_redirect = {
+        (
+            str(candidate.get("new_reference", "")).strip(),
+            str(candidate.get("old_entity", "")).strip(),
+            str(candidate.get("entity", "")).strip(),
+        ): str(candidate.get("evidence", "") or "")
+        for candidate in duplicate_candidates or []
+    }
+
+    entity_by_reference = {
+        str(entity.get("reference", "")).strip(): str(entity.get("entity", "")).strip()
+        for entity in selected_new_entities
+    }
+
+    for redirect in selected_redirects:
+        reference = str(redirect.get("reference", "")).strip()
+        old_entity = str(redirect.get("old_entity_number", "")).strip()
+        entity = entity_by_reference.get(reference, "")
+        if not old_entity or not entity:
+            continue
+
+        notes = evidence_by_redirect.get((reference, old_entity, entity), "")
+        row = _old_entity_row(
+            old_entity,
+            entity,
+            notes=notes,
+        )
+        if not row:
+            continue
+
+        row_key = (row["old-entity"], row["entity"])
+        if row_key in seen:
+            continue
+        seen.add(row_key)
+        old_entity_rows.append(row)
+
+    return old_entity_rows
+
+
+def _old_entity_row(old_entity, entity, notes=""):
+    """Return a valid old-entity redirect row, or None for incomplete ids."""
+    old_entity = str(old_entity or "").strip()
+    entity = str(entity or "").strip()
+    if not old_entity or not entity:
+        return None
+
+    return {
+        "old-entity": old_entity,
+        "status": "301",
+        "entity": entity,
+        "entry-date": date.today().isoformat(),
+        "notes": str(notes or ""),
+    }
+
+
+def _name_similarity_score(candidate):
+    """Parse a duplicate candidate name similarity value like '86%'."""
+    similarity = str(candidate.get("name_similarity", "") or "").strip()
+    if similarity.endswith("%"):
+        similarity = similarity[:-1]
+    try:
+        return int(float(similarity))
+    except ValueError:
+        return 0
+
+
+def _should_auto_redirect(candidate):
+    """Return True for duplicate candidates safe enough to redirect automatically."""
+    match_type = candidate.get("match_type")
+    if match_type == "complete_match":
+        return True
+    return match_type == "single_match" and _name_similarity_score(candidate) > 85
+
+
+def _create_auto_old_entity_redirects(duplicate_candidates, selected_entity_ids=None):
+    """
+    Build old-entity rows for duplicate matches that meet the auto-redirect rules.
+
+    Complete matches always qualify. Single matches qualify only above 85%.
+    Existing redirects are skipped, and selected_entity_ids limits redirects to
+    the user's selected new entities when a non-empty selection was supplied.
+    """
+    old_entity_rows = []
+    for candidate in duplicate_candidates:
+        entity = str(candidate.get("entity", "")).strip()
+        if selected_entity_ids is not None and entity not in selected_entity_ids:
+            continue
+        if candidate.get("old_entity_redirects"):
+            continue
+        if not _should_auto_redirect(candidate):
+            continue
+
+        row = _old_entity_row(
+            candidate.get("old_entity"),
+            entity,
+            notes=candidate.get("evidence", ""),
+        )
+        if row:
+            old_entity_rows.append(row)
+
+    return old_entity_rows
+
+
+def _merge_old_entity_rows(*row_groups):
+    """Merge old-entity row groups, keeping the first row for each old/new pair."""
+    rows = []
+    seen = set()
+    for row_group in row_groups:
+        for row in row_group:
+            key = (row.get("old-entity"), row.get("entity"))
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(row)
+    return rows
+
+
 def load_mappings():
+    """Load task summary templates keyed by field and issue type."""
     mappings_file_path = os.path.join(
         os.path.dirname(os.path.dirname(__file__)),
         "../application/configs/mapping.yaml",
@@ -28,6 +199,7 @@ def load_mappings():
 
 
 def _format_task_summary(details_str, task_source, mappings):
+    """Create a human-readable task summary from task log detail JSON."""
     try:
         details = json.loads(details_str)
     except (json.JSONDecodeError, TypeError):
@@ -61,6 +233,7 @@ def run_task_pipeline(
     column_field_path=None,
     mandatory_fields=None,
 ):
+    """Run the task pipeline and attach generated summary text to each task row."""
     task_pipeline = TaskPipeline()
     status = task_pipeline.run(
         output_path=task_log_path,
@@ -102,6 +275,13 @@ def fetch_response_data(
     additional_col_mappings,
     additional_concats,
 ):
+    """
+    Run the standard request pipeline and write transformed data plus issue logs.
+
+    This path is used by non-add-data workflows. It assigns unknown entities
+    before transforming, then saves issue, column-field, and dataset-resource
+    logs for each uploaded resource.
+    """
     pipeline = Pipeline(pipeline_dir, dataset, specification=specification)
     api = API(specification=specification)
 
@@ -184,6 +364,7 @@ def fetch_response_data(
 
 
 def resource_from_path(path):
+    """Return the resource hash/name from an uploaded resource file path."""
     return Path(path).stem
 
 
@@ -195,7 +376,17 @@ def _assign_entries(
     specification,
     cache_dir,
     endpoints=None,
+    excluded_references=None,
 ):
+    """
+    Assign entity numbers for unidentified lookups in a resource.
+
+    Rows not listed in excluded_references are added to lookup.csv first so
+    selected rows receive the lowest new entity numbers. Excluded rows are
+    still added afterwards; selection affects ordering, not whether a row is
+    assigned.
+    """
+    excluded_references = _reference_set(excluded_references)
     pipeline = Pipeline(pipeline_dir, dataset)
     resource_lookups = get_resource_unidentified_lookups(
         resource_path,
@@ -223,10 +414,22 @@ def _assign_entries(
 
     # Track which entries are new by checking before adding
     new_entries_added = []
+    selected_entries = []
+    other_entries = []
     for new_lookup in unassigned_entries:
-        for idx, entry in enumerate(new_lookup):
-            lookups.add_entry(entry[0])
-            new_entries_added.append(entry[0])
+        for entry in new_lookup:
+            entry_reference = str(entry[0].get("reference", "")).strip()
+            if entry_reference in excluded_references:
+                other_entries.append(entry[0])
+            else:
+                selected_entries.append(entry[0])
+
+    for entry in selected_entries:
+        lookups.add_entry(entry)
+        new_entries_added.append(entry)
+    for entry in other_entries:
+        lookups.add_entry(entry)
+        new_entries_added.append(entry)
 
     # save edited csvs
     max_entity_num = lookups.get_max_entity(pipeline.name, specification)
@@ -270,7 +473,15 @@ def _transform_add_data_resource(
     pipeline_dir,
     specification,
     cache_dir,
+    excluded_references,
 ):
+    """
+    Transform one add-data resource and assign entities when unknown rows exist.
+
+    All new rows are assigned entity numbers, but rows not listed in
+    excluded_references are prioritised and used for the
+    entity-organisation summary.
+    """
     issues_log = pipeline.transform(
         input_path=resource_file_path,
         output_path=output_path,
@@ -305,9 +516,13 @@ def _transform_add_data_resource(
         specification=specification,
         cache_dir=cache_dir,
         endpoints=endpoints if endpoints else None,
+        excluded_references=excluded_references,
     )
     entity_org_mapping = _create_entity_organisation(
-        new_lookups, dataset, organisations[0], pipeline_dir
+        _filter_selected_entities(new_lookups, excluded_references),
+        dataset,
+        organisations[0],
+        pipeline_dir,
     )
 
     # Reload pipeline to pick up newly saved lookups before rerunning transform.
@@ -328,6 +543,7 @@ def _transform_add_data_resource(
 
 
 def _process_add_data_resource(resource_file, **kwargs):
+    """Wrap one add-data resource transform with resource-specific logging."""
     try:
         return _transform_add_data_resource(**kwargs)
     except Exception as err:
@@ -343,6 +559,12 @@ def _find_duplicate_candidates(
     organisation_provider,
     organisation_index,
 ):
+    """
+    Find possible redirects for the transformed add-data output.
+
+    Duplicate analysis should not block add-data processing, so failures are
+    logged and returned as an empty candidate list.
+    """
     try:
         return find_duplicate_redirect_candidates(
             dataset=dataset,
@@ -367,6 +589,8 @@ def fetch_add_data_response(
     cache_dir,
     endpoint,
     converted_path=None,
+    excluded_references=None,
+    selected_redirects=None,
 ):
     """
     Run the add-data pipeline transform and build the pipeline summary response.
@@ -374,6 +598,13 @@ def fetch_add_data_response(
     This is reached via POST /requests with type "add_data" through the
     AddDataTask and add_data_workflow. Processing exceptions are re-raised so
     add_data_workflow can return them in the standard async error response.
+
+    excluded_references controls summary filtering and assignment
+    order: None or [] means all new entities are reported as new-entities,
+    while a non-empty list excludes those references from selected outputs.
+    selected_redirects is a list of reference/old entity number objects used
+    to create explicit old-entity redirect rows; None or [] means no manual
+    redirects.
     """
     try:
         pipeline = Pipeline(pipeline_dir, dataset, specification=specification)
@@ -426,6 +657,7 @@ def fetch_add_data_response(
                 pipeline_dir=pipeline_dir,
                 specification=specification,
                 cache_dir=cache_dir,
+                excluded_references=excluded_references,
             )
 
             existing_entities.extend(transformed_entities)
@@ -438,7 +670,10 @@ def fetch_add_data_response(
             else:
                 logger.info(f"No unidentified lookups found in {resource_file}")
 
-        new_entities_breakdown = _get_entities_breakdown(new_entities)
+        selected_new_entities = _filter_selected_entities(
+            new_entities, excluded_references
+        )
+        new_entities_breakdown = _get_entities_breakdown(selected_new_entities)
         existing_entities_breakdown = _get_existing_entities_breakdown(
             existing_entities
         )
@@ -450,6 +685,22 @@ def fetch_add_data_response(
             organisations[0],
             organisation,
         )
+        selected_entity_ids = (
+            {str(entity.get("entity")) for entity in selected_new_entities}
+            if excluded_references is not None and excluded_references != []
+            else None
+        )
+        old_entity_rows = _merge_old_entity_rows(
+            _create_auto_old_entity_redirects(
+                duplicate_candidates, selected_entity_ids=selected_entity_ids
+            ),
+            _create_old_entity_redirects(
+                new_entities,
+                selected_redirects,
+                excluded_references,
+                duplicate_candidates=duplicate_candidates,
+            ),
+        )
 
         if issues_log:
             issues_log.add_severity_column(severity_mapping=specification.issue_type)
@@ -460,6 +711,7 @@ def fetch_add_data_response(
             "new-entities": new_entities_breakdown,
             "existing-entities": existing_entities_breakdown,
             "entity-organisation": entity_org_mapping,
+            "old-entity": old_entity_rows,
             "duplicate-candidates": duplicate_candidates,
             "pipeline-issues": (
                 [dict(issue) for issue in issues_log.rows] if issues_log else []

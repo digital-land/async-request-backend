@@ -1,9 +1,14 @@
 import json
 import pytest
-from unittest.mock import MagicMock
+from datetime import date
+from unittest.mock import MagicMock, call
 from src.application.core.pipeline import (
     fetch_response_data,
     fetch_add_data_response,
+    _assign_entries,
+    _create_auto_old_entity_redirects,
+    _create_old_entity_redirects,
+    _filter_selected_entities,
     _get_entities_breakdown,
     _get_existing_entities_breakdown,
     _create_entity_organisation,
@@ -279,6 +284,142 @@ def test_fetch_add_data_response_success(monkeypatch, tmp_path):
     assert "existing-in-resource" in result
 
 
+def test_assign_entries_prioritises_rows_not_in_excluded_references(
+    monkeypatch, tmp_path
+):
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+    resource_path = tmp_path / "resource.csv"
+    resource_path.write_text("reference\nREF001\nREF002\n")
+    discovered_lookups = [
+        [
+            {
+                "prefix": "test-prefix",
+                "resource": "resource",
+                "organisation": "test-org",
+                "reference": "REF001",
+                "entity": "",
+            }
+        ],
+        [
+            {
+                "prefix": "test-prefix",
+                "resource": "resource",
+                "organisation": "test-org",
+                "reference": "REF002",
+                "entity": "",
+            }
+        ],
+    ]
+    assigned_lookups = [
+        {**discovered_lookups[1][0], "entity": "1000001"},
+        {**discovered_lookups[0][0], "entity": "1000002"},
+    ]
+
+    mock_pipeline = MagicMock()
+    mock_pipeline.name = "test-dataset"
+    mock_lookups = MagicMock()
+    mock_lookups.lookups_path = str(pipeline_dir / "lookup.csv")
+    mock_lookups.get_max_entity.return_value = 1000000
+    mock_lookups.save_csv.return_value = assigned_lookups
+    mock_lookups.entity_num_gen.state = {}
+    mock_specification = MagicMock()
+    mock_specification.get_dataset_entity_min.return_value = 1000000
+    mock_specification.get_dataset_entity_max.return_value = 1999999
+
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Pipeline", MagicMock(return_value=mock_pipeline)
+    )
+    monkeypatch.setattr("src.application.core.pipeline.Lookups", lambda _: mock_lookups)
+    monkeypatch.setattr(
+        "src.application.core.pipeline.get_resource_unidentified_lookups",
+        MagicMock(return_value=discovered_lookups),
+    )
+
+    result = _assign_entries(
+        resource_path=str(resource_path),
+        dataset="test-dataset",
+        organisation="test-org",
+        pipeline_dir=str(pipeline_dir),
+        specification=mock_specification,
+        cache_dir=str(tmp_path),
+        excluded_references=["REF001"],
+    )
+
+    assert mock_lookups.add_entry.call_args_list == [
+        call(discovered_lookups[1][0]),
+        call(discovered_lookups[0][0]),
+    ]
+    assert result == assigned_lookups
+
+
+@pytest.mark.parametrize("excluded_references", [None, []])
+def test_assign_entries_keeps_original_order_when_excluded_references_empty_or_null(
+    monkeypatch, tmp_path, excluded_references
+):
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+    resource_path = tmp_path / "resource.csv"
+    resource_path.write_text("reference\nREF001\nREF002\n")
+    discovered_lookups = [
+        [
+            {
+                "prefix": "test-prefix",
+                "resource": "resource",
+                "organisation": "test-org",
+                "reference": "REF001",
+                "entity": "",
+            }
+        ],
+        [
+            {
+                "prefix": "test-prefix",
+                "resource": "resource",
+                "organisation": "test-org",
+                "reference": "REF002",
+                "entity": "",
+            }
+        ],
+    ]
+    assigned_lookups = [
+        {**discovered_lookups[0][0], "entity": "1000001"},
+        {**discovered_lookups[1][0], "entity": "1000002"},
+    ]
+
+    mock_pipeline = MagicMock()
+    mock_pipeline.name = "test-dataset"
+    mock_lookups = MagicMock()
+    mock_lookups.lookups_path = str(pipeline_dir / "lookup.csv")
+    mock_lookups.get_max_entity.return_value = 1000000
+    mock_lookups.save_csv.return_value = assigned_lookups
+    mock_lookups.entity_num_gen.state = {}
+    mock_specification = MagicMock()
+    mock_specification.get_dataset_entity_min.return_value = 1000000
+    mock_specification.get_dataset_entity_max.return_value = 1999999
+
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Pipeline", MagicMock(return_value=mock_pipeline)
+    )
+    monkeypatch.setattr("src.application.core.pipeline.Lookups", lambda _: mock_lookups)
+    monkeypatch.setattr(
+        "src.application.core.pipeline.get_resource_unidentified_lookups",
+        MagicMock(return_value=discovered_lookups),
+    )
+
+    result = _assign_entries(
+        resource_path=str(resource_path),
+        dataset="test-dataset",
+        organisation="test-org",
+        pipeline_dir=str(pipeline_dir),
+        specification=mock_specification,
+        cache_dir=str(tmp_path),
+        excluded_references=excluded_references,
+    )
+
+    assert mock_lookups.add_entry.call_count == 2
+    assert result == assigned_lookups
+
+
 def test_fetch_add_data_response_no_files(monkeypatch, tmp_path):
     """Test when input directory has no files"""
     dataset = "test-dataset"
@@ -308,6 +449,131 @@ def test_fetch_add_data_response_no_files(monkeypatch, tmp_path):
 
     assert "new-in-resource" in result
     assert result["new-in-resource"] == 0
+
+
+def test_fetch_add_data_response_includes_selected_old_entity_redirects(
+    monkeypatch, tmp_path
+):
+    dataset = "test-dataset"
+    organisation = "test-org"
+    pipeline_dir = tmp_path / "pipeline"
+    input_path = tmp_path / "resource"
+    cache_dir = tmp_path / "cache"
+    endpoint = "abc123hash"
+
+    input_path.mkdir(parents=True)
+    pipeline_dir.mkdir(parents=True)
+    (input_path / "test.csv").write_text("reference\nREF001\nREF002")
+
+    mock_pipeline = MagicMock()
+    mock_pipeline.path = str(pipeline_dir)
+    mock_pipeline.redirect_lookups.return_value = {}
+    monkeypatch.setattr(
+        "src.application.core.pipeline.Pipeline", MagicMock(return_value=mock_pipeline)
+    )
+    monkeypatch.setattr("src.application.core.pipeline.Organisation", MagicMock())
+    mock_api = MagicMock()
+    mock_api.get_valid_category_values.return_value = {}
+    monkeypatch.setattr(
+        "src.application.core.pipeline.API", MagicMock(return_value=mock_api)
+    )
+    monkeypatch.setattr(
+        "src.application.core.pipeline._find_duplicate_candidates",
+        MagicMock(
+            return_value=[
+                {
+                    "old_entity": "900002",
+                    "entity": "1000002",
+                    "match_type": "complete_match",
+                    "new_reference": "REF002",
+                    "name_similarity": "",
+                    "evidence": "geometry complete_match, name similarity 100%",
+                    "old_entity_redirects": [],
+                },
+                {
+                    "old_entity": "900001",
+                    "entity": "1000002",
+                    "match_type": "single_match",
+                    "new_reference": "REF002",
+                    "name_similarity": "85%",
+                    "evidence": "geometry single_match, name similarity 85%",
+                    "old_entity_redirects": [],
+                },
+            ]
+        ),
+    )
+    issue_log = MagicMock()
+    issue_log.rows = []
+    monkeypatch.setattr(
+        "src.application.core.pipeline._process_add_data_resource",
+        MagicMock(
+            return_value=(
+                mock_pipeline,
+                issue_log,
+                [],
+                [
+                    {
+                        "entity": "1000001",
+                        "reference": "REF001",
+                        "organisation": "test-org",
+                    },
+                    {
+                        "entity": "1000002",
+                        "reference": "REF002",
+                        "organisation": "test-org",
+                    },
+                ],
+                [],
+            )
+        ),
+    )
+
+    result = fetch_add_data_response(
+        dataset=dataset,
+        organisation_provider=organisation,
+        pipeline_dir=str(pipeline_dir),
+        input_dir=str(input_path),
+        output_path=str(input_path / "output.csv"),
+        specification=MagicMock(),
+        cache_dir=str(cache_dir),
+        endpoint=endpoint,
+        excluded_references=["REF001"],
+        selected_redirects=[
+            {"reference": "REF002", "old_entity_number": "900001"},
+        ],
+    )
+
+    assert result["old-entity"] == [
+        {
+            "old-entity": "900002",
+            "status": "301",
+            "entity": "1000002",
+            "entry-date": date.today().isoformat(),
+            "notes": "geometry complete_match, name similarity 100%",
+        },
+        {
+            "old-entity": "900001",
+            "status": "301",
+            "entity": "1000002",
+            "entry-date": date.today().isoformat(),
+            "notes": "geometry single_match, name similarity 85%",
+        },
+    ]
+    assert result["new-entities"] == [
+        {
+            "entity": "1000002",
+            "prefix": "",
+            "end-date": "",
+            "endpoint": "",
+            "resource": "",
+            "reference": "REF002",
+            "entry-date": "",
+            "start-date": "",
+            "entry-number": "",
+            "organisation": "test-org",
+        }
+    ]
+    assert "all-entities" not in result
 
 
 def test_fetch_add_data_response_file_not_found(monkeypatch, tmp_path):
@@ -488,6 +754,227 @@ def test_get_entities_breakdown_missing_fields():
 
 
 # --- _create_entity_organisation ---
+
+
+def test_filter_selected_entities_excludes_requested_references():
+    new_entities = [
+        {"entity": "1000001", "reference": "REF001", "organisation": "test-org"},
+        {"entity": "1000002", "reference": "REF002", "organisation": "test-org"},
+    ]
+
+    result = _filter_selected_entities(
+        new_entities,
+        ["REF001"],
+    )
+
+    assert result == [new_entities[1]]
+
+
+@pytest.mark.parametrize("excluded_references", [None, []])
+def test_filter_selected_entities_returns_all_when_excluded_references_empty_or_null(
+    excluded_references,
+):
+    new_entities = [
+        {"entity": "1000001", "reference": "REF001", "organisation": "test-org"},
+        {"entity": "1000002", "reference": "REF002", "organisation": "test-org"},
+    ]
+
+    assert _filter_selected_entities(new_entities, excluded_references) == new_entities
+
+
+def test_filter_selected_entities_returns_all_for_non_matching_excluded_reference():
+    new_entities = [
+        {"entity": "1000001", "reference": "REF001", "organisation": "test-org"},
+    ]
+
+    assert _filter_selected_entities(new_entities, ["REF999"]) == new_entities
+
+
+def test_create_entity_organisation_uses_selected_entity_subset(tmp_path):
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+    (pipeline_dir / "entity-organisation.csv").write_text(
+        "dataset,entity-minimum,entity-maximum,organisation\n"
+    )
+    new_entities = [
+        {"entity": "1000001", "reference": "REF001", "organisation": "test-org"},
+        {"entity": "1000002", "reference": "REF002", "organisation": "test-org"},
+    ]
+
+    result = _create_entity_organisation(
+        _filter_selected_entities(
+            new_entities,
+            ["REF001"],
+        ),
+        "test-dataset",
+        "test-org",
+        str(pipeline_dir),
+    )
+
+    assert result[0]["entity-minimum"] == 1000002
+    assert result[0]["entity-maximum"] == 1000002
+
+
+def test_create_old_entity_redirects_from_selected_redirects():
+    new_entities = [
+        {"entity": "1000001", "reference": "REF001", "organisation": "test-org"},
+        {"entity": "1000002", "reference": "REF002", "organisation": "test-org"},
+    ]
+
+    result = _create_old_entity_redirects(
+        new_entities,
+        [{"reference": "REF002", "old_entity_number": "900001"}],
+        duplicate_candidates=[
+            {
+                "old_entity": "900001",
+                "entity": "1000002",
+                "new_reference": "REF002",
+                "evidence": "geometry single_match, name similarity 85%",
+            }
+        ],
+    )
+
+    assert result == [
+        {
+            "old-entity": "900001",
+            "status": "301",
+            "entity": "1000002",
+            "entry-date": date.today().isoformat(),
+            "notes": "geometry single_match, name similarity 85%",
+        }
+    ]
+
+
+def test_create_old_entity_redirects_ignores_redirects_for_excluded_references():
+    new_entities = [
+        {"entity": "1000001", "reference": "REF001", "organisation": "test-org"},
+        {"entity": "1000002", "reference": "REF002", "organisation": "test-org"},
+    ]
+
+    result = _create_old_entity_redirects(
+        new_entities,
+        [{"reference": "REF001", "old_entity_number": "900001"}],
+        excluded_references=["REF001"],
+        duplicate_candidates=[
+            {
+                "old_entity": "900001",
+                "entity": "1000001",
+                "new_reference": "REF001",
+            }
+        ],
+    )
+
+    assert result == []
+
+
+def test_create_auto_old_entity_redirects_for_complete_matches():
+    result = _create_auto_old_entity_redirects(
+        [
+            {
+                "old_entity": "900001",
+                "entity": "1000001",
+                "match_type": "complete_match",
+                "name_similarity": "",
+                "evidence": "geometry complete_match",
+                "old_entity_redirects": [],
+            }
+        ],
+    )
+
+    assert result == [
+        {
+            "old-entity": "900001",
+            "status": "301",
+            "entity": "1000001",
+            "entry-date": date.today().isoformat(),
+            "notes": "geometry complete_match",
+        }
+    ]
+
+
+def test_create_auto_old_entity_redirects_for_single_matches_above_85_percent():
+    result = _create_auto_old_entity_redirects(
+        [
+            {
+                "old_entity": "900001",
+                "entity": "1000001",
+                "match_type": "single_match",
+                "name_similarity": "86%",
+                "evidence": "geometry single_match, name similarity 86%",
+                "old_entity_redirects": [],
+            },
+            {
+                "old_entity": "900002",
+                "entity": "1000002",
+                "match_type": "single_match",
+                "name_similarity": "85%",
+                "evidence": "geometry single_match, name similarity 85%",
+                "old_entity_redirects": [],
+            },
+        ],
+    )
+
+    assert result == [
+        {
+            "old-entity": "900001",
+            "status": "301",
+            "entity": "1000001",
+            "entry-date": date.today().isoformat(),
+            "notes": "geometry single_match, name similarity 86%",
+        }
+    ]
+
+
+def test_create_auto_old_entity_redirects_ignores_existing_redirects_and_unselected_ids():
+    result = _create_auto_old_entity_redirects(
+        [
+            {
+                "old_entity": "900001",
+                "entity": "1000001",
+                "match_type": "complete_match",
+                "name_similarity": "",
+                "old_entity_redirects": [],
+            },
+            {
+                "old_entity": "900002",
+                "entity": "1000002",
+                "match_type": "complete_match",
+                "name_similarity": "",
+                "old_entity_redirects": [{"old-entity": "900002"}],
+            },
+        ],
+        selected_entity_ids={"1000002"},
+    )
+
+    assert result == []
+
+
+@pytest.mark.parametrize("selected_redirects", [None, []])
+def test_create_old_entity_redirects_returns_empty_when_selection_empty_or_null(
+    selected_redirects,
+):
+    new_entities = [
+        {"entity": "1000001", "reference": "REF001", "organisation": "test-org"},
+    ]
+
+    assert _create_old_entity_redirects(new_entities, selected_redirects) == []
+
+
+def test_create_old_entity_redirects_ignores_unassigned_or_invalid_redirects():
+    new_entities = [
+        {"entity": "1000001", "reference": "REF001", "organisation": "test-org"},
+    ]
+
+    result = _create_old_entity_redirects(
+        new_entities,
+        [
+            {"reference": "REF001"},
+            {"old_entity_number": "900001"},
+        ],
+        duplicate_candidates=[],
+    )
+
+    assert result == []
 
 
 def test_create_entity_organisation_sets_overlap_true_when_range_already_present(
