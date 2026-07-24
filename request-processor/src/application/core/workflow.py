@@ -154,6 +154,14 @@ def download_file(url, destination):
         ) as response:
             with open(destination, "wb") as f:
                 f.write(response.read())
+    except HTTPError as e:
+        # 404s are expected (e.g. branch-fallback / optional CSVs); let the
+        # caller decide severity. Log other HTTP errors as errors.
+        if e.code == 404:
+            logger.warning(f"Not found (may be expected) {url}: {e}")
+        else:
+            logger.error(f"Failed to download {url}: {e}")
+        raise
     except (socket.timeout, URLError) as e:
         logger.error(f"Failed to download {url}: {e}")
         raise
