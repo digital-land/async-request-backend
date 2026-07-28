@@ -250,3 +250,9 @@ mappings:
   description: GeoY missing
   summary-singular: "1 GeoY missing"
   summary-plural: "{count} GeoY co-ordinates missing"
+- field: organisation
+  issue-type: invalid organisation
+  description: Organisation must be a valid organisation
+  summary-singular: "1 organisation is not a valid organisation"
+  summary-plural: "{count} organisations are not valid organisations"
+
