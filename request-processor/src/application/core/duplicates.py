@@ -190,7 +190,9 @@ def _match_platform_dataset_entities(
         )
 
         comparisons = []
-        for field, comparison_column in zip(comparison_fields, comparison_column_names):
+        for field, comparison_column in zip(
+            comparison_fields, comparison_column_names, strict=True
+        ):
             platform_column = platform_columns_by_normalised_name.get(field)
             if field == "organisation":
                 platform_expression = platform_organisation_expression
@@ -229,7 +231,7 @@ def _match_platform_dataset_entities(
         result_columns = [description[0] for description in cursor.description]
         provision_by_id = {str(row.get("entity", "")): row for row in provision_rows}
         for values in cursor.fetchall():
-            result = dict(zip(result_columns, values))
+            result = dict(zip(result_columns, values, strict=True))
             new_entity_id = str(result.pop("__new_entity", "") or "")
             normalised_organisation = str(
                 result.pop("__normalised_organisation", "") or ""
@@ -470,10 +472,18 @@ def _build_non_spatial_candidate(
         "notes": REDIRECT_NOTE,
         "old_name": str(old_entity.get("name", "") or ""),
         "new_name": str(new_entity.get("name", "") or ""),
-        "old_entry_date": str(old_entity.get("entry-date", "") or ""),
-        "new_entry_date": str(new_entity.get("entry-date", "") or ""),
-        "old_end_date": str(old_entity.get("end-date", "") or ""),
-        "new_end_date": str(new_entity.get("end-date", "") or ""),
+        "old_entry_date": str(
+            old_entity.get("entry-date", "") or old_entity.get("entry_date", "") or ""
+        ),
+        "new_entry_date": str(
+            new_entity.get("entry-date", "") or new_entity.get("entry_date", "") or ""
+        ),
+        "old_end_date": str(
+            old_entity.get("end-date", "") or old_entity.get("end_date", "") or ""
+        ),
+        "new_end_date": str(
+            new_entity.get("end-date", "") or new_entity.get("end_date", "") or ""
+        ),
         "old_organisation": str(old_entity.get("organisation", "") or ""),
         "new_organisation": str(new_entity.get("organisation", "") or ""),
         "old_organisation_entity": str(
@@ -560,7 +570,7 @@ def _find_non_spatial_candidates(
         logger.exception(
             "Failed to compare platform dataset %s for duplicates: %s", dataset, err
         )
-        return []
+        raise
 
     return candidates
 

@@ -7,6 +7,7 @@ import types
 from contextlib import contextmanager
 
 import duckdb
+import pytest
 import requests
 
 from application.core import duplicates
@@ -454,7 +455,7 @@ def test_non_spatial_candidates_match_all_comparable_fields(tmp_path, monkeypatc
                 "Reference": "old-ref",
                 " Name ": "main hall",
                 "CATEGORY": " community ",
-                "entry-date": "2020-01-01",
+                "entry_date": "2020-01-01",
                 "notes": "platform-only metadata",
             },
             {
@@ -490,6 +491,8 @@ def test_non_spatial_candidates_match_all_comparable_fields(tmp_path, monkeypatc
     assert candidates[0]["new_reference"] == "new-ref"
     assert candidates[0]["match_type"] == "all_fields_match"
     assert candidates[0]["evidence"] == "all comparable fields match"
+    assert candidates[0]["old_entry_date"] == "2020-01-01"
+    assert candidates[0]["new_entry_date"] == "2026-01-01"
     assert candidates[0]["old_fields"]["category"] == " community "
     assert candidates[0]["new_fields"]["category"] == "Community"
     assert candidates[0]["old_entity_redirects"] == [
@@ -587,7 +590,7 @@ def test_non_spatial_candidates_resolve_platform_organisation_entity(tmp_path):
     assert candidates[0]["old_fields"]["organisation"] == "local-authority:STH"
 
 
-def test_non_spatial_candidate_download_failure_returns_empty(tmp_path):
+def test_non_spatial_candidate_download_failure_is_propagated(tmp_path):
     transformed_path = tmp_path / "transformed.csv"
     _write_non_spatial_transformed_csv(transformed_path)
 
@@ -596,14 +599,13 @@ def test_non_spatial_candidate_download_failure_returns_empty(tmp_path):
         raise requests.RequestException("unavailable")
         yield
 
-    candidates = duplicates.find_duplicate_redirect_candidates(
-        dataset="tree-preservation-order",
-        specification=FakeSpecification(typology="legal-instrument"),
-        transformed_csv_path=str(transformed_path),
-        download_platform_dataset_parquet=fail_fetch,
-    )
-
-    assert candidates == []
+    with pytest.raises(requests.RequestException, match="unavailable"):
+        duplicates.find_duplicate_redirect_candidates(
+            dataset="tree-preservation-order",
+            specification=FakeSpecification(typology="legal-instrument"),
+            transformed_csv_path=str(transformed_path),
+            download_platform_dataset_parquet=fail_fetch,
+        )
 
 
 def test_download_platform_dataset_parquet_streams_configured_file(
@@ -648,7 +650,7 @@ def test_download_platform_dataset_parquet_streams_configured_file(
     assert not os.path.exists(downloaded_path)
     assert calls == [
         (
-            "https://files.planning.data.gov.uk/dataset/test%20dataset.parquet",
+            f"{duplicates.DATASTORE_URL.rstrip('/')}/dataset/test%20dataset.parquet",
             120,
             True,
         ),
