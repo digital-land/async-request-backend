@@ -61,6 +61,62 @@ def _filter_selected_entities(new_entities, excluded_references):
     ]
 
 
+def _index_duplicate_candidates(duplicate_candidates):
+    candidates_by_selection = {}
+    candidate_old_entities = set()
+    for candidate in duplicate_candidates:
+        reference = str(candidate.get("new_reference", "")).strip()
+        old_entity = str(candidate.get("old_entity", "")).strip()
+        entity = str(candidate.get("entity", "")).strip()
+        if old_entity:
+            candidate_old_entities.add(old_entity)
+        if reference and old_entity and entity:
+            candidates_by_selection.setdefault((reference, old_entity), []).append(
+                candidate
+            )
+    return candidates_by_selection, candidate_old_entities
+
+
+def _selected_old_entity_row(
+    redirect,
+    candidates_by_selection,
+    candidate_old_entities,
+    excluded_references,
+    organisation,
+):
+    status = str(redirect.get("status", "") or "301").strip()
+    if status not in REDIRECT_STATUSES:
+        status = "301"
+
+    reference = str(redirect.get("reference", "")).strip()
+    old_entity = str(redirect.get("old_entity_number", "")).strip()
+    if status == "410":
+        if old_entity not in candidate_old_entities:
+            return None
+        return _old_entity_row(
+            old_entity,
+            "",
+            notes=_prefix_old_entity_notes(
+                organisation, "retirement selected in Assign Entities"
+            ),
+            status=status,
+        )
+
+    if reference in excluded_references:
+        return None
+
+    candidates = candidates_by_selection.get((reference, old_entity), [])
+    if len(candidates) != 1:
+        return None
+    candidate = candidates[0]
+    return _old_entity_row(
+        old_entity,
+        candidate.get("entity"),
+        notes=_prefix_old_entity_notes(organisation, candidate.get("evidence", "")),
+        status=status,
+    )
+
+
 def _create_old_entity_redirects(
     selected_redirects,
     duplicate_candidates,
@@ -79,60 +135,19 @@ def _create_old_entity_redirects(
         return []
 
     excluded_references = _reference_set(excluded_references)
+    candidates_by_selection, candidate_old_entities = _index_duplicate_candidates(
+        duplicate_candidates
+    )
+
     old_entity_rows = []
     seen = set()
-    candidates_by_selection = {}
-    candidate_old_entities = set()
-    for candidate in duplicate_candidates:
-        key = (
-            str(candidate.get("new_reference", "")).strip(),
-            str(candidate.get("old_entity", "")).strip(),
-        )
-        if key[1]:
-            candidate_old_entities.add(key[1])
-        if all(key) and str(candidate.get("entity", "")).strip():
-            candidates_by_selection.setdefault(key, []).append(candidate)
-
     for redirect in selected_redirects:
-        status = str(redirect.get("status", "") or "301").strip()
-        if status not in REDIRECT_STATUSES:
-            status = "301"
-        reference = str(redirect.get("reference", "")).strip()
-        old_entity = str(redirect.get("old_entity_number", "")).strip()
-        if status == "410":
-            if not old_entity:
-                continue
-            if old_entity not in candidate_old_entities:
-                continue
-            row = _old_entity_row(
-                old_entity,
-                "",
-                notes=_prefix_old_entity_notes(
-                    organisation, "retirement selected in Assign Entities"
-                ),
-                status=status,
-            )
-            row_key = (row["old-entity"], row["entity"])
-            if row_key not in seen:
-                seen.add(row_key)
-                old_entity_rows.append(row)
-            continue
-
-        if reference in excluded_references:
-            continue
-
-        candidates = candidates_by_selection.get((reference, old_entity), [])
-        if len(candidates) != 1:
-            continue
-        candidate = candidates[0]
-        entity = str(candidate.get("entity", "")).strip()
-
-        notes = _prefix_old_entity_notes(organisation, candidate.get("evidence", ""))
-        row = _old_entity_row(
-            old_entity,
-            entity,
-            notes=notes,
-            status=status,
+        row = _selected_old_entity_row(
+            redirect,
+            candidates_by_selection,
+            candidate_old_entities,
+            excluded_references,
+            organisation,
         )
         if not row:
             continue
