@@ -16,6 +16,18 @@ from application.core.duplicates import find_duplicate_redirect_candidates
 
 logger = get_logger(__name__)
 
+REDIRECT_STATUSES = {"301", "410"}
+
+
+def _prefix_old_entity_notes(organisation, notes):
+    organisation = str(organisation or "").strip()
+    notes = str(notes or "").strip()
+    if not organisation:
+        return notes
+    if notes == organisation or notes.startswith(f"{organisation} "):
+        return notes
+    return " ".join(part for part in (organisation, notes) if part)
+
 
 def _reference_set(references):
     """Return normalised reference values from an optional request list."""
@@ -50,51 +62,77 @@ def _filter_selected_entities(new_entities, excluded_references):
 
 
 def _create_old_entity_redirects(
-    new_entities,
     selected_redirects,
+    duplicate_candidates,
     excluded_references=None,
-    duplicate_candidates=None,
+    organisation="",
 ):
     """
     Build old-entity rows from explicit redirect selections.
 
-    selected_redirects is a list of objects containing a new entity reference
-    and old entity number. Duplicate candidates provide the evidence note.
+    A 301 selection contains a target reference and old entity number. A 410
+    selection contains only the old entity number and status. Duplicate
+    candidates validate the action and provide the current redirect target.
     References excluded by excluded_references cannot be redirected.
     """
     if not selected_redirects:
         return []
 
-    selected_new_entities = _filter_selected_entities(new_entities, excluded_references)
-
+    excluded_references = _reference_set(excluded_references)
     old_entity_rows = []
     seen = set()
-    evidence_by_redirect = {
-        (
+    candidates_by_selection = {}
+    candidate_old_entities = set()
+    for candidate in duplicate_candidates:
+        key = (
             str(candidate.get("new_reference", "")).strip(),
             str(candidate.get("old_entity", "")).strip(),
-            str(candidate.get("entity", "")).strip(),
-        ): str(candidate.get("evidence", "") or "")
-        for candidate in duplicate_candidates or []
-    }
-
-    entity_by_reference = {
-        str(entity.get("reference", "")).strip(): str(entity.get("entity", "")).strip()
-        for entity in selected_new_entities
-    }
+        )
+        if key[1]:
+            candidate_old_entities.add(key[1])
+        if all(key) and str(candidate.get("entity", "")).strip():
+            candidates_by_selection.setdefault(key, []).append(candidate)
 
     for redirect in selected_redirects:
+        status = str(redirect.get("status", "") or "301").strip()
+        if status not in REDIRECT_STATUSES:
+            status = "301"
         reference = str(redirect.get("reference", "")).strip()
         old_entity = str(redirect.get("old_entity_number", "")).strip()
-        entity = entity_by_reference.get(reference, "")
-        if not old_entity or not entity:
+        if status == "410":
+            if not old_entity:
+                continue
+            if old_entity not in candidate_old_entities:
+                continue
+            row = _old_entity_row(
+                old_entity,
+                "",
+                notes=_prefix_old_entity_notes(
+                    organisation, "retirement selected in Assign Entities"
+                ),
+                status=status,
+            )
+            row_key = (row["old-entity"], row["entity"])
+            if row_key not in seen:
+                seen.add(row_key)
+                old_entity_rows.append(row)
             continue
 
-        notes = evidence_by_redirect.get((reference, old_entity, entity), "")
+        if reference in excluded_references:
+            continue
+
+        candidates = candidates_by_selection.get((reference, old_entity), [])
+        if len(candidates) != 1:
+            continue
+        candidate = candidates[0]
+        entity = str(candidate.get("entity", "")).strip()
+
+        notes = _prefix_old_entity_notes(organisation, candidate.get("evidence", ""))
         row = _old_entity_row(
             old_entity,
             entity,
             notes=notes,
+            status=status,
         )
         if not row:
             continue
@@ -108,17 +146,20 @@ def _create_old_entity_redirects(
     return old_entity_rows
 
 
-def _old_entity_row(old_entity, entity, notes=""):
-    """Return a valid old-entity redirect row, or None for incomplete ids."""
+def _old_entity_row(old_entity, entity, notes="", status="301"):
+    """Return a valid old-entity redirect or retirement row."""
     old_entity = str(old_entity or "").strip()
     entity = str(entity or "").strip()
-    if not old_entity or not entity:
+    status = str(status or "301").strip()
+    if status not in REDIRECT_STATUSES:
+        status = "301"
+    if not old_entity or (status == "301" and not entity):
         return None
 
     return {
         "old-entity": old_entity,
-        "status": "301",
-        "entity": entity,
+        "status": status,
+        "entity": "" if status == "410" else entity,
         "entry-date": date.today().isoformat(),
         "notes": str(notes or ""),
     }
@@ -143,7 +184,11 @@ def _should_auto_redirect(candidate):
     return match_type == "single_match" and _name_similarity_score(candidate) > 85
 
 
-def _create_auto_old_entity_redirects(duplicate_candidates, selected_entity_ids=None):
+def _create_auto_old_entity_redirects(
+    duplicate_candidates,
+    selected_entity_ids=None,
+    organisation="",
+):
     """
     Build old-entity rows for duplicate matches that meet the auto-redirect rules.
 
@@ -164,7 +209,7 @@ def _create_auto_old_entity_redirects(duplicate_candidates, selected_entity_ids=
         row = _old_entity_row(
             candidate.get("old_entity"),
             entity,
-            notes=candidate.get("evidence", ""),
+            notes=_prefix_old_entity_notes(organisation, candidate.get("evidence", "")),
         )
         if row:
             old_entity_rows.append(row)
@@ -692,13 +737,15 @@ def fetch_add_data_response(
         )
         old_entity_rows = _merge_old_entity_rows(
             _create_auto_old_entity_redirects(
-                duplicate_candidates, selected_entity_ids=selected_entity_ids
+                duplicate_candidates,
+                selected_entity_ids=selected_entity_ids,
+                organisation=organisations[0],
             ),
             _create_old_entity_redirects(
-                new_entities,
                 selected_redirects,
+                duplicate_candidates,
                 excluded_references,
-                duplicate_candidates=duplicate_candidates,
+                organisation=organisations[0],
             ),
         )
 

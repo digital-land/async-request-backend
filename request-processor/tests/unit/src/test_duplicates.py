@@ -1,8 +1,13 @@
 import csv
 import importlib
+import os
 import sqlite3
 import sys
 import types
+from contextlib import contextmanager
+
+import duckdb
+import requests
 
 from application.core import duplicates
 
@@ -66,6 +71,92 @@ def _write_transformed_csv(path):
         )
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _write_non_spatial_transformed_csv(path):
+    rows = []
+    for entity, reference, name, category, entry_date in (
+        ("200", "new-ref", "  Main Hall ", "Community", "2026-01-01"),
+        ("201", "different-ref", "Other Hall", "Education", "2026-01-01"),
+    ):
+        for field, value in (
+            ("reference", reference),
+            ("name", name),
+            ("category", category),
+            ("entry-date", entry_date),
+            ("notes", "resource-only notes"),
+            ("description", "resource-only description"),
+        ):
+            rows.append(
+                {
+                    "entry-number": entity,
+                    "entity": entity,
+                    "field": field,
+                    "value": value,
+                }
+            )
+
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f, fieldnames=["entry-number", "entity", "field", "value"]
+        )
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _write_non_spatial_transformed_csv_with_organisation(path):
+    rows = []
+    for field, value in (
+        ("reference", "new-ref"),
+        ("name", "Main Hall"),
+        ("category", "Community"),
+        ("entry-date", "2026-01-01"),
+        ("organisation", "local-authority:STH"),
+        ("organisation-entity", "resource-only-value"),
+    ):
+        rows.append(
+            {
+                "entry-number": "200",
+                "entity": "200",
+                "field": field,
+                "value": value,
+            }
+        )
+
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f, fieldnames=["entry-number", "entity", "field", "value"]
+        )
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+@contextmanager
+def _existing_parquet(path):
+    yield str(path)
+
+
+def _write_platform_parquet(path, rows):
+    csv_path = path.with_suffix(".source.csv")
+    fieldnames = list(dict.fromkeys(field for row in rows for field in row))
+    with open(csv_path, "w", newline="", encoding="utf-8") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    escaped_parquet_path = str(path).replace("'", "''")
+    connection = duckdb.connect()
+    try:
+        connection.execute(
+            f"""
+            COPY (
+                SELECT * FROM read_csv(?, all_varchar = true, header = true)
+            ) TO '{escaped_parquet_path}' (FORMAT PARQUET)
+            """,
+            [str(csv_path)],
+        )
+    finally:
+        connection.close()
 
 
 def test_duplicate_candidates_are_provision_entities_against_existing_platform(
@@ -351,9 +442,31 @@ def test_duplicate_candidates_skip_non_conservation_area(tmp_path, monkeypatch):
     assert candidates == []
 
 
-def test_duplicate_candidates_skip_non_geography(tmp_path, monkeypatch):
+def test_non_spatial_candidates_match_all_comparable_fields(tmp_path, monkeypatch):
     transformed_path = tmp_path / "transformed.csv"
-    _write_transformed_csv(transformed_path)
+    _write_non_spatial_transformed_csv(transformed_path)
+    platform_path = tmp_path / "platform.parquet"
+    _write_platform_parquet(
+        platform_path,
+        [
+            {
+                " Entity ": "100",
+                "Reference": "old-ref",
+                " Name ": "main hall",
+                "CATEGORY": " community ",
+                "entry-date": "2020-01-01",
+                "notes": "platform-only metadata",
+            },
+            {
+                " Entity ": "101",
+                "Reference": "old-other",
+                " Name ": "Other Hall",
+                "CATEGORY": "Different",
+                "entry-date": "2020-01-01",
+                "notes": "",
+            },
+        ],
+    )
     monkeypatch.setattr(
         duplicates,
         "_run_duplicate_check",
@@ -361,14 +474,183 @@ def test_duplicate_candidates_skip_non_geography(tmp_path, monkeypatch):
     )
 
     candidates = duplicates.find_duplicate_redirect_candidates(
-        dataset="article-4-direction",
+        dataset="tree-preservation-order",
+        specification=FakeSpecification(typology="legal-instrument"),
+        transformed_csv_path=str(transformed_path),
+        redirect_lookups={"100": {"entity": "300", "status": "301"}},
+        download_platform_dataset_parquet=lambda dataset: _existing_parquet(
+            platform_path
+        ),
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0]["old_entity"] == "100"
+    assert candidates[0]["entity"] == "200"
+    assert candidates[0]["old_reference"] == "old-ref"
+    assert candidates[0]["new_reference"] == "new-ref"
+    assert candidates[0]["match_type"] == "all_fields_match"
+    assert candidates[0]["evidence"] == "all comparable fields match"
+    assert candidates[0]["old_fields"]["category"] == " community "
+    assert candidates[0]["new_fields"]["category"] == "Community"
+    assert candidates[0]["old_entity_redirects"] == [
+        {"old-entity": "100", "entity": "300", "status": "301"}
+    ]
+
+
+def test_non_spatial_candidates_emit_each_old_new_pair_and_skip_same_entity(tmp_path):
+    transformed_path = tmp_path / "transformed.csv"
+    _write_non_spatial_transformed_csv(transformed_path)
+    platform_path = tmp_path / "platform.parquet"
+    _write_platform_parquet(
+        platform_path,
+        [
+            {
+                "entity": "100",
+                "reference": "old-a",
+                "name": "Main Hall",
+                "category": "Community",
+            },
+            {
+                "entity": "101",
+                "reference": "old-b",
+                "name": "Main Hall",
+                "category": "Community",
+            },
+            {
+                "entity": "200",
+                "reference": "same-entity",
+                "name": "Main Hall",
+                "category": "Community",
+            },
+        ],
+    )
+
+    candidates = duplicates.find_duplicate_redirect_candidates(
+        dataset="tree-preservation-order",
+        specification=FakeSpecification(typology="legal-instrument"),
+        transformed_csv_path=str(transformed_path),
+        download_platform_dataset_parquet=lambda dataset: _existing_parquet(
+            platform_path
+        ),
+    )
+
+    assert sorted((row["old_entity"], row["entity"]) for row in candidates) == [
+        ("100", "200"),
+        ("101", "200"),
+    ]
+
+
+def test_non_spatial_candidates_resolve_platform_organisation_entity(tmp_path):
+    transformed_path = tmp_path / "transformed.csv"
+    _write_non_spatial_transformed_csv_with_organisation(transformed_path)
+    platform_path = tmp_path / "platform.parquet"
+    _write_platform_parquet(
+        platform_path,
+        [
+            {
+                "entity": "100",
+                "reference": "old-ref",
+                "name": "Main Hall",
+                "category": "Community",
+                "entry-date": "2020-01-01",
+                "organisation": "",
+                "organisation-entity": "318",
+            },
+            {
+                "entity": "101",
+                "reference": "other-org",
+                "name": "Main Hall",
+                "category": "Community",
+                "entry-date": "2020-01-01",
+                "organisation": "",
+                "organisation-entity": "999",
+            },
+        ],
+    )
+
+    candidates = duplicates.find_duplicate_redirect_candidates(
+        dataset="tree-preservation-order",
         specification=FakeSpecification(typology="legal-instrument"),
         transformed_csv_path=str(transformed_path),
         organisation_provider="local-authority:STH",
         organisation_index=FakeOrganisationIndex(),
-        fetch_platform_entities=lambda dataset, organisation_entity: [
-            {"entity": "100"}
-        ],
+        download_platform_dataset_parquet=lambda dataset: _existing_parquet(
+            platform_path
+        ),
+    )
+
+    assert [(row["old_entity"], row["entity"]) for row in candidates] == [
+        ("100", "200")
+    ]
+    assert candidates[0]["old_organisation"] == "local-authority:STH"
+    assert candidates[0]["old_organisation_entity"] == "318"
+    assert candidates[0]["old_fields"]["organisation"] == "local-authority:STH"
+
+
+def test_non_spatial_candidate_download_failure_returns_empty(tmp_path):
+    transformed_path = tmp_path / "transformed.csv"
+    _write_non_spatial_transformed_csv(transformed_path)
+
+    @contextmanager
+    def fail_fetch(dataset):
+        raise requests.RequestException("unavailable")
+        yield
+
+    candidates = duplicates.find_duplicate_redirect_candidates(
+        dataset="tree-preservation-order",
+        specification=FakeSpecification(typology="legal-instrument"),
+        transformed_csv_path=str(transformed_path),
+        download_platform_dataset_parquet=fail_fetch,
     )
 
     assert candidates == []
+
+
+def test_download_platform_dataset_parquet_streams_configured_file(
+    monkeypatch, tmp_path
+):
+    calls = []
+    source_path = tmp_path / "source.parquet"
+    _write_platform_parquet(source_path, [{"entity": "100", "name": "Main Hall"}])
+    parquet_bytes = source_path.read_bytes()
+
+    class FakeResponse:
+        status_code = 200
+        headers = {"Content-Length": str(len(parquet_bytes))}
+
+        def raise_for_status(self):
+            pass
+
+        def iter_content(self, chunk_size):
+            assert chunk_size == 1024 * 1024
+            yield parquet_bytes
+
+        def close(self):
+            calls.append("closed")
+
+    def fake_get(url, timeout, stream):
+        calls.append((url, timeout, stream))
+        return FakeResponse()
+
+    monkeypatch.setattr(duplicates.requests, "get", fake_get)
+
+    with duplicates._download_platform_dataset_parquet("test dataset") as path:
+        downloaded_path = path
+        connection = duckdb.connect()
+        try:
+            rows = connection.execute(
+                "SELECT entity, name FROM read_parquet(?)", [path]
+            ).fetchall()
+        finally:
+            connection.close()
+
+    assert rows == [("100", "Main Hall")]
+    assert not os.path.exists(downloaded_path)
+    assert calls == [
+        (
+            "https://files.planning.data.gov.uk/dataset/test%20dataset.parquet",
+            120,
+            True,
+        ),
+        "closed",
+    ]

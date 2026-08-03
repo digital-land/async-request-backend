@@ -437,7 +437,6 @@ def add_data_task(request: Dict, directories=None):
             )
             if "plugin" in log:
                 response["plugin"] = log["plugin"]
-            logger.info(f"response is : {response}")
             save_response_to_db(request_schema.id, response)
         else:
             save_response_to_db(request_schema.id, log)
