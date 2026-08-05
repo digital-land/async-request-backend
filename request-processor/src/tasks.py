@@ -656,9 +656,13 @@ def save_response_to_db(request_id, response_data):
                     )
 
                 elif "message" in response_data:
-                    error = CustomException(response_data)
+                    if "errMsg" in response_data:
+                        error_detail = dict(response_data)
+                        error_detail["errMsg"] = error_detail.pop("message")
+                    else:
+                        error_detail = CustomException(response_data).detail
                     new_response = models.Response(
-                        request_id=request_id, error=error.detail
+                        request_id=request_id, error=error_detail
                     )
                     session.add(new_response)
                     session.commit()
@@ -690,7 +694,15 @@ def _fetch_resource(resource_dir, url, endpoint_parameters=None):
         )
         log["fetch-status"] = fetch_status.name
         if plugin is None:
-            content_type = log.get("response-headers", {}).get("content-type")
+            response_headers = log.get("response-headers", {})
+            content_type = next(
+                (
+                    value
+                    for key, value in response_headers.items()
+                    if key.lower() == "content-type"
+                ),
+                None,
+            )
         if fetch_status == FetchStatus.OK:
             log["plugin"] = plugin
             try:

@@ -17,13 +17,11 @@ DATASETTE_BASE_URL = os.getenv(
     "DATASETTE_BASE_URL", "https://datasette.planning.data.gov.uk"
 )
 REDIRECT_NOTE = "Redirect duplicate entity selected in Assign Entities"
-NON_SPATIAL_EXCLUDED_FIELDS = {
-    "reference",
-    "entry-date",
-    "notes",
-    "description",
-    "organisation-entity",
-    "organisation_entity",
+NON_SPATIAL_COMPARISON_FIELDS = {
+    "name",
+    "start-date",
+    "doc-url",
+    "document-url",
 }
 
 
@@ -89,8 +87,7 @@ def _non_spatial_comparison_fields(provision_rows: list[dict]) -> list[str]:
         str(field).strip().lower()
         for row in provision_rows
         for field in row
-        if field != "entity"
-        and str(field).strip().lower() not in NON_SPATIAL_EXCLUDED_FIELDS
+        if str(field).strip().lower() in NON_SPATIAL_COMPARISON_FIELDS
     }
     return sorted(field for field in fields if field)
 

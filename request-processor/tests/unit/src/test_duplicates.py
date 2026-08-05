@@ -82,6 +82,7 @@ def _write_non_spatial_transformed_csv(path):
     ):
         for field, value in (
             ("reference", reference),
+            ("conservation-area", "CA-MAI-02"),
             ("name", name),
             ("category", category),
             ("entry-date", entry_date),
@@ -158,6 +159,26 @@ def _write_platform_parquet(path, rows):
         )
     finally:
         connection.close()
+
+
+def test_non_spatial_comparison_fields_use_whitelist():
+    fields = duplicates._non_spatial_comparison_fields(
+        [
+            {
+                "entity": "200",
+                "name": "Main Hall",
+                "start-date": "2026-01-01",
+                "doc-url": "https://example.com/doc",
+                "document-url": "https://example.com/document",
+                "documentation-url": "https://example.com/documentation",
+                "category": "Community",
+                "conservation-area": "CA-MAI-02",
+                "reference": "new-ref",
+            }
+        ]
+    )
+
+    assert fields == ["doc-url", "document-url", "name", "start-date"]
 
 
 def test_duplicate_candidates_are_provision_entities_against_existing_platform(
@@ -453,6 +474,7 @@ def test_non_spatial_candidates_match_all_comparable_fields(tmp_path, monkeypatc
             {
                 " Entity ": "100",
                 "Reference": "old-ref",
+                "conservation-area": "CA04",
                 " Name ": "main hall",
                 "CATEGORY": " community ",
                 "entry_date": "2020-01-01",
@@ -461,7 +483,7 @@ def test_non_spatial_candidates_match_all_comparable_fields(tmp_path, monkeypatc
             {
                 " Entity ": "101",
                 "Reference": "old-other",
-                " Name ": "Other Hall",
+                " Name ": "Different Hall",
                 "CATEGORY": "Different",
                 "entry-date": "2020-01-01",
                 "notes": "",
@@ -495,6 +517,8 @@ def test_non_spatial_candidates_match_all_comparable_fields(tmp_path, monkeypatc
     assert candidates[0]["new_entry_date"] == "2026-01-01"
     assert candidates[0]["old_fields"]["category"] == " community "
     assert candidates[0]["new_fields"]["category"] == "Community"
+    assert candidates[0]["old_fields"]["conservation-area"] == "CA04"
+    assert candidates[0]["new_fields"]["conservation-area"] == "CA-MAI-02"
     assert candidates[0]["old_entity_redirects"] == [
         {"old-entity": "100", "entity": "300", "status": "301"}
     ]
