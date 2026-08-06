@@ -632,6 +632,45 @@ def test_non_spatial_candidate_download_failure_is_propagated(tmp_path):
         )
 
 
+def test_non_spatial_candidate_missing_published_parquet_returns_empty(
+    monkeypatch, tmp_path
+):
+    transformed_path = tmp_path / "transformed.csv"
+    _write_non_spatial_transformed_csv(transformed_path)
+    calls = []
+
+    class FakeResponse:
+        status_code = 404
+
+        def raise_for_status(self):
+            raise AssertionError("404 should be handled before raise_for_status")
+
+        def close(self):
+            calls.append("closed")
+
+    def fake_get(url, timeout, stream):
+        calls.append((url, timeout, stream))
+        return FakeResponse()
+
+    monkeypatch.setattr(duplicates.requests, "get", fake_get)
+
+    candidates = duplicates.find_duplicate_redirect_candidates(
+        dataset="new-dataset",
+        specification=FakeSpecification(typology="legal-instrument"),
+        transformed_csv_path=str(transformed_path),
+    )
+
+    assert candidates == []
+    assert calls == [
+        (
+            f"{duplicates.DATASTORE_URL.rstrip('/')}/dataset/new-dataset.parquet",
+            120,
+            True,
+        ),
+        "closed",
+    ]
+
+
 def test_download_platform_dataset_parquet_streams_configured_file(
     monkeypatch, tmp_path
 ):

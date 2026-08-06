@@ -108,6 +108,15 @@ def _download_platform_dataset_parquet(dataset: str):
     response = None
     try:
         response = requests.get(url, timeout=120, stream=True)
+        if response.status_code == 404:
+            # New datasets have no published Parquet yet, so there is nothing to
+            # compare and duplicate analysis should not block add-data.
+            logger.info(
+                "No published Parquet found for dataset %s; skipping duplicate analysis",
+                dataset,
+            )
+            yield None
+            return
         response.raise_for_status()
         with open(parquet_path, "wb") as parquet_file:
             for chunk in response.iter_content(chunk_size=1024 * 1024):
@@ -536,6 +545,8 @@ def _find_non_spatial_candidates(
         return []
     try:
         with download_platform_dataset_parquet(dataset) as parquet_path:
+            if parquet_path is None:
+                return []
             matches = _match_platform_dataset_entities(
                 parquet_path,
                 provision_rows,
