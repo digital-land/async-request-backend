@@ -16,8 +16,6 @@ from celery import Task, Celery
 # and worker
 celery = Celery("async-request-processor", broker=os.environ["CELERY_BROKER_URL"])
 
-celery.conf.task_default_queue = os.environ.get("CELERY_TASK_DEFAULT_QUEUE", "celery")
-
 
 # classes to be used in both app and worker, in app used to que task,
 # in the worker you should override the task name with the correct task
