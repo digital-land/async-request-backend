@@ -3,7 +3,7 @@ import database
 import pytest
 import json
 from src import tasks
-from src.tasks import save_response_to_db, check_dataurl
+from src.tasks import save_response_to_db, check_dataurl, _fetch_resource
 from request_model import models, schemas
 from unittest.mock import MagicMock
 from application.exceptions.customExceptions import CustomException
@@ -47,6 +47,34 @@ from application.exceptions.customExceptions import CustomException
             ),
             {"message": "Test message", "status": "404"},
             ["errCode", "errMsg", "errTime", "errType"],
+        ),
+        (
+            "formatted_check_url_error",
+            schemas.RequestTypeEnum.check_url,
+            schemas.CheckUrlParams(
+                collection="local-plan",
+                dataset="plan-timetable",
+                url="https://example.com/explore",
+            ),
+            {
+                "message": "The selected file must be a CSV, GeoJSON, GML or GeoPackage file",
+                "errMsg": "All fetch attempts failed",
+                "errCode": None,
+                "errType": "User Error",
+                "endpointUrl": "https://example.com/explore",
+                "fetchStatus": "FAILED",
+                "exceptionType": "JSONDecodeError",
+                "contentType": "text/html; charset=utf-8",
+                "plugin": "arcgis",
+            },
+            [
+                "errMsg",
+                "endpointUrl",
+                "fetchStatus",
+                "exceptionType",
+                "contentType",
+                "plugin",
+            ],
         ),
     ],
 )
@@ -93,6 +121,14 @@ def test_save_response_to_db(
 
         for key in expected_keys:
             assert key in data, f"{key} should be present in data"
+
+        if test_name == "formatted_check_url_error":
+            assert data["errMsg"] == (
+                "The selected file must be a CSV, GeoJSON, GML or GeoPackage file"
+            )
+            assert data["endpointUrl"] == "https://example.com/explore"
+            assert data["exceptionType"] == "JSONDecodeError"
+            assert "message" not in data
 
         if test_name == "success_check_file":
             # Check if response_details table has details
@@ -171,6 +207,47 @@ def test_save_add_data_response_details_matches_integer_issue_entry_numbers(db):
     assert details[1].detail["issue_logs"] == [
         {"entry-number": 2, "issue-type": "missing field"}
     ]
+
+
+def test_fetch_resource_preserves_html_content_type_case_insensitively(
+    monkeypatch, tmp_path
+):
+    url = "https://example.com/explore"
+
+    class FakeCollector:
+        def __init__(self, resource_dir):
+            self.resource_dir = resource_dir
+
+        def fetch(self, url, plugin, parameters, refill_todays_logs):
+            if plugin is None:
+                return tasks.FetchStatus.FAILED, {
+                    "endpoint-url": url,
+                    "status": "200",
+                    "response-headers": {"Content-Type": "text/html; charset=utf-8"},
+                }
+            return tasks.FetchStatus.FAILED, {
+                "endpoint-url": url,
+                "exception": "JSONDecodeError",
+            }
+
+    monkeypatch.setattr(tasks, "Collector", FakeCollector)
+
+    with pytest.raises(CustomException) as exception:
+        _fetch_resource(tmp_path, url)
+
+    assert exception.value.detail == {
+        "errCode": None,
+        "errType": "User Error",
+        "errMsg": "All fetch attempts failed",
+        "errMsgDetail": None,
+        "errTime": exception.value.detail["errTime"],
+        "endpointUrl": url,
+        "entryDate": None,
+        "fetchStatus": "FAILED",
+        "exceptionType": "JSONDecodeError",
+        "contentType": "text/html; charset=utf-8",
+        "plugin": "arcgis",
+    }
 
 
 def test_download_resource_uses_datastore_url(monkeypatch, tmp_path):

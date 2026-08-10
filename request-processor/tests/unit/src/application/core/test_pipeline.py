@@ -14,6 +14,7 @@ from src.application.core.pipeline import (
     _create_entity_organisation,
     _format_task_summary,
     _find_duplicate_candidates,
+    _merge_old_entity_rows,
     run_task_pipeline,
 )
 
@@ -549,14 +550,14 @@ def test_fetch_add_data_response_includes_selected_old_entity_redirects(
             "status": "301",
             "entity": "1000002",
             "entry-date": date.today().isoformat(),
-            "notes": "geometry complete_match, name similarity 100%",
+            "notes": "test-org geometry complete_match, name similarity 100%",
         },
         {
             "old-entity": "900001",
             "status": "301",
             "entity": "1000002",
             "entry-date": date.today().isoformat(),
-            "notes": "geometry single_match, name similarity 85%",
+            "notes": "test-org geometry single_match, name similarity 85%",
         },
     ]
     assert result["new-entities"] == [
@@ -705,6 +706,23 @@ def test_find_duplicate_candidates_passes_redirect_lookups(monkeypatch, tmp_path
     assert calls["redirect_lookups"] == {"100": {"entity": "300", "status": "301"}}
 
 
+def test_find_duplicate_candidates_propagates_analysis_failure(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "src.application.core.pipeline.find_duplicate_redirect_candidates",
+        MagicMock(side_effect=RuntimeError("comparison failed")),
+    )
+
+    with pytest.raises(RuntimeError, match="comparison failed"):
+        _find_duplicate_candidates(
+            dataset="tree-preservation-order",
+            specification=MagicMock(),
+            output_path=str(tmp_path / "transformed.csv"),
+            redirect_lookups={},
+            organisation_provider="local-authority:STH",
+            organisation_index=MagicMock(),
+        )
+
+
 def test_get_entities_breakdown_success():
     """Test converting entities to breakdown format"""
     new_entities = [
@@ -816,13 +834,7 @@ def test_create_entity_organisation_uses_selected_entity_subset(tmp_path):
 
 
 def test_create_old_entity_redirects_from_selected_redirects():
-    new_entities = [
-        {"entity": "1000001", "reference": "REF001", "organisation": "test-org"},
-        {"entity": "1000002", "reference": "REF002", "organisation": "test-org"},
-    ]
-
     result = _create_old_entity_redirects(
-        new_entities,
         [{"reference": "REF002", "old_entity_number": "900001"}],
         duplicate_candidates=[
             {
@@ -832,6 +844,7 @@ def test_create_old_entity_redirects_from_selected_redirects():
                 "evidence": "geometry single_match, name similarity 85%",
             }
         ],
+        organisation="local-authority:MAI",
     )
 
     assert result == [
@@ -840,19 +853,168 @@ def test_create_old_entity_redirects_from_selected_redirects():
             "status": "301",
             "entity": "1000002",
             "entry-date": date.today().isoformat(),
-            "notes": "geometry single_match, name similarity 85%",
+            "notes": "local-authority:MAI geometry single_match, name similarity 85%",
         }
     ]
 
 
-def test_create_old_entity_redirects_ignores_redirects_for_excluded_references():
-    new_entities = [
-        {"entity": "1000001", "reference": "REF001", "organisation": "test-org"},
-        {"entity": "1000002", "reference": "REF002", "organisation": "test-org"},
+def test_create_old_entity_redirects_applies_selected_status():
+    result = _create_old_entity_redirects(
+        [
+            {
+                "old_entity_number": "900001",
+                "status": "410",
+            }
+        ],
+        duplicate_candidates=[
+            {
+                "old_entity": "900001",
+                "entity": "1000002",
+                "new_reference": "REF002",
+                "match_type": "all_fields_match",
+                "evidence": "all comparable fields match",
+            }
+        ],
+        organisation="local-authority:MAI",
+    )
+
+    assert result[0]["status"] == "410"
+    assert result[0]["entity"] == ""
+    assert result[0]["notes"] == (
+        "local-authority:MAI retirement selected in Assign Entities"
+    )
+
+
+def test_create_old_entity_redirects_allows_existing_candidate_target():
+    result = _create_old_entity_redirects(
+        [
+            {
+                "old_entity_number": "7001056210",
+                "status": "410",
+            }
+        ],
+        duplicate_candidates=[
+            {
+                "old_entity": "7001056210",
+                "entity": "7001067890",
+                "new_reference": "TPO 20/90b",
+                "evidence": "all comparable fields match",
+                "old_entity_redirects": [
+                    {
+                        "old-entity": "7001056210",
+                        "entity": "7001067890",
+                        "status": "301",
+                    }
+                ],
+            }
+        ],
+        organisation="local-authority:CAS",
+    )
+
+    assert result == [
+        {
+            "old-entity": "7001056210",
+            "status": "410",
+            "entity": "",
+            "entry-date": date.today().isoformat(),
+            "notes": "local-authority:CAS retirement selected in Assign Entities",
+        }
     ]
 
+
+def test_create_old_entity_redirects_resolves_current_target_from_selection():
     result = _create_old_entity_redirects(
-        new_entities,
+        [
+            {
+                "reference": "TPO 20/90b",
+                "old_entity_number": "7001056210",
+                "status": "301",
+            }
+        ],
+        duplicate_candidates=[
+            {
+                "old_entity": "7001056210",
+                "entity": "7001067890",
+                "new_reference": "TPO 20/90b",
+            }
+        ],
+    )
+
+    assert result == [
+        {
+            "old-entity": "7001056210",
+            "status": "301",
+            "entity": "7001067890",
+            "entry-date": date.today().isoformat(),
+            "notes": "",
+        }
+    ]
+
+
+def test_create_old_entity_redirects_rejects_changed_target_when_candidates_ambiguous():
+    result = _create_old_entity_redirects(
+        [
+            {
+                "reference": "TPO 20/90b",
+                "old_entity_number": "7001056210",
+                "status": "301",
+            }
+        ],
+        duplicate_candidates=[
+            {
+                "old_entity": "7001056210",
+                "entity": "7001067890",
+                "new_reference": "TPO 20/90b",
+            },
+            {
+                "old_entity": "7001056210",
+                "entity": "7001067891",
+                "new_reference": "TPO 20/90b",
+            },
+        ],
+    )
+
+    assert result == []
+
+
+def test_create_old_entity_retirement_rejects_unmatched_old_entity():
+    result = _create_old_entity_redirects(
+        [{"old_entity_number": "9999999999", "status": "410"}],
+        duplicate_candidates=[
+            {
+                "old_entity": "7001056210",
+                "entity": "7001067890",
+                "new_reference": "TPO 20/90b",
+            }
+        ],
+    )
+
+    assert result == []
+
+
+def test_create_old_entity_redirects_defaults_invalid_status_to_301():
+    result = _create_old_entity_redirects(
+        [
+            {
+                "reference": "REF002",
+                "old_entity_number": "900001",
+                "status": "302",
+            }
+        ],
+        duplicate_candidates=[
+            {
+                "old_entity": "900001",
+                "entity": "1000002",
+                "new_reference": "REF002",
+            }
+        ],
+    )
+
+    assert result[0]["status"] == "301"
+
+
+def test_create_old_entity_redirects_ignores_redirects_for_excluded_references():
+    result = _create_old_entity_redirects(
         [{"reference": "REF001", "old_entity_number": "900001"}],
         excluded_references=["REF001"],
         duplicate_candidates=[
@@ -867,6 +1029,39 @@ def test_create_old_entity_redirects_ignores_redirects_for_excluded_references()
     assert result == []
 
 
+def test_create_old_entity_retirement_ignores_excluded_candidate_reference():
+    result = _create_old_entity_redirects(
+        [{"old_entity_number": "900001", "status": "410"}],
+        excluded_references=["REF001"],
+        duplicate_candidates=[
+            {
+                "old_entity": "900001",
+                "entity": "1000001",
+                "new_reference": "REF001",
+            }
+        ],
+    )
+
+    assert result == []
+
+
+def test_merge_old_entity_rows_manual_retirement_replaces_auto_redirect():
+    automatic_redirect = {
+        "old-entity": "900001",
+        "status": "301",
+        "entity": "1000001",
+    }
+    manual_retirement = {
+        "old-entity": "900001",
+        "status": "410",
+        "entity": "",
+    }
+
+    assert _merge_old_entity_rows([automatic_redirect], [manual_retirement]) == [
+        manual_retirement
+    ]
+
+
 def test_create_auto_old_entity_redirects_for_complete_matches():
     result = _create_auto_old_entity_redirects(
         [
@@ -879,6 +1074,7 @@ def test_create_auto_old_entity_redirects_for_complete_matches():
                 "old_entity_redirects": [],
             }
         ],
+        organisation="local-authority:MAI",
     )
 
     assert result == [
@@ -887,9 +1083,24 @@ def test_create_auto_old_entity_redirects_for_complete_matches():
             "status": "301",
             "entity": "1000001",
             "entry-date": date.today().isoformat(),
-            "notes": "geometry complete_match",
+            "notes": "local-authority:MAI geometry complete_match",
         }
     ]
+
+
+def test_create_auto_old_entity_redirects_requires_review_for_all_fields_match():
+    result = _create_auto_old_entity_redirects(
+        [
+            {
+                "old_entity": "900001",
+                "entity": "1000001",
+                "match_type": "all_fields_match",
+                "old_entity_redirects": [],
+            }
+        ]
+    )
+
+    assert result == []
 
 
 def test_create_auto_old_entity_redirects_for_single_matches_above_85_percent():
@@ -953,20 +1164,11 @@ def test_create_auto_old_entity_redirects_ignores_existing_redirects_and_unselec
 def test_create_old_entity_redirects_returns_empty_when_selection_empty_or_null(
     selected_redirects,
 ):
-    new_entities = [
-        {"entity": "1000001", "reference": "REF001", "organisation": "test-org"},
-    ]
-
-    assert _create_old_entity_redirects(new_entities, selected_redirects) == []
+    assert _create_old_entity_redirects(selected_redirects, []) == []
 
 
 def test_create_old_entity_redirects_ignores_unassigned_or_invalid_redirects():
-    new_entities = [
-        {"entity": "1000001", "reference": "REF001", "organisation": "test-org"},
-    ]
-
     result = _create_old_entity_redirects(
-        new_entities,
         [
             {"reference": "REF001"},
             {"old_entity_number": "900001"},

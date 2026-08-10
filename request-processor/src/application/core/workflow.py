@@ -660,8 +660,6 @@ def add_data_workflow(
             "transformed-csv": csv_to_json(output_path),
         }
 
-        logger.info(f"add data response is for id {request_id} : {response_data}")
-
     except Exception as e:
         logger.warning(
             f"An error occurred in add_data_workflow: {e} for request id {request_id}"

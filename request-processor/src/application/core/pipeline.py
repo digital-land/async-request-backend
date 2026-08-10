@@ -16,6 +16,18 @@ from application.core.duplicates import find_duplicate_redirect_candidates
 
 logger = get_logger(__name__)
 
+REDIRECT_STATUSES = {"301", "410"}
+
+
+def _prefix_old_entity_notes(organisation, notes):
+    organisation = str(organisation or "").strip()
+    notes = str(notes or "").strip()
+    if not organisation:
+        return notes
+    if notes == organisation or notes.startswith(f"{organisation} "):
+        return notes
+    return " ".join(part for part in (organisation, notes) if part)
+
 
 def _reference_set(references):
     """Return normalised reference values from an optional request list."""
@@ -49,52 +61,99 @@ def _filter_selected_entities(new_entities, excluded_references):
     ]
 
 
+def _index_duplicate_candidates(duplicate_candidates):
+    candidates_by_selection = {}
+    candidates_by_old_entity = {}
+    for candidate in duplicate_candidates:
+        reference = str(candidate.get("new_reference", "")).strip()
+        old_entity = str(candidate.get("old_entity", "")).strip()
+        entity = str(candidate.get("entity", "")).strip()
+        if old_entity:
+            candidates_by_old_entity.setdefault(old_entity, []).append(candidate)
+        if reference and old_entity and entity:
+            candidates_by_selection.setdefault((reference, old_entity), []).append(
+                candidate
+            )
+    return candidates_by_selection, candidates_by_old_entity
+
+
+def _selected_old_entity_row(
+    redirect,
+    candidates_by_selection,
+    candidates_by_old_entity,
+    excluded_references,
+    organisation,
+):
+    status = str(redirect.get("status", "") or "301").strip()
+    if status not in REDIRECT_STATUSES:
+        status = "301"
+
+    reference = str(redirect.get("reference", "")).strip()
+    old_entity = str(redirect.get("old_entity_number", "")).strip()
+    if status == "410":
+        candidates = candidates_by_old_entity.get(old_entity, [])
+        if not candidates:
+            return None
+        if all(
+            str(candidate.get("new_reference", "")).strip() in excluded_references
+            for candidate in candidates
+        ):
+            return None
+        return _old_entity_row(
+            old_entity,
+            "",
+            notes=_prefix_old_entity_notes(
+                organisation, "retirement selected in Assign Entities"
+            ),
+            status=status,
+        )
+
+    if reference in excluded_references:
+        return None
+
+    candidates = candidates_by_selection.get((reference, old_entity), [])
+    if len(candidates) != 1:
+        return None
+    candidate = candidates[0]
+    return _old_entity_row(
+        old_entity,
+        candidate.get("entity"),
+        notes=_prefix_old_entity_notes(organisation, candidate.get("evidence", "")),
+        status=status,
+    )
+
+
 def _create_old_entity_redirects(
-    new_entities,
     selected_redirects,
+    duplicate_candidates,
     excluded_references=None,
-    duplicate_candidates=None,
+    organisation="",
 ):
     """
     Build old-entity rows from explicit redirect selections.
 
-    selected_redirects is a list of objects containing a new entity reference
-    and old entity number. Duplicate candidates provide the evidence note.
+    A 301 selection contains a target reference and old entity number. A 410
+    selection contains only the old entity number and status. Duplicate
+    candidates validate the action and provide the current redirect target.
     References excluded by excluded_references cannot be redirected.
     """
     if not selected_redirects:
         return []
 
-    selected_new_entities = _filter_selected_entities(new_entities, excluded_references)
+    excluded_references = _reference_set(excluded_references)
+    candidates_by_selection, candidates_by_old_entity = _index_duplicate_candidates(
+        duplicate_candidates
+    )
 
     old_entity_rows = []
     seen = set()
-    evidence_by_redirect = {
-        (
-            str(candidate.get("new_reference", "")).strip(),
-            str(candidate.get("old_entity", "")).strip(),
-            str(candidate.get("entity", "")).strip(),
-        ): str(candidate.get("evidence", "") or "")
-        for candidate in duplicate_candidates or []
-    }
-
-    entity_by_reference = {
-        str(entity.get("reference", "")).strip(): str(entity.get("entity", "")).strip()
-        for entity in selected_new_entities
-    }
-
     for redirect in selected_redirects:
-        reference = str(redirect.get("reference", "")).strip()
-        old_entity = str(redirect.get("old_entity_number", "")).strip()
-        entity = entity_by_reference.get(reference, "")
-        if not old_entity or not entity:
-            continue
-
-        notes = evidence_by_redirect.get((reference, old_entity, entity), "")
-        row = _old_entity_row(
-            old_entity,
-            entity,
-            notes=notes,
+        row = _selected_old_entity_row(
+            redirect,
+            candidates_by_selection,
+            candidates_by_old_entity,
+            excluded_references,
+            organisation,
         )
         if not row:
             continue
@@ -108,17 +167,20 @@ def _create_old_entity_redirects(
     return old_entity_rows
 
 
-def _old_entity_row(old_entity, entity, notes=""):
-    """Return a valid old-entity redirect row, or None for incomplete ids."""
+def _old_entity_row(old_entity, entity, notes="", status="301"):
+    """Return a valid old-entity redirect or retirement row."""
     old_entity = str(old_entity or "").strip()
     entity = str(entity or "").strip()
-    if not old_entity or not entity:
+    status = str(status or "301").strip()
+    if status not in REDIRECT_STATUSES:
+        status = "301"
+    if not old_entity or (status == "301" and not entity):
         return None
 
     return {
         "old-entity": old_entity,
-        "status": "301",
-        "entity": entity,
+        "status": status,
+        "entity": "" if status == "410" else entity,
         "entry-date": date.today().isoformat(),
         "notes": str(notes or ""),
     }
@@ -143,7 +205,11 @@ def _should_auto_redirect(candidate):
     return match_type == "single_match" and _name_similarity_score(candidate) > 85
 
 
-def _create_auto_old_entity_redirects(duplicate_candidates, selected_entity_ids=None):
+def _create_auto_old_entity_redirects(
+    duplicate_candidates,
+    selected_entity_ids=None,
+    organisation="",
+):
     """
     Build old-entity rows for duplicate matches that meet the auto-redirect rules.
 
@@ -164,7 +230,7 @@ def _create_auto_old_entity_redirects(duplicate_candidates, selected_entity_ids=
         row = _old_entity_row(
             candidate.get("old_entity"),
             entity,
-            notes=candidate.get("evidence", ""),
+            notes=_prefix_old_entity_notes(organisation, candidate.get("evidence", "")),
         )
         if row:
             old_entity_rows.append(row)
@@ -173,15 +239,17 @@ def _create_auto_old_entity_redirects(duplicate_candidates, selected_entity_ids=
 
 
 def _merge_old_entity_rows(*row_groups):
-    """Merge old-entity row groups, keeping the first row for each old/new pair."""
+    """Merge rows by old entity, allowing a retirement to replace a redirect."""
     rows = []
-    seen = set()
+    row_indexes = {}
     for row_group in row_groups:
         for row in row_group:
-            key = (row.get("old-entity"), row.get("entity"))
-            if key in seen:
+            key = row.get("old-entity")
+            if key in row_indexes:
+                if row.get("status") == "410":
+                    rows[row_indexes[key]] = row
                 continue
-            seen.add(key)
+            row_indexes[key] = len(rows)
             rows.append(row)
     return rows
 
@@ -562,8 +630,8 @@ def _find_duplicate_candidates(
     """
     Find possible redirects for the transformed add-data output.
 
-    Duplicate analysis should not block add-data processing, so failures are
-    logged and returned as an empty candidate list.
+    Failures are logged and propagated so they cannot be mistaken for an empty
+    candidate list.
     """
     try:
         return find_duplicate_redirect_candidates(
@@ -576,7 +644,7 @@ def _find_duplicate_candidates(
         )
     except Exception as err:
         logger.exception("Duplicate analysis failed for dataset %s: %s", dataset, err)
-        return []
+        raise
 
 
 def fetch_add_data_response(
@@ -692,13 +760,15 @@ def fetch_add_data_response(
         )
         old_entity_rows = _merge_old_entity_rows(
             _create_auto_old_entity_redirects(
-                duplicate_candidates, selected_entity_ids=selected_entity_ids
+                duplicate_candidates,
+                selected_entity_ids=selected_entity_ids,
+                organisation=organisations[0],
             ),
             _create_old_entity_redirects(
-                new_entities,
                 selected_redirects,
+                duplicate_candidates,
                 excluded_references,
-                duplicate_candidates=duplicate_candidates,
+                organisation=organisations[0],
             ),
         )
 
