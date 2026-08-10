@@ -1,10 +1,8 @@
 import os
-import time
 from typing import Dict
 import urllib.parse
 
 import sentry_sdk
-from celery.exceptions import SoftTimeLimitExceeded
 from sentry_sdk.integrations.logging import ignore_logger
 from celery.utils.log import get_task_logger
 from celery.signals import task_prerun, task_success, task_failure, celeryd_init
@@ -251,20 +249,6 @@ def check_dataurl(request: Dict, directories=None):  # noqa
     logger.info(f"Request payload: {json.dumps(request, default=str)}")
     request_schema = schemas.Request.model_validate(request)
     request_data = request_schema.params
-
-    # TEMPORARY - remove before merging.
-    # Exercises the SQS redrive policy. The worker has to die *without* acking for the
-    # message to be redelivered: a task that merely raises is acked and deleted, so it
-    # would never reach the DLQ. os._exit kills the child immediately, skipping the ack
-    # and the task_failure handler, which is what task_reject_on_worker_lost requeues on.
-    # Expect three deliveries, then the message lands in celery-dlq.
-    if request_data.organisationName == "local-authority:STE":
-        logger.warning(f"DLQ TEST: sleeping for request {request_schema.id}")
-        try:
-            time.sleep(3600)
-        except SoftTimeLimitExceeded:
-            logger.warning("DLQ TEST: soft limit reached, exiting without ack")
-            os._exit(1)
 
     if request_schema.status == "COMPLETE":
         logger.info(f"Request {request_schema.id} already COMPLETE")
