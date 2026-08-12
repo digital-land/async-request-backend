@@ -466,6 +466,12 @@ def after_task_success(sender, result, **kwargs):
 def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
     request_id = args[0]["id"]
     logger.debug(f"Set status to FAILED for request {request_id}")
+    # Exception type only: request_id would give the metric unbounded cardinality.
+    sentry_sdk.metrics.count(
+        "request_processor.task_failure",
+        1,
+        attributes={"exception": type(exception).__name__},
+    )
     _update_request_status(request_id, "FAILED")
     clean_up_request_files(request_id)
 

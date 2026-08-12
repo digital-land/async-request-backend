@@ -1,9 +1,19 @@
 import os
 
+# The values below are supplied as environment variables by Terraform (digital-land-infrastructure,
+# modules/async-task), alongside the SQS queue attributes they have to stay consistent with. The
+# defaults are only used when running locally via docker-compose.
+
+# task_default_queue is set on the app in task_interface/base_tasks.py, which both the api
+# (producer) and the worker (consumer) import, so the two cannot drift apart.
+
 broker_transport_options = {
     "region": os.environ["CELERY_BROKER_REGION"],
     "is_secure": os.environ.get("CELERY_BROKER_IS_SECURE", "false").lower() == "true",
-    # Must exceed task_time_limit (1800) so SQS doesn't re-deliver a message mid-execution.
+    # kombu only applies this when it creates a queue that doesn't already exist, so it has no
+    # effect on the deployed queue, which Terraform manages. The queue's own VisibilityTimeout is
+    # what governs redelivery; this is kept in step with it for local runs, where kombu does
+    # create the queue.
     "visibility_timeout": int(
         os.environ.get("CELERY_BROKER_VISIBILITY_TIMEOUT", "2100")
     ),
@@ -12,8 +22,9 @@ broker_transport_options = {
 broker_connection_retry_on_startup = True
 
 # Raise SoftTimeLimitExceeded at 29 min to allow graceful cleanup, hard kill at 30 min.
-task_soft_time_limit = 1740
-task_time_limit = 1800
+# Both must stay below the queue's visibility timeout so SQS doesn't re-deliver a running task.
+task_soft_time_limit = int(os.environ.get("CELERY_TASK_SOFT_TIME_LIMIT", "1740"))
+task_time_limit = int(os.environ.get("CELERY_TASK_TIME_LIMIT", "1800"))
 
 # Late ack means the task messages will be acknowledged __after__ the task has been executed,
 # not right before, which is the default behavior.
@@ -27,4 +38,6 @@ task_reject_on_worker_lost = True
 # The default is 4 (four messages for each process).
 # We only want 1 message prefetched per worker to give maximum possibility for other workers (including other instances)
 # to have visibility of messages on the SQS queue
-worker_prefetch_multiplier = 1
+worker_prefetch_multiplier = int(
+    os.environ.get("CELERY_WORKER_PREFETCH_MULTIPLIER", "1")
+)
