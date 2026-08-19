@@ -632,18 +632,21 @@ def test_non_spatial_candidate_download_failure_is_propagated(tmp_path):
         )
 
 
+@pytest.mark.parametrize("missing_status", [403, 404])
 def test_non_spatial_candidate_missing_published_parquet_returns_empty(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, missing_status
 ):
     transformed_path = tmp_path / "transformed.csv"
     _write_non_spatial_transformed_csv(transformed_path)
     calls = []
 
     class FakeResponse:
-        status_code = 404
+        status_code = missing_status
 
         def raise_for_status(self):
-            raise AssertionError("404 should be handled before raise_for_status")
+            raise AssertionError(
+                f"{missing_status} should be handled before raise_for_status"
+            )
 
         def close(self):
             calls.append("closed")
