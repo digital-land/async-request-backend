@@ -108,12 +108,16 @@ def _download_platform_dataset_parquet(dataset: str):
     response = None
     try:
         response = requests.get(url, timeout=120, stream=True)
-        if response.status_code == 404:
+        if response.status_code in (403, 404):
             # New datasets have no published Parquet yet, so there is nothing to
-            # compare and duplicate analysis should not block add-data.
-            logger.info(
-                "No published Parquet found for dataset %s; skipping duplicate analysis",
+            # compare and duplicate analysis should not block add-data. The
+            # datastore bucket does not grant ListBucket, so a missing object is
+            # returned as 403 rather than 404.
+            logger.warning(
+                "No published Parquet found for dataset %s (HTTP %s); "
+                "skipping duplicate analysis",
                 dataset,
+                response.status_code,
             )
             yield None
             return
