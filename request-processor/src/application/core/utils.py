@@ -281,26 +281,31 @@ def create_user_friendly_error_log(exception_detail):
         for key, value in exception_detail.get("responseHeaders", {}).items()
     }
     is_cloudflare_challenge = (
-        (response_headers.get("cf-mitigated") or "").lower() == "challenge"
-        or (response_headers.get("server") or "").lower() == "cloudflare"
+        response_headers.get("cf-mitigated") or ""
+    ).lower() == "challenge"
+    is_imperva_waf = bool(response_headers.get("x-iinfo")) or (
+        "imperva" in (response_headers.get("x-cdn") or "").lower()
     )
 
-    user_message = "An error occurred, please try again later."
+    user_message = "We could not check this link. Please try again later."
 
     # The ordering here has been considered to show the most relevant message to users in the front end
     if exception_type in ["SSLError", "SSLCertVerificationError"]:
         user_message = "SSL certificate verification failed"
     elif status_code == "403" and is_cloudflare_challenge:
         user_message = (
-            "This URL is protected by Cloudflare and requires a browser security "
-            "challenge. Use a direct file URL that can be downloaded without "
-            "completing a browser challenge."
+            "This website uses bot detection, so we cannot download this file "
+            "automatically. Use a link that allows automated downloads."
+        )
+    elif status_code == "403" and is_imperva_waf:
+        user_message = (
+            "This website uses bot detection, so we cannot download this file "
+            "automatically. Use a link that allows automated downloads."
         )
     elif status_code == "403":
         user_message = (
-            "We could not access this URL (HTTP 403 Forbidden). The website may be "
-            "blocking automated downloads. Use a direct file URL that can be "
-            "downloaded without completing a browser challenge."
+            "We could not download this file because access is restricted. The "
+            "website may be blocking automated downloads."
         )
     elif content_type and "text/html" in content_type:
         user_message = (

@@ -693,6 +693,7 @@ def _fetch_resource(resource_dir, url, endpoint_parameters=None):
     collector = Collector(resource_dir=Path(resource_dir))
     plugins = [None, "arcgis", "wfs"]
     content_type = None
+    response_headers = {}
 
     for plugin in plugins:
         fetch_status, log = collector.fetch(
@@ -729,4 +730,6 @@ def _fetch_resource(resource_dir, url, endpoint_parameters=None):
     error_detail = {"message": "All fetch attempts failed", **log}
     if content_type:
         error_detail["content-type"] = content_type
+    if response_headers:
+        error_detail["response-headers"] = response_headers
     raise CustomException(error_detail)

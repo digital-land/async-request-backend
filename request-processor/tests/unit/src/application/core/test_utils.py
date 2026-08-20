@@ -39,9 +39,8 @@ def test_create_user_friendly_error_log_prioritises_forbidden_url_over_html():
     )
 
     assert result["message"] == (
-        "We could not access this URL (HTTP 403 Forbidden). The website may be "
-        "blocking automated downloads. Use a direct file URL that can be "
-        "downloaded without completing a browser challenge."
+        "We could not download this file because access is restricted. The "
+        "website may be blocking automated downloads."
     )
 
 
@@ -58,9 +57,30 @@ def test_create_user_friendly_error_log_explains_cloudflare_challenge():
     )
 
     assert result["message"] == (
-        "This URL is protected by Cloudflare and requires a browser security "
-        "challenge. Use a direct file URL that can be downloaded without "
-        "completing a browser challenge."
+        "This website uses bot detection, so we cannot download this file "
+        "automatically. Use a link that allows automated downloads."
+    )
+
+
+def test_create_user_friendly_error_log_treats_cloudflare_server_as_generic_403():
+    result = create_user_friendly_error_log(
+        {"errCode": "403", "responseHeaders": {"server": "cloudflare"}}
+    )
+
+    assert result["message"] == (
+        "We could not download this file because access is restricted. The "
+        "website may be blocking automated downloads."
+    )
+
+
+def test_create_user_friendly_error_log_explains_imperva_waf():
+    result = create_user_friendly_error_log(
+        {"errCode": "403", "responseHeaders": {"x-cdn": "Imperva"}}
+    )
+
+    assert result["message"] == (
+        "This website uses bot detection, so we cannot download this file "
+        "automatically. Use a link that allows automated downloads."
     )
 
 
@@ -72,6 +92,8 @@ def test_custom_exception_preserves_safe_response_headers():
                 "content-type": "text/html; charset=UTF-8",
                 "server": "cloudflare",
                 "cf-mitigated": "challenge",
+                "x-cdn": "Imperva",
+                "x-iinfo": "9-12345678-12345679 NNNN CT(0 0 0) RT(0 0)",
                 "set-cookie": "sensitive-cookie-value",
             },
         }
@@ -81,6 +103,8 @@ def test_custom_exception_preserves_safe_response_headers():
         "content-type": "text/html; charset=UTF-8",
         "server": "cloudflare",
         "cf-mitigated": "challenge",
+        "x-cdn": "Imperva",
+        "x-iinfo": "9-12345678-12345679 NNNN CT(0 0 0) RT(0 0)",
     }
 
 

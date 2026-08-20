@@ -48,7 +48,8 @@ class CustomException(Exception):
         self.response_headers = {
             key: value
             for key, value in log.get("response-headers", {}).items()
-            if key.lower() in {"content-type", "server", "cf-mitigated"}
+            if key.lower()
+            in {"content-type", "server", "cf-mitigated", "x-cdn", "x-iinfo"}
         }
         self.message_detail = log.get("user_message_detail")
         self.plugin = log.get("plugin")

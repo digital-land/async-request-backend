@@ -57,7 +57,7 @@ from application.exceptions.customExceptions import CustomException
                 url="https://example.com/explore",
             ),
             {
-                "message": "The selected file must be a CSV, GeoJSON, GML or GeoPackage file",
+                "message": "This link opens a web page, not a data file.",
                 "errMsg": "All fetch attempts failed",
                 "errCode": None,
                 "errType": "User Error",
@@ -123,9 +123,7 @@ def test_save_response_to_db(
             assert key in data, f"{key} should be present in data"
 
         if test_name == "formatted_check_url_error":
-            assert data["errMsg"] == (
-                "The selected file must be a CSV, GeoJSON, GML or GeoPackage file"
-            )
+            assert data["errMsg"] == ("This link opens a web page, not a data file.")
             assert data["endpointUrl"] == "https://example.com/explore"
             assert data["exceptionType"] == "JSONDecodeError"
             assert "message" not in data
@@ -246,6 +244,7 @@ def test_fetch_resource_preserves_html_content_type_case_insensitively(
         "fetchStatus": "FAILED",
         "exceptionType": "JSONDecodeError",
         "contentType": "text/html; charset=utf-8",
+        "responseHeaders": {"Content-Type": "text/html; charset=utf-8"},
         "plugin": "arcgis",
     }
 
