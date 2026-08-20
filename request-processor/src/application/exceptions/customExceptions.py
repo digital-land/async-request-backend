@@ -45,6 +45,11 @@ class CustomException(Exception):
         self.exception_type = log.get("exception")
         # Content type of the response useful for text/html checks (when not using arcgis/wfs plugin)
         self.content_type = log.get("content-type")
+        self.response_headers = {
+            key: value
+            for key, value in log.get("response-headers", {}).items()
+            if key.lower() in {"content-type", "server", "cf-mitigated"}
+        }
         self.message_detail = log.get("user_message_detail")
         self.plugin = log.get("plugin")
 
@@ -64,5 +69,6 @@ class CustomException(Exception):
             "fetchStatus": self.fetch_status,
             "exceptionType": self.exception_type,
             "contentType": self.content_type,
+            "responseHeaders": self.response_headers,
             "plugin": self.plugin,
         }

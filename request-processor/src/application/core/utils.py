@@ -276,18 +276,36 @@ def create_user_friendly_error_log(exception_detail):
     exception_type = exception_detail.get("exceptionType")
     content_type = exception_detail.get("contentType")
     plugin = exception_detail.get("plugin")
+    response_headers = {
+        key.lower(): value
+        for key, value in exception_detail.get("responseHeaders", {}).items()
+    }
+    is_cloudflare_challenge = (
+        (response_headers.get("cf-mitigated") or "").lower() == "challenge"
+        or (response_headers.get("server") or "").lower() == "cloudflare"
+    )
 
     user_message = "An error occurred, please try again later."
 
     # The ordering here has been considered to show the most relevant message to users in the front end
     if exception_type in ["SSLError", "SSLCertVerificationError"]:
         user_message = "SSL certificate verification failed"
+    elif status_code == "403" and is_cloudflare_challenge:
+        user_message = (
+            "This URL is protected by Cloudflare and requires a browser security "
+            "challenge. Use a direct file URL that can be downloaded without "
+            "completing a browser challenge."
+        )
+    elif status_code == "403":
+        user_message = (
+            "We could not access this URL (HTTP 403 Forbidden). The website may be "
+            "blocking automated downloads. Use a direct file URL that can be "
+            "downloaded without completing a browser challenge."
+        )
     elif content_type and "text/html" in content_type:
         user_message = (
             "The selected file must be a CSV, GeoJSON, GML or GeoPackage file"
         )
-    elif status_code == "403":
-        user_message = "The URL must be accessible"
     elif status_code == "404":
         user_message = "The URL does not exist. Check the URL you've entered is correct (HTTP 404 error)"
     elif plugin == "arcgis" and status_code == "200":

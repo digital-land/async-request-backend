@@ -5,11 +5,13 @@ from src.application.core.utils import (
     validate_source,
     _find_existing_endpoint_for_org_dataset,
     _read_existing_source_entry,
+    create_user_friendly_error_log,
 )
 import requests_mock
 import os
 import csv
 from src.application.core import utils
+from src.application.exceptions.customExceptions import CustomException
 
 
 def test_get_request():
@@ -29,6 +31,57 @@ def test_get_request():
         assert log["status"] == "200"
         assert log["message"] == ""
         assert content == response_content
+
+
+def test_create_user_friendly_error_log_prioritises_forbidden_url_over_html():
+    result = create_user_friendly_error_log(
+        {"errCode": "403", "contentType": "text/html; charset=UTF-8"}
+    )
+
+    assert result["message"] == (
+        "We could not access this URL (HTTP 403 Forbidden). The website may be "
+        "blocking automated downloads. Use a direct file URL that can be "
+        "downloaded without completing a browser challenge."
+    )
+
+
+def test_create_user_friendly_error_log_explains_cloudflare_challenge():
+    result = create_user_friendly_error_log(
+        {
+            "errCode": "403",
+            "contentType": "text/html; charset=UTF-8",
+            "responseHeaders": {
+                "server": "cloudflare",
+                "cf-mitigated": "challenge",
+            },
+        }
+    )
+
+    assert result["message"] == (
+        "This URL is protected by Cloudflare and requires a browser security "
+        "challenge. Use a direct file URL that can be downloaded without "
+        "completing a browser challenge."
+    )
+
+
+def test_custom_exception_preserves_safe_response_headers():
+    error = CustomException(
+        {
+            "message": "All fetch attempts failed",
+            "response-headers": {
+                "content-type": "text/html; charset=UTF-8",
+                "server": "cloudflare",
+                "cf-mitigated": "challenge",
+                "set-cookie": "sensitive-cookie-value",
+            },
+        }
+    )
+
+    assert error.detail["responseHeaders"] == {
+        "content-type": "text/html; charset=UTF-8",
+        "server": "cloudflare",
+        "cf-mitigated": "challenge",
+    }
 
 
 def test_check_content():
