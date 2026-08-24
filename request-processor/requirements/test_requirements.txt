@@ -55,9 +55,7 @@ canonicaljson==2.0.0
     #   -r requirements/requirements.txt
     #   digital-land
 cchardet==2.1.7
-    # via
-    #   -r requirements/requirements.txt
-    #   digital-land
+    # via -r requirements/requirements.txt
 celery[pytest,sqs]==5.3.6
     # via
     #   -r requirements/requirements.txt
@@ -84,6 +82,7 @@ cfgv==3.4.0
 charset-normalizer==3.4.1
     # via
     #   -r requirements/requirements.txt
+    #   digital-land
     #   requests
 click==8.1.8
     # via
@@ -114,8 +113,10 @@ click-repl==0.3.0
     # via
     #   -r requirements/requirements.txt
     #   celery
-cloudpathlib[s3]==0.24.0
-    # via digital-land
+cloudpathlib[s3]==0.25.0
+    # via
+    #   -r requirements/requirements.txt
+    #   digital-land
 cloudpickle==3.1.1
     # via
     #   -r requirements/requirements.txt
@@ -313,7 +314,7 @@ packaging==24.2
     #   dask
     #   marshmallow
     #   pytest
-pandas==2.2.3
+pandas==2.0.3
     # via
     #   -r requirements/requirements.txt
     #   dask
@@ -335,10 +336,14 @@ pluggy==1.5.0
     #   -r requirements/requirements.txt
     #   datasette
     #   pytest
-polars==1.42.1
-    # via digital-land
-polars-runtime-32==1.42.1
-    # via polars
+polars==1.44.0
+    # via
+    #   -r requirements/requirements.txt
+    #   digital-land
+polars-runtime-32==1.44.0
+    # via
+    #   -r requirements/requirements.txt
+    #   polars
 pre-commit==4.2.0
     # via -r requirements/requirements.txt
 prompt-toolkit==3.0.50
@@ -454,7 +459,7 @@ s3transfer==0.11.4
     #   boto3
 sentry-sdk[celery]==2.44.0
     # via -r requirements/requirements.txt
-shapely==2.0.2
+shapely==2.0.7
     # via
     #   -r requirements/requirements.txt
     #   digital-land
