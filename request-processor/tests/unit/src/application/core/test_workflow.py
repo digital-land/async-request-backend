@@ -149,6 +149,26 @@ waste-plan:
     ]
 
 
+def test_get_mandatory_fields_preserves_list_alternatives(tmp_path):
+    mandatory_fields = tmp_path / "mandatory_fields.yaml"
+    mandatory_fields.write_text(
+        """tree:
+- reference
+-
+  - point
+  - geometry
+-
+  - point
+  - geometry
+"""
+    )
+
+    assert getMandatoryFields(mandatory_fields, "tree") == [
+        "reference",
+        ["point", "geometry"],
+    ]
+
+
 @pytest.mark.parametrize(
     "dataset, geom_type, column_mapping, expected_row, expected_rows_before, expected_rows_after",
     [  # Parameters for test_fetch_pipelines

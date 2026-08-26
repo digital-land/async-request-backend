@@ -529,10 +529,10 @@ def getMandatoryFields(required_fields_path, dataset, rows=None):
     with open(required_fields_path, "r") as f:
         data = yaml.safe_load(f)
 
-    datasets =[dataset]
+    datasets = [dataset]
 
     if dataset in MULTI_DATASET_TYPES and rows:
-        datasets = datasets+list(
+        datasets = datasets + list(
             dict.fromkeys(
                 value.strip()
                 for row in rows
@@ -541,11 +541,13 @@ def getMandatoryFields(required_fields_path, dataset, rows=None):
             )
         )
 
-    return list(
-        dict.fromkeys(
-            field for row_dataset in datasets for field in data.get(row_dataset, [])
-        )
-    )
+    required_fields = []
+    for row_dataset in datasets:
+        for field in data.get(row_dataset, []):
+            if field not in required_fields:
+                required_fields.append(field)
+
+    return required_fields
 
 
 def add_data_workflow(
