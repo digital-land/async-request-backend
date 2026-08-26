@@ -35,6 +35,8 @@ logger = get_logger(__name__)
 
 REQUEST_TIMEOUT_SECONDS = 30
 _GITHUB_CONFIG_TOKEN_CACHE = {"token": None, "expires_at": 0}
+# These submissions can contain rows for multiple dataset types in one CSV.
+MULTI_DATASET_TYPES = {"local-plan", "minerals-plan", "waste-plan"}
 
 
 def _base64url_encode(value):
@@ -218,13 +220,6 @@ def run_workflow(
             additional_col_mappings=column_mapping,
             additional_concats=additional_concats,
         )
-        # Need to get the mandatory fields from specification/central place. Hardcoding for MVP
-        required_fields_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "../application/configs/mandatory_fields.yaml",
-        )
-
-        required_fields = getMandatoryFields(required_fields_path, dataset)
         # Pipeline will only create a converted if not csv format as raw input
         converted_json = []
         if os.path.exists(
@@ -239,6 +234,17 @@ def run_workflow(
                     directories.COLLECTION_DIR, "resource", request_id, f"{resource}"
                 )
             )
+
+        # Plan submissions can contain local, minerals and waste plan rows in one CSV.
+        # Use the values in the dataset column to determine the complete set of
+        # columns that should be available for this resource.
+        required_fields_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "../application/configs/mandatory_fields.yaml",
+        )
+        required_fields = getMandatoryFields(
+            required_fields_path, dataset, converted_json
+        )
 
         issue_log_json = csv_to_json(
             os.path.join(directories.ISSUE_DIR, dataset, request_id, f"{resource}.csv")
@@ -519,10 +525,28 @@ def _get_column_mapping(column_field_path, dataset, required_fields, specificati
     return list(field_dict.values())
 
 
-def getMandatoryFields(required_fields_path, dataset):
+def getMandatoryFields(required_fields_path, dataset, rows=None):
     with open(required_fields_path, "r") as f:
         data = yaml.safe_load(f)
-    required_fields = data.get(dataset, [])
+
+    datasets = [dataset]
+
+    if dataset in MULTI_DATASET_TYPES and rows:
+        datasets = datasets + list(
+            dict.fromkeys(
+                value.strip()
+                for row in rows
+                for value in (row.get("dataset") or "").replace(",", ";").split(";")
+                if value.strip()
+            )
+        )
+
+    required_fields = []
+    for row_dataset in datasets:
+        for field in data.get(row_dataset, []):
+            if field not in required_fields:
+                required_fields.append(field)
+
     return required_fields
 
 
