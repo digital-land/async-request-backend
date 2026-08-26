@@ -8,6 +8,7 @@ from src.application.core.workflow import (
     fetch_add_data_pipeline_csvs,
     add_extra_column_mappings,
     _get_column_mapping,
+    getMandatoryFields,
     download_file,
     REQUEST_TIMEOUT_SECONDS,
     _GITHUB_CONFIG_TOKEN_CACHE,
@@ -115,6 +116,37 @@ def test_csv_to_json_with_valid_file(test_dir):
     assert len(json_data) == 2
     assert json_data[0]["dataset"] == "conservation-area"
     assert json_data[1]["field"] == "name"
+
+
+def test_get_mandatory_fields_for_mixed_plan_csv(tmp_path):
+    mandatory_fields = tmp_path / "mandatory_fields.yaml"
+    mandatory_fields.write_text(
+        """local-plan:
+- local-planning-authorities
+minerals-plan:
+- minerals-and-waste-planning-authorities
+- document-count
+waste-plan:
+- minerals-and-waste-planning-authorities
+- document-count
+"""
+    )
+
+    result = getMandatoryFields(
+        mandatory_fields,
+        "local-plan",
+        [
+            {"dataset": "local-plan"},
+            {"dataset": "minerals-plan, waste-plan"},
+            {"dataset": "local-plan"},
+        ],
+    )
+
+    assert result == [
+        "local-planning-authorities",
+        "minerals-and-waste-planning-authorities",
+        "document-count",
+    ]
 
 
 @pytest.mark.parametrize(
