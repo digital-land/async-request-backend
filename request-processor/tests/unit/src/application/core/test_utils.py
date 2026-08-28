@@ -5,11 +5,13 @@ from src.application.core.utils import (
     validate_source,
     _find_existing_endpoint_for_org_dataset,
     _read_existing_source_entry,
+    create_user_friendly_error_log,
 )
 import requests_mock
 import os
 import csv
 from src.application.core import utils
+from src.application.exceptions.customExceptions import CustomException
 
 
 def test_get_request():
@@ -29,6 +31,81 @@ def test_get_request():
         assert log["status"] == "200"
         assert log["message"] == ""
         assert content == response_content
+
+
+def test_create_user_friendly_error_log_prioritises_forbidden_url_over_html():
+    result = create_user_friendly_error_log(
+        {"errCode": "403", "contentType": "text/html; charset=UTF-8"}
+    )
+
+    assert result["message"] == (
+        "We could not download this file because access is restricted. The "
+        "website may be blocking automated downloads."
+    )
+
+
+def test_create_user_friendly_error_log_explains_cloudflare_challenge():
+    result = create_user_friendly_error_log(
+        {
+            "errCode": "403",
+            "contentType": "text/html; charset=UTF-8",
+            "responseHeaders": {
+                "server": "cloudflare",
+                "cf-mitigated": "challenge",
+            },
+        }
+    )
+
+    assert result["message"] == (
+        "This website uses bot detection, so we cannot download this file "
+        "automatically. Use a link that allows automated downloads."
+    )
+
+
+def test_create_user_friendly_error_log_treats_cloudflare_server_as_generic_403():
+    result = create_user_friendly_error_log(
+        {"errCode": "403", "responseHeaders": {"server": "cloudflare"}}
+    )
+
+    assert result["message"] == (
+        "We could not download this file because access is restricted. The "
+        "website may be blocking automated downloads."
+    )
+
+
+def test_create_user_friendly_error_log_explains_imperva_waf():
+    result = create_user_friendly_error_log(
+        {"errCode": "403", "responseHeaders": {"x-cdn": "Imperva"}}
+    )
+
+    assert result["message"] == (
+        "This website uses bot detection, so we cannot download this file "
+        "automatically. Use a link that allows automated downloads."
+    )
+
+
+def test_custom_exception_preserves_safe_response_headers():
+    error = CustomException(
+        {
+            "message": "All fetch attempts failed",
+            "response-headers": {
+                "content-type": "text/html; charset=UTF-8",
+                "server": "cloudflare",
+                "cf-mitigated": "challenge",
+                "x-cdn": "Imperva",
+                "x-iinfo": "9-12345678-12345679 NNNN CT(0 0 0) RT(0 0)",
+                "set-cookie": "sensitive-cookie-value",
+            },
+        }
+    )
+
+    assert error.detail["responseHeaders"] == {
+        "content-type": "text/html; charset=UTF-8",
+        "server": "cloudflare",
+        "cf-mitigated": "challenge",
+        "x-cdn": "Imperva",
+        "x-iinfo": "9-12345678-12345679 NNNN CT(0 0 0) RT(0 0)",
+    }
 
 
 def test_check_content():

@@ -276,18 +276,41 @@ def create_user_friendly_error_log(exception_detail):
     exception_type = exception_detail.get("exceptionType")
     content_type = exception_detail.get("contentType")
     plugin = exception_detail.get("plugin")
+    response_headers = {
+        key.lower(): value
+        for key, value in exception_detail.get("responseHeaders", {}).items()
+    }
+    is_cloudflare_challenge = (
+        response_headers.get("cf-mitigated") or ""
+    ).lower() == "challenge"
+    is_imperva_waf = bool(response_headers.get("x-iinfo")) or (
+        "imperva" in (response_headers.get("x-cdn") or "").lower()
+    )
 
-    user_message = "An error occurred, please try again later."
+    user_message = "We could not check this link. Please try again later."
 
     # The ordering here has been considered to show the most relevant message to users in the front end
     if exception_type in ["SSLError", "SSLCertVerificationError"]:
         user_message = "SSL certificate verification failed"
+    elif status_code == "403" and is_cloudflare_challenge:
+        user_message = (
+            "This website uses bot detection, so we cannot download this file "
+            "automatically. Use a link that allows automated downloads."
+        )
+    elif status_code == "403" and is_imperva_waf:
+        user_message = (
+            "This website uses bot detection, so we cannot download this file "
+            "automatically. Use a link that allows automated downloads."
+        )
+    elif status_code == "403":
+        user_message = (
+            "We could not download this file because access is restricted. The "
+            "website may be blocking automated downloads."
+        )
     elif content_type and "text/html" in content_type:
         user_message = (
             "The selected file must be a CSV, GeoJSON, GML or GeoPackage file"
         )
-    elif status_code == "403":
-        user_message = "The URL must be accessible"
     elif status_code == "404":
         user_message = "The URL does not exist. Check the URL you've entered is correct (HTTP 404 error)"
     elif plugin == "arcgis" and status_code == "200":
