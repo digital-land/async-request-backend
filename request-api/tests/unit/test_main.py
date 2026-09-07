@@ -21,7 +21,7 @@ client = TestClient(app)
 exception_msg = "Fake connection error message"
 
 
-def _create_request_model():
+def _create_request_model(service=None):
     return models.Request(
         id="6WuEVYfuScqnW4oewgbyZd",
         type="check_file",
@@ -29,6 +29,7 @@ def _create_request_model():
         modified=datetime.now(),
         status="NEW",
         params=schemas.CheckFileParams(
+            service=service,
             collection="tree-preservation-order",
             dataset="tree",
             original_filename="something.csv",
@@ -40,7 +41,7 @@ def _create_request_model():
 
 @patch("crud.create_request", return_value=_create_request_model())
 @patch(
-    "task_interface.base_tasks.CheckDataFileTask.delay",
+    "main.CheckDataFileTask.apply_async",
     side_effect=OperationalError(exception_msg),
 )
 def test_create_request_when_celery_throws_exception(
@@ -51,6 +52,35 @@ def test_create_request_when_celery_throws_exception(
             helpers.build_request_create(), http_request=None, http_response=None
         )
         assert exception_msg == error.value
+
+
+@pytest.mark.parametrize(
+    "service, expected_queue",
+    [
+        ("manage", "async-request-high"),
+        (None, "async-request-standard"),
+        ("provide", "async-request-standard"),
+    ],
+)
+@patch("main.CheckDataFileTask.apply_async")
+@patch("crud.create_request")
+@patch("main.standard_queue", "async-request-standard")
+@patch("main.high_queue", "async-request-high")
+def test_create_request_routes_by_service(
+    mock_create_request, mock_apply_async, service, expected_queue, helpers
+):
+    request_model = _create_request_model(service=service)
+    mock_create_request.return_value = request_model
+
+    main.create_request(
+        helpers.build_request_create(),
+        http_request=Mock(headers={"Host": "test"}),
+        http_response=MagicMock(),
+    )
+
+    mock_apply_async.assert_called_once_with(
+        args=[request_model.model_dump()], queue=expected_queue
+    )
 
 
 @patch("crud.get_request", return_value=None)

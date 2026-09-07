@@ -17,6 +17,7 @@ class PluginTypeEnum(str, Enum):
 
 class Params(BaseModel):
     type: RequestTypeEnum
+    service: Optional[str] = None
     organisationName: Optional[str] = None
     dataset: str
     collection: str

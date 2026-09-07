@@ -35,6 +35,12 @@ CheckDataFileTask = celery.register_task(CheckDataFileTask())
 CheckDataUrlTask = celery.register_task(CheckDataUrlTask())
 AddDataTask = celery.register_task(AddDataTask())
 
+standard_queue = os.environ.get("CELERY_TASK_STANDARD_QUEUE", "celery")
+high_queue = os.environ.get("CELERY_TASK_HIGH_QUEUE", "celery")
+
+def _queue_for_service(service: str | None) -> str:
+    return high_queue if service == "manage" else standard_queue
+
 if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
     sentry_sdk.init(
         enable_tracing=os.environ.get("SENTRY_TRACING_ENABLED", "false").lower()
@@ -150,14 +156,19 @@ def create_request(
     db: Session = Depends(_get_db),
 ):
     request_schema = _map_to_schema(request_model=crud.create_request(db, request))
+    queue = _queue_for_service(request_schema.params.service)
 
     try:
         if request_schema.type == "check_file":
-            CheckDataFileTask.delay(request_schema.model_dump())
+            CheckDataFileTask.apply_async(
+                args=[request_schema.model_dump()], queue=queue
+            )
         elif request_schema.type == "check_url":
-            CheckDataUrlTask.delay(request_schema.model_dump())
+            CheckDataUrlTask.apply_async(
+                args=[request_schema.model_dump()], queue=queue
+            )
         elif request_schema.type == "add_data":
-            AddDataTask.delay(request_schema.model_dump())
+            AddDataTask.apply_async(args=[request_schema.model_dump()], queue=queue)
         else:
             raise ValueError("invalid request type")
 
