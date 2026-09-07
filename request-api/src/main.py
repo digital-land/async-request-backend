@@ -42,6 +42,7 @@ high_queue = os.environ.get("CELERY_TASK_HIGH_QUEUE", "celery")
 def _queue_for_service(service: str | None) -> str:
     return high_queue if service == "manage" else standard_queue
 
+
 if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
     sentry_sdk.init(
         enable_tracing=os.environ.get("SENTRY_TRACING_ENABLED", "false").lower()
