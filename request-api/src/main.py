@@ -38,6 +38,7 @@ AddDataTask = celery.register_task(AddDataTask())
 standard_queue = os.environ.get("CELERY_TASK_STANDARD_QUEUE", "celery")
 high_queue = os.environ.get("CELERY_TASK_HIGH_QUEUE", "celery")
 
+
 def _queue_for_service(service: str | None) -> str:
     return high_queue if service == "manage" else standard_queue
 
