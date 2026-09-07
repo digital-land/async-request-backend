@@ -79,7 +79,7 @@ def test_create_request_routes_by_service(
     )
 
     mock_apply_async.assert_called_once_with(
-        args=[request_model.model_dump()], queue=expected_queue
+        args=[main._map_to_schema(request_model).model_dump()], queue=expected_queue
     )
 
 
