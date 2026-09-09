@@ -22,10 +22,16 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           result-encoding: json
           script: |
-            if (context.payload?.inputs?.environment) return [context.payload?.inputs?.environment];
-            const {data: {environments}} =
-              await github.request(`GET /repos/${process.env.GITHUB_REPOSITORY}/environments`);
-            return environments.map(e => e.name)
+            const approved = ["development", "staging", "production"];
+            const requested = context.payload?.inputs?.environment;
+            const names = requested
+              ? [requested]
+              : (await github.request(
+                  `GET /repos/${process.env.GITHUB_REPOSITORY}/environments`
+                )).data.environments.map(e => e.name);
+            const invalid = names.find(name => !approved.includes(name));
+            if (invalid) throw new Error(`Unsupported deployment environment: ${invalid}`);
+            return names;
 
   test:
     uses: ./.github/workflows/test.yml
@@ -39,6 +45,7 @@ jobs:
     environment: ${{ matrix.environment }}
     env:
       DOCKER_REPO: ${{ secrets.DEPLOY_DOCKER_REPOSITORY_REQUEST_API }}
+      DEPLOYMENT_ENVIRONMENT: ${{ matrix.environment }}
     steps:
       - uses: actions/checkout@v6
 
@@ -80,7 +87,7 @@ jobs:
 
       - name: Update ECS Service
         run: |
-          aws ecs update-service --cluster ${{ matrix.environment }}-cluster --service ${{ matrix.environment }}-pub-async-request-api  --task-definition ${{ matrix.environment }}-pub-async-request-api-task --force-new-deployment
+          aws ecs update-service --cluster "${DEPLOYMENT_ENVIRONMENT}-cluster" --service "${DEPLOYMENT_ENVIRONMENT}-pub-async-request-api" --task-definition "${DEPLOYMENT_ENVIRONMENT}-pub-async-request-api-task" --force-new-deployment
 
 
   publish-request-processor:
@@ -92,6 +99,7 @@ jobs:
     environment: ${{ matrix.environment }}
     env:
       DOCKER_REPO: ${{ secrets.DEPLOY_DOCKER_REPOSITORY_REQUEST_PROCESSOR }}
+      DEPLOYMENT_ENVIRONMENT: ${{ matrix.environment }}
     steps:
       - uses: actions/checkout@v6
 
@@ -131,6 +139,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.DEPLOY_AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-2
 
-      - name: Update ECS Service (Processor)
+      - name: Update ECS Services (Processors)
         run: |
-          aws ecs update-service --cluster ${{ matrix.environment }}-cluster --service ${{ matrix.environment }}-pub-async-request-processor  --task-definition ${{ matrix.environment }}-pub-async-request-processor-task --force-new-deployment
+          aws ecs update-service --cluster "${DEPLOYMENT_ENVIRONMENT}-cluster" --service "${DEPLOYMENT_ENVIRONMENT}-pub-async-request-processor" --task-definition "${DEPLOYMENT_ENVIRONMENT}-pub-async-request-processor-task" --force-new-deployment
+          aws ecs update-service --cluster "${DEPLOYMENT_ENVIRONMENT}-cluster" --service "${DEPLOYMENT_ENVIRONMENT}-pub-async-request-processor-high" --task-definition "${DEPLOYMENT_ENVIRONMENT}-pub-async-request-processor-high-task" --force-new-deployment
