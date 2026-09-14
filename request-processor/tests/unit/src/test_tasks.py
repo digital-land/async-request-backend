@@ -23,8 +23,8 @@ from application.exceptions.customExceptions import CustomException
             ),
             {
                 "transformed-csv": [
-                    {"column1": "value1", "column2": "value2-transformed"},
-                    {"column1": "value3", "column2": "value4"},
+                    {"field": "datasets", "value": "local-plan"},
+                    {"field": "datasets", "value": "minerals-plan;waste-plan"},
                 ],
                 "converted-csv": [
                     {"column1": "value1", "column2": "value2"},
@@ -35,7 +35,7 @@ from application.exceptions.customExceptions import CustomException
                     {"entry-number": "2", "issue": "Issue 2"},
                 ],
             },
-            ["task-log", "column-mapping"],
+            ["task-log", "column-mapping", "datasets-in-resource"],
         ),
         (
             "exception_check_url",
@@ -129,6 +129,11 @@ def test_save_response_to_db(
             assert "message" not in data
 
         if test_name == "success_check_file":
+            assert data["datasets-in-resource"] == [
+                "local-plan",
+                "minerals-plan",
+                "waste-plan",
+            ]
             # Check if response_details table has details
             response_details_query = (
                 session.query(models.ResponseDetails)
@@ -139,6 +144,7 @@ def test_save_response_to_db(
                 response_details_query is not None
             ), "ResponseDetails table should contain details"
             detail = response_details_query.detail
+            assert "datasets-in-resource" not in detail
             assert "converted_row" in detail, "converted_row should be present in data"
             assert "issue_logs" in detail, "issue_logs should be present in data"
             assert "entry_number" in detail, "entry_number should be present in data"
@@ -886,3 +892,30 @@ def test_check_dataurl_workflow_called_with_correct_params(monkeypatch):
     assert workflow_calls[0]["org"] == ""
     assert workflow_calls[0]["geom_type"] == "polygon"
     assert workflow_calls[0]["column_mapping"] == {"SiteReference": "reference"}
+
+
+@pytest.mark.parametrize(
+    "fields, expected",
+    [
+        ([], []),
+        ([("dataset", "minerals-plan;waste-plan")], []),
+        ([("datasets", "local-plan")] * 2, ["local-plan"]),
+        (
+            [("datasets", "local-plan")] * 50
+            + [("datasets", "minerals-plan;waste-plan")],
+            ["local-plan", "minerals-plan", "waste-plan"],
+        ),
+        (
+            [
+                ("datasets", " supplementary-plan; local-plan; "),
+                ("datasets", None),
+                ("datasets", ""),
+                ("prefix", "minerals-plan"),
+            ],
+            ["supplementary-plan", "local-plan"],
+        ),
+    ],
+)
+def test_get_datasets_in_resource(fields, expected):
+    rows = [{"field": field, "value": value} for field, value in fields]
+    assert tasks._get_datasets_in_resource(rows) == expected

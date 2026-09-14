@@ -6,12 +6,16 @@ import json
 import os
 from pathlib import Path
 import socket
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+
 import time
 import urllib.parse
 import urllib.request
 from urllib.error import HTTPError, URLError
 import warnings
 
+from digital_land.phase.normalise import NormalisePhase
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 import yaml
@@ -35,8 +39,6 @@ logger = get_logger(__name__)
 
 REQUEST_TIMEOUT_SECONDS = 30
 _GITHUB_CONFIG_TOKEN_CACHE = {"token": None, "expires_at": 0}
-# These submissions can contain rows for multiple dataset types in one CSV.
-MULTI_DATASET_TYPES = {"local-plan", "minerals-plan", "waste-plan"}
 
 
 def _base64url_encode(value):
@@ -179,6 +181,7 @@ def run_workflow(
     geom_type,
     column_mapping,
     directories,
+    _check_datasets=True,
 ):
     additional_concats = None
     response_data = {}
@@ -235,16 +238,33 @@ def run_workflow(
                 )
             )
 
-        # Plan submissions can contain local, minerals and waste plan rows in one CSV.
-        # Use the values in the dataset column to determine the complete set of
-        # columns that should be available for this resource.
+        transformed_json = csv_to_json(
+            os.path.join(
+                directories.TRANSFORMED_DIR, dataset, request_id, f"{resource}.csv"
+            )
+        )
+        if _check_datasets:
+            result = _check_resource_datasets(
+                converted_json,
+                transformed_json,
+                resource,
+                request_id,
+                collection,
+                dataset,
+                organisation,
+                geom_type,
+                column_mapping,
+                directories,
+                specification,
+            )
+            if result is not None:
+                return result
+
         required_fields_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
             "../application/configs/mandatory_fields.yaml",
         )
-        required_fields = getMandatoryFields(
-            required_fields_path, dataset, converted_json
-        )
+        required_fields = getMandatoryFields(required_fields_path, dataset)
 
         issue_log_json = csv_to_json(
             os.path.join(directories.ISSUE_DIR, dataset, request_id, f"{resource}.csv")
@@ -276,11 +296,6 @@ def run_workflow(
             specification,
         )
 
-        transformed_json = csv_to_json(
-            os.path.join(
-                directories.TRANSFORMED_DIR, dataset, request_id, f"{resource}.csv"
-            )
-        )
         response_data = {
             "converted-csv": converted_json,
             "issue-log": issue_log_json,
@@ -313,6 +328,154 @@ def run_workflow(
         )
 
     return response_data
+
+
+def _write_check_csv(path, rows, fieldnames):
+    with open(path, "w", newline="") as output:
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _check_resource_datasets(
+    rows,
+    facts,
+    resource,
+    request_id,
+    collection,
+    dataset,
+    organisation,
+    geom_type,
+    column_mapping,
+    directories,
+    specification,
+):
+    """Check mapped dataset memberships and fold the outputs onto the source rows."""
+    memberships = {}
+    dataset_facts = []
+    line_numbers = {}
+    normalise = NormalisePhase()
+    source_entries = [
+        entry
+        for entry, row in enumerate(rows, 1)
+        if any(
+            normalise.strip_nulls(
+                normalise.normalise_whitespace([value or "" for value in row.values()])
+            )
+        )
+    ]
+    for fact in facts:
+        entry = fact.get("entry-number")
+        if not entry:
+            continue
+        entry = str(source_entries[int(entry) - 1])
+        line_numbers[entry] = fact.get("line-number", "")
+        if fact.get("field") == "datasets":
+            dataset_facts.append({**fact, "entry-number": entry})
+            memberships.setdefault(entry, set()).update(
+                value.strip()
+                for value in fact.get("value", "").split(";")
+                if value.strip() in specification.dataset
+            )
+
+    groups = {}
+    for entry in source_entries:
+        # Missing or unrecognised memberships must still receive the selected check.
+        for member in sorted(memberships.get(str(entry)) or {dataset}):
+            groups.setdefault(member, []).append(entry)
+    if not groups or list(groups) == [dataset]:
+        return None
+
+    logs = {key: {} for key in ("issue-log", "transformed-csv", "task-log")}
+    for fact in dataset_facts:
+        logs["transformed-csv"][json.dumps(fact, sort_keys=True)] = fact
+    mappings = {}
+    with TemporaryDirectory(prefix="dataset-checks-") as temporary:
+        paths = {
+            name: str(Path(temporary) / name)
+            for name in (
+                "COLLECTION_DIR",
+                "CONVERTED_DIR",
+                "ISSUE_DIR",
+                "COLUMN_FIELD_DIR",
+                "TRANSFORMED_DIR",
+                "DATASET_RESOURCE_DIR",
+                "PIPELINE_DIR",
+            )
+        }
+        paths.update(
+            CACHE_DIR=directories.CACHE_DIR,
+            SPECIFICATION_DIR=directories.SPECIFICATION_DIR,
+            S3_SPEC=directories.S3_SPEC,
+        )
+        child_directories = SimpleNamespace(**paths)
+        for member, entries in groups.items():
+            input_dir = Path(paths["COLLECTION_DIR"]) / "resource" / request_id
+            input_dir.mkdir(parents=True, exist_ok=True)
+            _write_check_csv(
+                input_dir / resource,
+                [rows[entry - 1] for entry in entries],
+                list(rows[0]),
+            )
+            result = run_workflow(
+                resource,
+                request_id,
+                specification.dataset[member].get("collection") or collection,
+                member,
+                organisation,
+                geom_type,
+                column_mapping,
+                child_directories,
+                _check_datasets=False,
+            )
+            if result.get("status") == 500:
+                return result
+            for key in ("issue-log", "transformed-csv"):
+                for item in result[key]:
+                    item = dict(item)
+                    entry = item.get("entry-number")
+                    if entry and int(entry) > 0:
+                        original_entry = str(entries[int(entry) - 1])
+                        item["entry-number"] = original_entry
+                        if "line-number" in item:
+                            item["line-number"] = line_numbers.get(
+                                original_entry
+                            ) or str(int(original_entry) + 1)
+                    # Tasks describe the original request. Deduplicate the same
+                    # failure on a row checked against more than one schema.
+                    if key == "issue-log":
+                        item["dataset"] = dataset
+                    identity = json.dumps(item, sort_keys=True)
+                    logs[key].setdefault(identity, item)
+            for mapping in result["column-mapping"]:
+                field = mapping["field"]
+                current = mappings.setdefault(field, dict(mapping))
+                current["mandatory"] |= mapping["mandatory"]
+                if mapping.get("column"):
+                    current["column"] = mapping["column"]
+            # Missing columns must be evaluated within their own schema, since
+            # a mapping in another schema does not satisfy that requirement.
+            for task in result["task-log"]:
+                if task.get("task-source") == "column-field":
+                    logs["task-log"].setdefault(task["details"], task)
+        merged = {key: list(items.values()) for key, items in logs.items()}
+        merged.update(
+            {"converted-csv": rows, "column-mapping": list(mappings.values())}
+        )
+        if merged["issue-log"]:
+            issue_path = Path(temporary) / "issues.csv"
+            _write_check_csv(
+                issue_path, merged["issue-log"], list(merged["issue-log"][0])
+            )
+            merged["task-log"].extend(
+                run_task_pipeline(
+                    task_log_path=Path(temporary) / "tasks.csv",
+                    dataset=dataset,
+                    organisation=organisation,
+                    issue_path=issue_path,
+                )
+            )
+    return merged
 
 
 # flake8: noqa
@@ -525,27 +688,14 @@ def _get_column_mapping(column_field_path, dataset, required_fields, specificati
     return list(field_dict.values())
 
 
-def getMandatoryFields(required_fields_path, dataset, rows=None):
+def getMandatoryFields(required_fields_path, dataset):
     with open(required_fields_path, "r") as f:
         data = yaml.safe_load(f)
 
-    datasets = [dataset]
-
-    if dataset in MULTI_DATASET_TYPES and rows:
-        datasets = datasets + list(
-            dict.fromkeys(
-                value.strip()
-                for row in rows
-                for value in (row.get("dataset") or "").replace(",", ";").split(";")
-                if value.strip()
-            )
-        )
-
     required_fields = []
-    for row_dataset in datasets:
-        for field in data.get(row_dataset, []):
-            if field not in required_fields:
-                required_fields.append(field)
+    for field in data.get(dataset, []):
+        if field not in required_fields:
+            required_fields.append(field)
 
     return required_fields
 

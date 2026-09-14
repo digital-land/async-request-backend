@@ -615,6 +615,19 @@ def _save_response_details(
     session.commit()
 
 
+def _get_datasets_in_resource(transformed_rows):
+    """Return distinct dataset values across the complete, mapped check output."""
+    return list(
+        dict.fromkeys(
+            value.strip()
+            for row in transformed_rows
+            if row.get("field") == "datasets"
+            for value in (row.get("value") or "").split(";")
+            if value.strip()
+        )
+    )
+
+
 def save_response_to_db(request_id, response_data):
     logger.info(f"save_response_to_db started for request_id: {request_id}")
     db_session = database.session_maker()
@@ -630,6 +643,9 @@ def save_response_to_db(request_id, response_data):
                     data = {
                         "task-log": response_data.get("task-log", []),
                         "column-mapping": response_data.get("column-mapping", []),
+                        "datasets-in-resource": _get_datasets_in_resource(
+                            response_data["transformed-csv"]
+                        ),
                         "plugin": response_data.get("plugin", None),
                     }
                     new_response = models.Response(request_id=request_id, data=data)
