@@ -621,7 +621,7 @@ def _get_datasets_in_resource(transformed_rows):
         dict.fromkeys(
             value.strip()
             for row in transformed_rows
-            if row.get("field") == "datasets"
+            if row.get("field") in ("dataset", "datasets")
             for value in (row.get("value") or "").split(";")
             if value.strip()
         )

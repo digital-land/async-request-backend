@@ -7,7 +7,10 @@ import pytest
 from src.application.core import workflow
 
 
-def test_dataset_checks_preserve_rows_and_merge_shared_issues(monkeypatch, tmp_path):
+@pytest.mark.parametrize("dataset_field", ["dataset", "datasets"])
+def test_dataset_checks_preserve_rows_and_merge_shared_issues(
+    monkeypatch, tmp_path, dataset_field
+):
     rows = [
         {"Plan type": "local-plan", "reference": "local"},
         {"Plan type": "minerals-plan;waste-plan", "reference": "shared"},
@@ -19,7 +22,7 @@ def test_dataset_checks_preserve_rows_and_merge_shared_issues(monkeypatch, tmp_p
         {
             "entry-number": str(index),
             "line-number": str(index + 1),
-            "field": "datasets",
+            "field": dataset_field,
             "value": row["Plan type"],
         }
         for index, row in enumerate(rows, 1)
@@ -48,7 +51,7 @@ def test_dataset_checks_preserve_rows_and_merge_shared_issues(monkeypatch, tmp_p
     ):
         assert not _check_datasets
         assert collection == "local-plan"
-        assert column_mapping == {"Plan type": "datasets"}
+        assert column_mapping == {"Plan type": dataset_field}
         with open(
             f"{directories.COLLECTION_DIR}/resource/{request_id}/{resource}"
         ) as f:
@@ -61,7 +64,7 @@ def test_dataset_checks_preserve_rows_and_merge_shared_issues(monkeypatch, tmp_p
                 {
                     "entry-number": str(entry),
                     "line-number": str(entry + 1),
-                    "field": "datasets",
+                    "field": dataset_field,
                     "value": row["Plan type"],
                 }
             )
@@ -85,7 +88,7 @@ def test_dataset_checks_preserve_rows_and_merge_shared_issues(monkeypatch, tmp_p
             "issue-log": issues,
             "task-log": [],
             "column-mapping": [
-                {"field": "datasets", "column": "Plan type", "mandatory": True},
+                {"field": dataset_field, "column": "Plan type", "mandatory": True},
                 {
                     "field": "minerals-and-waste-planning-authorities",
                     "column": "minerals-and-waste-planning-authorities",
@@ -104,7 +107,7 @@ def test_dataset_checks_preserve_rows_and_merge_shared_issues(monkeypatch, tmp_p
         "local-plan",
         "org",
         "",
-        {"Plan type": "datasets"},
+        {"Plan type": dataset_field},
         directories,
         specification,
     )
@@ -145,14 +148,14 @@ def test_single_dataset_keeps_existing_check(value):
     )
 
 
-def test_singular_dataset_does_not_trigger_multiple_checks():
+def test_unrelated_field_does_not_trigger_multiple_checks():
     assert (
         workflow._check_resource_datasets(
             [{"dataset": "minerals-plan;waste-plan"}],
             [
                 {
                     "entry-number": "1",
-                    "field": "dataset",
+                    "field": "prefix",
                     "value": "minerals-plan;waste-plan",
                 }
             ],

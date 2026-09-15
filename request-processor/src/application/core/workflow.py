@@ -370,7 +370,7 @@ def _check_resource_datasets(
             continue
         entry = str(source_entries[int(entry) - 1])
         line_numbers[entry] = fact.get("line-number", "")
-        if fact.get("field") == "datasets":
+        if fact.get("field") in ("dataset", "datasets"):
             dataset_facts.append({**fact, "entry-number": entry})
             memberships.setdefault(entry, set()).update(
                 value.strip()

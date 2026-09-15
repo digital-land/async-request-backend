@@ -898,7 +898,11 @@ def test_check_dataurl_workflow_called_with_correct_params(monkeypatch):
     "fields, expected",
     [
         ([], []),
-        ([("dataset", "minerals-plan;waste-plan")], []),
+        ([("dataset", "minerals-plan;waste-plan")], ["minerals-plan", "waste-plan"]),
+        (
+            [("dataset", "local-plan"), ("datasets", "local-plan;minerals-plan")],
+            ["local-plan", "minerals-plan"],
+        ),
         ([("datasets", "local-plan")] * 2, ["local-plan"]),
         (
             [("datasets", "local-plan")] * 50
