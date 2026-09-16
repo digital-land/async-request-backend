@@ -118,7 +118,7 @@ def test_csv_to_json_with_valid_file(test_dir):
     assert json_data[1]["field"] == "name"
 
 
-def test_get_mandatory_fields_for_mixed_plan_csv(tmp_path):
+def test_get_mandatory_fields_for_selected_dataset(tmp_path):
     mandatory_fields = tmp_path / "mandatory_fields.yaml"
     mandatory_fields.write_text(
         """local-plan:
@@ -132,18 +132,10 @@ waste-plan:
 """
     )
 
-    result = getMandatoryFields(
-        mandatory_fields,
-        "local-plan",
-        [
-            {"dataset": "local-plan"},
-            {"dataset": "minerals-plan, waste-plan"},
-            {"dataset": "local-plan"},
-        ],
-    )
-
-    assert result == [
-        "local-planning-authorities",
+    assert getMandatoryFields(mandatory_fields, "local-plan") == [
+        "local-planning-authorities"
+    ]
+    assert getMandatoryFields(mandatory_fields, "minerals-plan") == [
         "minerals-and-waste-planning-authorities",
         "document-count",
     ]
