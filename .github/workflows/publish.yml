@@ -39,6 +39,9 @@ jobs:
   publish-request-api:
     runs-on: ubuntu-22.04
     needs: [detect-environments, test]
+    permissions:
+      id-token: write
+      contents: read
     strategy:
       matrix:
         environment: ${{ fromJSON(needs.detect-environments.outputs.environments) }}
@@ -61,8 +64,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
-          aws-access-key-id: ${{ secrets.DEPLOY_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.DEPLOY_AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.DEPLOY_AWS_ROLE_ARN }}
           aws-region: us-east-1
 
       - uses: aws-actions/amazon-ecr-login@v2
@@ -81,8 +83,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
-          aws-access-key-id: ${{ secrets.DEPLOY_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.DEPLOY_AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.DEPLOY_AWS_ROLE_ARN }}
           aws-region: eu-west-2
 
       - name: Update ECS Service
@@ -93,6 +94,9 @@ jobs:
   publish-request-processor:
     runs-on: ubuntu-22.04
     needs: [detect-environments, test]
+    permissions:
+      id-token: write
+      contents: read
     strategy:
       matrix:
         environment: ${{ fromJSON(needs.detect-environments.outputs.environments) }}
@@ -115,8 +119,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
-          aws-access-key-id: ${{ secrets.DEPLOY_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.DEPLOY_AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.DEPLOY_AWS_ROLE_ARN }}
           aws-region: us-east-1
 
       - uses: aws-actions/amazon-ecr-login@v2
@@ -135,8 +138,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
-          aws-access-key-id: ${{ secrets.DEPLOY_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.DEPLOY_AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.DEPLOY_AWS_ROLE_ARN }}
           aws-region: eu-west-2
 
       - name: Update ECS Services (Processors)
