@@ -310,6 +310,7 @@ def run_task_pipeline(
         issue_path=issue_path,
         column_field_path=column_field_path,
         mandatory_fields=mandatory_fields,
+        severity_filter=["critical", "error"],
     )
     if status == TaskPipelineStatus.FAILED:
         raise RuntimeError(f"TaskPipeline failed for dataset '{dataset}'")

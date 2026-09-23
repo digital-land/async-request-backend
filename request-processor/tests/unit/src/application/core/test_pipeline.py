@@ -1446,6 +1446,7 @@ def test_run_task_pipeline_passes_column_field_path_and_mandatory_fields(
         issue_path=issue_path,
         column_field_path=column_field_path,
         mandatory_fields=mandatory_fields,
+        severity_filter=["critical", "error"],
     )
     assert result == []
 
@@ -1509,3 +1510,24 @@ def test_get_column_mapping_filters_empty_rows(tmp_path):
     assert len(result) == 1
     assert result[0]["field"] == "reference"
     assert result[0]["column"] == "ref"
+
+
+def test_run_task_pipeline_retains_critical_and_error_issues(tmp_path, monkeypatch):
+    issue_path = tmp_path / "issues.csv"
+    issue_path.write_text(
+        "dataset,resource,field,issue-type,severity,responsibility\n"
+        "test,res,geometry,invalid WKT,critical,external\n"
+        "test,res,name,missing value,error,external\n"
+        "test,res,date,invalid date,warning,external\n"
+        "test,res,entity,unknown entity,critical,internal\n"
+    )
+    monkeypatch.setattr("src.application.core.pipeline.load_mappings", lambda: {})
+    tasks = run_task_pipeline(
+        task_log_path=str(tmp_path / "tasks.csv"),
+        dataset="test",
+        organisation="local-authority:CTY",
+        issue_path=str(issue_path),
+    )
+    assert len(tasks) == 2
+    assert {task["severity"] for task in tasks} == {"critical", "error"}
+    assert all(task["responsibility"] == "external" for task in tasks)
