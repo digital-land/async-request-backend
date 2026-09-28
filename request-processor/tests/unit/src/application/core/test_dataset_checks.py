@@ -197,8 +197,8 @@ def test_child_failure_fails_whole_check(monkeypatch, tmp_path, dataset):
     assert result == error
 
 
-@pytest.mark.parametrize("missing_authority", [False, True])
-def test_mixed_resource_uses_each_schema(monkeypatch, tmp_path, missing_authority):
+@pytest.fixture
+def run_plan_check(monkeypatch, tmp_path):
     """Exercise the real mapping, harmonisation and task pipelines offline."""
     from pathlib import Path
     from application.core import pipeline
@@ -235,6 +235,28 @@ def test_mixed_resource_uses_each_schema(monkeypatch, tmp_path, missing_authorit
     monkeypatch.setattr(workflow, "fetch_pipeline_csvs", configure)
     resource_path = Path(paths["COLLECTION_DIR"]) / "resource" / "request"
     resource_path.mkdir(parents=True)
+
+    def run(rows, dataset="plan"):
+        workflow._write_check_csv(resource_path / "resource", rows, list(rows[0]))
+        result = workflow.run_workflow(
+            "resource",
+            "request",
+            "local-plan",
+            dataset,
+            "local-authority:ADU",
+            "",
+            {},
+            directories,
+        )
+        assert "status" not in result, result
+        return result
+
+    return run
+
+
+@pytest.mark.parametrize("missing_authority", [False, True])
+@pytest.mark.parametrize("separator", [";", ":", ","])
+def test_mixed_resource_uses_each_schema(run_plan_check, missing_authority, separator):
     rows = [
         {
             "reference": "local",
@@ -248,7 +270,7 @@ def test_mixed_resource_uses_each_schema(monkeypatch, tmp_path, missing_authorit
         {
             "reference": "shared",
             "name": "Shared",
-            "datasets": "minerals-plan;waste-plan",
+            "datasets": separator.join(["minerals-plan", "waste-plan"]),
             "local-planning-authorities": "",
             "minerals-and-waste-planning-authorities": "E60000229",
             "document-count": "1",
@@ -259,24 +281,13 @@ def test_mixed_resource_uses_each_schema(monkeypatch, tmp_path, missing_authorit
     if missing_authority:
         for row in rows:
             del row["minerals-and-waste-planning-authorities"]
-    workflow._write_check_csv(resource_path / "resource", rows, list(rows[0]))
-    result = workflow.run_workflow(
-        "resource",
-        "request",
-        "local-plan",
-        "plan",
-        "local-authority:ADU",
-        "",
-        {},
-        directories,
-    )
-    assert "status" not in result, result
+    result = run_plan_check(rows)
     assert result["converted-csv"] == rows
     assert [
         fact["value"]
         for fact in result["transformed-csv"]
         if fact["field"] == "datasets"
-    ] == ["local-plan", "minerals-plan;waste-plan"]
+    ] == ["local-plan", separator.join(["minerals-plan", "waste-plan"])]
     assert any(
         fact["field"] == "minerals-and-waste-planning-authorities"
         and fact["value"] == "E60000229"
@@ -305,3 +316,103 @@ def test_mixed_resource_uses_each_schema(monkeypatch, tmp_path, missing_authorit
     ]
     assert len(date_tasks) == 1
     assert date_tasks[0]["count"] == 1
+
+
+@pytest.mark.parametrize("field", ["dataset", "datasets"])
+@pytest.mark.parametrize(
+    "value", ["supplementary-plan-cda-design-code", "tree", "minerals-plan-waste-plan"]
+)
+def test_invalid_plan_membership_creates_critical_task(run_plan_check, field, value):
+    selected = "plan" if field == "datasets" else "supplementary-plan"
+    rows = [{field: "", "reference": ""}, {field: value, "reference": "bad"}]
+    result = run_plan_check(rows, selected)
+    issues = [
+        i for i in result["issue-log"] if i["issue-type"] == "invalid category value"
+    ]
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "critical"
+    assert issues[0]["value"] == value
+    assert issues[0]["line-number"] == "3"
+    tasks = [
+        t
+        for t in result["task-log"]
+        if json.loads(t["details"]).get("issue_type") == "invalid category value"
+    ]
+    assert len(tasks) == 1
+    assert tasks[0]["severity"] == "critical"
+    assert json.loads(tasks[0]["details"])["field"] == field
+
+
+@pytest.mark.parametrize("field", ["dataset", "datasets"])
+@pytest.mark.parametrize("separator", [";", ":", ","])
+def test_supported_plan_combinations(run_plan_check, field, separator):
+    result = run_plan_check(
+        [
+            {
+                field: separator.join(["minerals-plan", "waste-plan"]),
+                "reference": "shared",
+            }
+        ],
+        "plan" if field == "datasets" else "minerals-plan",
+    )
+    assert not [
+        i for i in result["issue-log"] if i["issue-type"] == "invalid category value"
+    ]
+
+
+def test_mixed_valid_and_invalid_memberships(run_plan_check):
+    result = run_plan_check([{"datasets": "local-plan;invalid", "reference": "mixed"}])
+    issues = [
+        i for i in result["issue-log"] if i["issue-type"] == "invalid category value"
+    ]
+    assert len(issues) == 1
+    assert issues[0]["value"] == "local-plan;invalid"
+    assert issues[0]["severity"] == "critical"
+
+
+def test_non_plan_check_does_not_validate_plan_memberships(run_plan_check, monkeypatch):
+    from unittest.mock import Mock
+    from application.core import pipeline
+
+    validate = Mock(side_effect=AssertionError("Plan validation must not run"))
+    monkeypatch.setattr(pipeline, "validate_plan_datasets", validate)
+    run_plan_check([{"reference": "tree", "dataset": "tree"}], "tree")
+    validate.assert_not_called()
+
+
+def test_invalid_plan_is_enriched_when_pipeline_has_no_other_issues(
+    run_plan_check, monkeypatch
+):
+    from application.core import pipeline
+
+    transform = pipeline.Pipeline.transform
+
+    def transform_without_other_issues(*args, **kwargs):
+        issue_log = transform(*args, **kwargs)
+        issue_log.rows = []
+        # A fresh, empty issue log has not acquired severity columns.
+        issue_log.fieldnames = [
+            "dataset",
+            "resource",
+            "line-number",
+            "entry-number",
+            "field",
+            "entity",
+            "issue-type",
+            "value",
+            "message",
+        ]
+        return issue_log
+
+    monkeypatch.setattr(pipeline.Pipeline, "transform", transform_without_other_issues)
+    result = run_plan_check([{"datasets": "invalid", "reference": "bad"}])
+    assert len(result["issue-log"]) == 1
+    issue = result["issue-log"][0]
+    assert issue["issue-type"] == "invalid category value"
+    assert issue["severity"] == "critical"
+    assert issue["responsibility"] == "external"
+    assert issue["description"]
+    assert issue["line-number"] == "2"
+    tasks = [task for task in result["task-log"] if task["task-source"] == "issue"]
+    assert len(tasks) == 1
+    assert tasks[0]["severity"] == "critical"

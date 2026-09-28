@@ -19,6 +19,7 @@ from task_interface.base_tasks import (
 )
 import json
 from application.core import workflow
+from application.core.plan_datasets import split_dataset_values
 from application.configurations.config import DATASTORE_URL, Directories
 import application.core.utils as utils
 from application.exceptions.customExceptions import (
@@ -619,11 +620,10 @@ def _get_datasets_in_resource(transformed_rows):
     """Return distinct dataset values across the complete, mapped check output."""
     return list(
         dict.fromkeys(
-            value.strip()
+            value
             for row in transformed_rows
             if row.get("field") in ("dataset", "datasets")
-            for value in (row.get("value") or "").split(";")
-            if value.strip()
+            for value in split_dataset_values(row.get("value"))
         )
     )
 
