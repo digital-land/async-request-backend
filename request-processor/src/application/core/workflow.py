@@ -29,6 +29,7 @@ from application.core.utils import (
 from application.logging.logger import get_logger
 from application.core.plan_datasets import (
     PLAN_CHECK_DATASETS,
+    PLAN_DATASETS,
     split_dataset_values,
 )
 from application.core.pipeline import (
@@ -391,6 +392,9 @@ def _check_resource_datasets(
                     else fact.get("value", "").split(";")
                 )
                 if value.strip() in specification.dataset
+                and (
+                    dataset not in PLAN_CHECK_DATASETS or value.strip() in PLAN_DATASETS
+                )
             )
 
     groups = {}

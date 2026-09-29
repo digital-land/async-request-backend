@@ -25,15 +25,12 @@ def set_plan_issue_severity(issue_log):
 
 def validate_plan_datasets(facts, rows, issue_log):
     """Add invalid plan memberships to the issue log before severity enrichment."""
-    invalid_facts = [
-        fact
-        for fact in facts
-        if fact.get("field") in ("dataset", "datasets")
-        and any(
-            value not in PLAN_DATASETS
-            for value in split_dataset_values(fact.get("value"))
-        )
-    ]
+    invalid_facts = []
+    for fact in facts:
+        if fact.get("field") in ("dataset", "datasets") and fact.get("value"):
+            values = split_dataset_values(fact["value"])
+            if not values or any(value not in PLAN_DATASETS for value in values):
+                invalid_facts.append(fact)
     if invalid_facts:
         normalise = NormalisePhase()
         source_lines = [
