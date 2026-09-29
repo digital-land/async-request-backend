@@ -55,5 +55,7 @@ def validate_plan_datasets(facts, rows, issue_log):
                 entry_number=fact["entry-number"],
                 line_number=fact.get("line-number")
                 or source_lines[int(fact["entry-number"]) - 1],
-                message="Use " + ", ".join(PLAN_DATASETS) + "; separate multiple values with semicolons.",
+                message="Use "
+                + ", ".join(PLAN_DATASETS)
+                + "; separate multiple values with semicolons.",
             )
