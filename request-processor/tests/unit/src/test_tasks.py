@@ -920,6 +920,10 @@ def test_check_dataurl_workflow_called_with_correct_params(monkeypatch):
         ),
     ],
 )
-def test_get_datasets_in_resource(fields, expected):
-    rows = [{"field": field, "value": value} for field, value in fields]
+@pytest.mark.parametrize("separator", [";", ":", ","])
+def test_get_datasets_in_resource(fields, expected, separator):
+    rows = [
+        {"field": field, "value": value.replace(";", separator) if value else value}
+        for field, value in fields
+    ]
     assert tasks._get_datasets_in_resource(rows) == expected

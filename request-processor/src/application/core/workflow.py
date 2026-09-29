@@ -27,6 +27,11 @@ from application.core.utils import (
     validate_source,
 )
 from application.logging.logger import get_logger
+from application.core.plan_datasets import (
+    PLAN_CHECK_DATASETS,
+    PLAN_DATASETS,
+    split_dataset_values,
+)
 from application.core.pipeline import (
     fetch_response_data,
     resource_from_path,
@@ -243,6 +248,9 @@ def run_workflow(
                 directories.TRANSFORMED_DIR, dataset, request_id, f"{resource}.csv"
             )
         )
+        issue_log_json = csv_to_json(
+            os.path.join(directories.ISSUE_DIR, dataset, request_id, f"{resource}.csv")
+        )
         if _check_datasets:
             result = _check_resource_datasets(
                 converted_json,
@@ -256,6 +264,13 @@ def run_workflow(
                 column_mapping,
                 directories,
                 specification,
+                plan_issues=[
+                    issue
+                    for issue in issue_log_json
+                    if dataset in PLAN_CHECK_DATASETS
+                    and issue.get("field") in ("dataset", "datasets")
+                    and issue.get("issue-type") == "invalid category value"
+                ],
             )
             if result is not None:
                 return result
@@ -265,10 +280,6 @@ def run_workflow(
             "../application/configs/mandatory_fields.yaml",
         )
         required_fields = getMandatoryFields(required_fields_path, dataset)
-
-        issue_log_json = csv_to_json(
-            os.path.join(directories.ISSUE_DIR, dataset, request_id, f"{resource}.csv")
-        )
 
         # Secondary pipeline to create tasks from issues and column-field mappings, and generate task log summary
         task_log_path = os.path.join(
@@ -349,6 +360,7 @@ def _check_resource_datasets(
     column_mapping,
     directories,
     specification,
+    plan_issues=(),
 ):
     """Check mapped dataset memberships and fold the outputs onto the source rows."""
     memberships = {}
@@ -374,8 +386,15 @@ def _check_resource_datasets(
             dataset_facts.append({**fact, "entry-number": entry})
             memberships.setdefault(entry, set()).update(
                 value.strip()
-                for value in fact.get("value", "").split(";")
+                for value in (
+                    split_dataset_values(fact.get("value"))
+                    if dataset in PLAN_CHECK_DATASETS
+                    else fact.get("value", "").split(";")
+                )
                 if value.strip() in specification.dataset
+                and (
+                    dataset not in PLAN_CHECK_DATASETS or value.strip() in PLAN_DATASETS
+                )
             )
 
     groups = {}
@@ -387,6 +406,10 @@ def _check_resource_datasets(
         return None
 
     logs = {key: {} for key in ("issue-log", "transformed-csv", "task-log")}
+    for issue in plan_issues:
+        issue = dict(issue)
+        issue["entry-number"] = str(source_entries[int(issue["entry-number"]) - 1])
+        logs["issue-log"][json.dumps(issue, sort_keys=True)] = issue
     for fact in dataset_facts:
         logs["transformed-csv"][json.dumps(fact, sort_keys=True)] = fact
     mappings = {}

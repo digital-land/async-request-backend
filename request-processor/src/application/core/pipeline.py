@@ -13,6 +13,11 @@ from digital_land.commands import get_resource_unidentified_lookups
 from pathlib import Path
 
 from application.core.duplicates import find_duplicate_redirect_candidates
+from application.core.plan_datasets import (
+    PLAN_CHECK_DATASETS,
+    set_plan_issue_severity,
+    validate_plan_datasets,
+)
 
 logger = get_logger(__name__)
 
@@ -414,8 +419,24 @@ def fetch_response_data(
                 ),
                 disable_lookups=True,
             )
+            if dataset in PLAN_CHECK_DATASETS:
+                converted_path = Path(converted_dir) / request_id / f"{resource}.csv"
+                with open(
+                    Path(transformed_dir) / dataset / request_id / f"{resource}.csv",
+                    newline="",
+                ) as facts, open(
+                    converted_path if converted_path.exists() else file_path,
+                    newline="",
+                ) as rows:
+                    validate_plan_datasets(
+                        list(csv.DictReader(facts)),
+                        list(csv.DictReader(rows)),
+                        issue_log,
+                    )
             # Issue log needs severity column added, so manually added and saved here
             issue_log.add_severity_column(severity_mapping=specification.issue_type)
+            if dataset in PLAN_CHECK_DATASETS:
+                set_plan_issue_severity(issue_log)
             issue_log.save(
                 os.path.join(issue_dir, dataset, request_id, resource + ".csv")
             )
