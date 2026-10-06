@@ -223,6 +223,62 @@ def test_fetch_response_data_reraises_pipeline_transform_exception(
         )
 
 
+@pytest.mark.parametrize("owner", [None, "local-authority:MAN"])
+def test_add_data_owner_only_changes_entity_organisation(monkeypatch, tmp_path, owner):
+    module = "src.application.core.pipeline"
+    resource_dir = tmp_path / "resource"
+    resource_dir.mkdir()
+    (resource_dir / "test.csv").write_text("reference\nREF001\nREF002\n")
+    pipeline_dir = tmp_path / "pipeline"
+    pipeline_dir.mkdir()
+    (pipeline_dir / "entity-organisation.csv").write_text(
+        "dataset,entity-minimum,entity-maximum,organisation\n"
+    )
+    pipeline = MagicMock()
+    pipeline.path = str(pipeline_dir)
+    pipeline.transform.return_value.rows = [{"issue-type": "unknown entity"}]
+    monkeypatch.setattr(f"{module}.Pipeline", MagicMock(return_value=pipeline))
+    monkeypatch.setattr(f"{module}.Organisation", MagicMock())
+    monkeypatch.setattr(f"{module}.API", MagicMock())
+    monkeypatch.setattr(f"{module}._map_transformed_entities", lambda *args: [])
+    monkeypatch.setattr(f"{module}._find_duplicate_candidates", lambda *args: [])
+    source = "government-organisation:MHCLG"
+    assign = MagicMock(
+        return_value=[
+            {"entity": "100", "reference": "REF001", "organisation": source},
+            {"entity": "101", "reference": "REF002", "organisation": source},
+        ]
+    )
+    monkeypatch.setattr(f"{module}._assign_entries", assign)
+    result = fetch_add_data_response(
+        dataset="conservation-area",
+        organisation_provider=source,
+        pipeline_dir=str(pipeline_dir),
+        input_dir=str(resource_dir),
+        output_path=str(tmp_path / "output.csv"),
+        specification=MagicMock(),
+        cache_dir=str(tmp_path),
+        endpoint="endpoint",
+        excluded_references=["REF002"],
+        authoritative_organisation=owner,
+    )
+    assert result["entity-organisation"] == [
+        {
+            "dataset": "conservation-area",
+            "organisation": owner or source,
+            "entity-minimum": 100,
+            "entity-maximum": 100,
+            "overlap": False,
+            "error": False,
+        }
+    ]
+    assert assign.call_args.kwargs["organisation"] == source
+    assert all(
+        call.kwargs["organisations"] == [source]
+        for call in pipeline.transform.call_args_list
+    )
+
+
 def test_fetch_add_data_response_success(monkeypatch, tmp_path):
     """Test successful execution of fetch_add_data_response"""
     dataset = "test-dataset"

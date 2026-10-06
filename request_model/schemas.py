@@ -43,6 +43,7 @@ class AddDataParams(Params):
     resource: Optional[str] = None
     documentation_url: Optional[str] = None
     authoritative: Optional[bool] = None
+    authoritative_organisation: Optional[str] = None
     licence: Optional[str] = None
     start_date: Optional[str] = None
     organisation: Optional[str] = None

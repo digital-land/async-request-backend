@@ -417,7 +417,8 @@ def test_add_data_workflow(monkeypatch):
     assert result == expected_response
 
 
-def test_add_data_workflow_calls(monkeypatch):
+@pytest.mark.parametrize("owner", [None, "local-authority:MAN"])
+def test_add_data_workflow_calls(monkeypatch, owner):
     file_name = "test.csv"
     request_id = "req-002"
     collection = "test-collection"
@@ -460,6 +461,7 @@ def test_add_data_workflow_calls(monkeypatch):
         converted_path=None,
         excluded_references=None,
         selected_redirects=None,
+        authoritative_organisation=None,
     ):
         called["fetch_add_data_response"] = {
             "dataset": dataset,
@@ -472,6 +474,7 @@ def test_add_data_workflow_calls(monkeypatch):
             "endpoint": endpoint,
             "excluded_references": excluded_references,
             "selected_redirects": selected_redirects,
+            "authoritative_organisation": authoritative_organisation,
         }
         return {"result": "ok"}
 
@@ -500,6 +503,7 @@ def test_add_data_workflow_calls(monkeypatch):
         url,
         documentation_url,
         directories,
+        authoritative_organisation=owner,
     )
 
     expected_pipeline_dir = os.path.join(
@@ -526,6 +530,7 @@ def test_add_data_workflow_calls(monkeypatch):
     assert called["fetch_add_data_response"]["endpoint"] == expected_endpoint_hash
     assert called["fetch_add_data_response"]["excluded_references"] is None
     assert called["fetch_add_data_response"]["selected_redirects"] is None
+    assert called["fetch_add_data_response"]["authoritative_organisation"] == owner
 
 
 def test_add_data_workflow_with_resource_endpoints(monkeypatch):

@@ -435,6 +435,11 @@ def add_data_task(request: Dict, directories=None):
                 endpoints=endpoints,
                 excluded_references=getattr(request_data, "excluded_references", None),
                 selected_redirects=getattr(request_data, "selected_redirects", None),
+                authoritative_organisation=(
+                    request_data.authoritative_organisation
+                    if request_data.authoritative is False
+                    else None
+                ),
             )
             if "plugin" in log:
                 response["plugin"] = log["plugin"]
