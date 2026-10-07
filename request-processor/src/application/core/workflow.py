@@ -742,6 +742,7 @@ def add_data_workflow(
     endpoints=None,
     excluded_references=None,
     selected_redirects=None,
+    authoritative_organisation=None,
 ):
     """
     Setup directories and download required CSVs to manage add-data pipeline
@@ -822,6 +823,7 @@ def add_data_workflow(
             converted_path=converted_path,
             excluded_references=excluded_references,
             selected_redirects=selected_redirects,
+            authoritative_organisation=authoritative_organisation,
         )
 
         # Create endpoint and source summaries in workflow

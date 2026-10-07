@@ -278,7 +278,15 @@ def test_download_resource_uses_datastore_url(monkeypatch, tmp_path):
     assert log["resource-url"] == downloaded["url"]
 
 
-def test_add_data_task_success(monkeypatch):
+@pytest.mark.parametrize(
+    "authoritative,owner,expected",
+    [
+        (False, "local-authority:MAN", "local-authority:MAN"),
+        (False, None, None),
+        (True, "local-authority:MAN", None),
+    ],
+)
+def test_add_data_task_success(monkeypatch, authoritative, owner, expected):
     request = {
         "id": "req-123",
         "status": "NEW",
@@ -298,19 +306,21 @@ def test_add_data_task_success(monkeypatch):
     request_schema = MagicMock()
     request_schema.status = "NEW"
     request_schema.id = "req-123"
-    request_schema.params = MagicMock()
-    request_schema.params.collection = "col"
-    request_schema.params.dataset = "ds"
-    request_schema.params.organisation = "org"
-    request_schema.params.url = "http://example.com/data.csv"
+    request_schema.params = schemas.AddDataParams(
+        collection="col",
+        dataset="ds",
+        organisation="org",
+        url="http://example.com/data.csv",
+        authoritative=authoritative,
+        authoritative_organisation=owner,
+    )
 
     monkeypatch.setattr(
         tasks.schemas.Request, "model_validate", lambda r: request_schema
     )
     monkeypatch.setattr(tasks, "_fetch_resource", lambda *a, **kw: ("file.csv", {}))
-    monkeypatch.setattr(
-        tasks.workflow, "add_data_workflow", lambda *a, **kw: {"result": "ok"}
-    )
+    workflow = MagicMock(return_value={"result": "ok"})
+    monkeypatch.setattr(tasks.workflow, "add_data_workflow", workflow)
     monkeypatch.setattr(tasks, "save_response_to_db", lambda *a, **kw: None)
     monkeypatch.setattr(
         tasks, "_get_request", lambda rid: {"id": rid, "status": "COMPLETE"}
@@ -320,6 +330,8 @@ def test_add_data_task_success(monkeypatch):
 
     assert result["id"] == "req-123"
     assert result["status"] == "COMPLETE"
+    assert workflow.call_args.args[4] == "org"
+    assert workflow.call_args.kwargs["authoritative_organisation"] == expected
 
 
 def test_add_data_task_success_with_resource(monkeypatch):

@@ -13,10 +13,17 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
       - name: Install test dependencies with pip
         working-directory: ./request-api
         run: |
-          pip3 install -r requirements/test_requirements.txt
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements/test_requirements.txt
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Run Lint and Tests
         working-directory: ./request-api

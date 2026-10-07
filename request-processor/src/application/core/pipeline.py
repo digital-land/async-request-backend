@@ -564,6 +564,7 @@ def _transform_add_data_resource(
     specification,
     cache_dir,
     excluded_references,
+    authoritative_organisation=None,
 ):
     """
     Transform one add-data resource and assign entities when unknown rows exist.
@@ -611,7 +612,7 @@ def _transform_add_data_resource(
     entity_org_mapping = _create_entity_organisation(
         _filter_selected_entities(new_lookups, excluded_references),
         dataset,
-        organisations[0],
+        authoritative_organisation or organisations[0],
         pipeline_dir,
     )
 
@@ -681,6 +682,7 @@ def fetch_add_data_response(
     converted_path=None,
     excluded_references=None,
     selected_redirects=None,
+    authoritative_organisation=None,
 ):
     """
     Run the add-data pipeline transform and build the pipeline summary response.
@@ -748,6 +750,7 @@ def fetch_add_data_response(
                 specification=specification,
                 cache_dir=cache_dir,
                 excluded_references=excluded_references,
+                authoritative_organisation=authoritative_organisation,
             )
 
             existing_entities.extend(transformed_entities)
