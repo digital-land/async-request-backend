@@ -4,7 +4,7 @@
 #
 #    pip-compile requirements/requirements.in
 #
--e git+https://github.com/digital-land/pipeline.git#egg=digital-land
+-e git+https://github.com/digital-land/pipeline.git@feat/missing-reference-critical-issue#egg=digital-land
     # via -r requirements/requirements.in
 aiofiles==24.1.0
     # via datasette
