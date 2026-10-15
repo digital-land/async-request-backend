@@ -16,6 +16,8 @@ class PluginTypeEnum(str, Enum):
 
 
 class Params(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     type: RequestTypeEnum
     service: Optional[str] = None
     organisationName: Optional[str] = None
@@ -49,6 +51,10 @@ class AddDataParams(Params):
     organisation: Optional[str] = None
     plugin: Optional[PluginTypeEnum] = None
     github_branch: Optional[str] = None
+    return_endpoint: Optional[str] = Field(
+        default=None,
+        description="Client return route identifier; not used by processing.",
+    )
     excluded_references: Optional[List[str]] = None
     selected_redirects: Optional[List[Dict[str, str]]] = None
 
@@ -60,7 +66,7 @@ class RequestBase(BaseModel):
 
 
 class RequestCreate(RequestBase):
-    pass
+    model_config = ConfigDict(extra="forbid")
 
 
 class ResponseData(BaseModel):
