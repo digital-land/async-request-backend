@@ -135,6 +135,46 @@ def test_create_request(db, sqs_queue, helpers):
     assert response.headers["Location"] == f"$testserver/requests/{request_id}"
 
 
+@pytest.mark.parametrize("kind", ["check_url", "check_file", "add_data"])
+def test_request_params_survive_persistence_and_resubmission(db, sqs_queue, kind):
+    params = {
+        "type": kind,
+        "collection": "tree-preservation-order",
+        "dataset": "tree",
+        "organisationName": "local-authority:ABC",
+        "endpoint_parameters": {"plugin": "wfs"},
+        "column_mapping": {"Name": "name"},
+    }
+    if kind == "check_file":
+        params.update(original_filename="trees.csv", uploaded_filename="upload.csv")
+    else:
+        params["url"] = "https://example.org/trees.csv"
+    if kind == "add_data":
+        params.update(
+            documentation_url="https://example.org/docs",
+            licence="ogl3",
+            start_date="2026-01-01",
+            organisation="local-authority:ABC",
+            return_endpoint="assign_entities.flagged_resources_summary",
+        )
+    created = client.post("/requests", json={"params": params})
+    assert created.status_code == 202
+    stored_response = client.get(f"/requests/{created.json()['id']}")
+    assert stored_response.status_code == 200
+    stored = stored_response.json()["params"]
+    for field, value in params.items():
+        assert stored[field] == value
+    resubmitted = client.post(
+        "/requests",
+        json={"params": {**stored, "column_mapping": {"TreeName": "name"}}},
+    )
+    assert resubmitted.status_code == 202
+    assert resubmitted.json()["params"] == {
+        **stored,
+        "column_mapping": {"TreeName": "name"},
+    }
+
+
 def test_create_request_missing_uploaded_file(db, sqs_queue, helpers):
     with pytest.raises(ValidationError):
         json_dict = helpers.request_create_dict(
