@@ -15,6 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 import crud
+from auth import add_data_requires_auth, require_auth
 from database import session_maker
 from pagination_model import PaginationParams
 from request_model import models, schemas
@@ -151,6 +152,7 @@ def healthcheck(
 
 
 @app.post("/requests", status_code=202, response_model=schemas.Request)
+@require_auth(roles={"staff", "admin"}, when=add_data_requires_auth)
 def create_request(
     request: schemas.RequestCreate,
     http_request: Request,
