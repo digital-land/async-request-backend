@@ -441,9 +441,18 @@ def test_run_duplicate_check_commits_before_spatialite_metadata(monkeypatch):
     assert matches["complete_matches"][0]["entity_b"] == 200
 
 
-def test_duplicate_candidates_skip_non_conservation_area(tmp_path, monkeypatch):
+def test_other_geography_candidates_use_field_matching(tmp_path, monkeypatch):
     transformed_path = tmp_path / "transformed.csv"
     _write_transformed_csv(transformed_path)
+    platform_path = tmp_path / "platform.parquet"
+    _write_platform_parquet(
+        platform_path,
+        [
+            {"entity": "100", "name": " new NAME ", "organisation-entity": "318"},
+            {"entity": "101", "name": "Different name", "organisation-entity": "318"},
+            {"entity": "102", "name": "New name", "organisation-entity": "999"},
+        ],
+    )
     monkeypatch.setattr(
         duplicates,
         "_run_duplicate_check",
@@ -459,9 +468,15 @@ def test_duplicate_candidates_skip_non_conservation_area(tmp_path, monkeypatch):
         fetch_platform_entities=lambda dataset, organisation_entity: (
             _ for _ in ()
         ).throw(AssertionError()),
+        download_platform_dataset_parquet=lambda dataset: _existing_parquet(
+            platform_path
+        ),
     )
 
-    assert candidates == []
+    assert len(candidates) == 1
+    assert candidates[0]["old_entity"] == "100"
+    assert candidates[0]["entity"] == "200"
+    assert candidates[0]["match_type"] == "all_fields_match"
 
 
 def test_non_spatial_candidates_match_all_comparable_fields(tmp_path, monkeypatch):

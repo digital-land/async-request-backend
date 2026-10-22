@@ -626,7 +626,7 @@ def find_duplicate_redirect_candidates(
 
     dataset_typology = specification.get_dataset_typology(dataset)
     redirect_lookups = redirect_lookups or {}
-    if dataset_typology != "geography":
+    if dataset_typology != "geography" or dataset != "conservation-area":
         return _find_non_spatial_candidates(
             dataset,
             provision_rows,
@@ -635,9 +635,6 @@ def find_duplicate_redirect_candidates(
             organisation_provider,
             organisation_index,
         )
-
-    if dataset != "conservation-area":
-        return []
 
     organisation_entity = _resolve_organisation_entity(
         organisation_index, organisation_provider
