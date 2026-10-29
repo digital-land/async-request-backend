@@ -1,8 +1,13 @@
+import base64
 import datetime
+import time
 from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import pytest
+import jwt
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 from pydantic_core import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
@@ -14,6 +19,31 @@ from main import app, _get_db, _get_sqs_client, send_slack_alert
 from request_model import schemas, models
 
 client = TestClient(app)
+
+
+@pytest.fixture
+def auth_headers(monkeypatch):
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public = key.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    monkeypatch.setenv("AUTH_JWT_PUBLIC_KEY", base64.b64encode(public).decode())
+    monkeypatch.setenv("AUTH_TRUSTED_ISSUERS", "manage-test")
+    monkeypatch.setenv("AUTH_JWT_AUDIENCE", "async-test")
+    issued = int(time.time())
+    token = jwt.encode(
+        {
+            "iss": "manage-test",
+            "aud": "async-test",
+            "sub": "integration-test",
+            "role": "staff",
+            "iat": issued,
+            "exp": issued + 900,
+        },
+        key,
+        algorithm="RS256",
+    )
+    return {"Authorization": f"Bearer {token}"}
 
 
 @patch("main.boto3.client")
@@ -136,7 +166,9 @@ def test_create_request(db, sqs_queue, helpers):
 
 
 @pytest.mark.parametrize("kind", ["check_url", "check_file", "add_data"])
-def test_request_params_survive_persistence_and_resubmission(db, sqs_queue, kind):
+def test_request_params_survive_persistence_and_resubmission(
+    db, sqs_queue, kind, auth_headers
+):
     params = {
         "type": kind,
         "collection": "tree-preservation-order",
@@ -157,7 +189,8 @@ def test_request_params_survive_persistence_and_resubmission(db, sqs_queue, kind
             organisation="local-authority:ABC",
             return_endpoint="assign_entities.flagged_resources_summary",
         )
-    created = client.post("/requests", json={"params": params})
+    headers = auth_headers if kind == "add_data" else {}
+    created = client.post("/requests", json={"params": params}, headers=headers)
     assert created.status_code == 202
     stored_response = client.get(f"/requests/{created.json()['id']}")
     assert stored_response.status_code == 200
@@ -167,6 +200,7 @@ def test_request_params_survive_persistence_and_resubmission(db, sqs_queue, kind
     resubmitted = client.post(
         "/requests",
         json={"params": {**stored, "column_mapping": {"TreeName": "name"}}},
+        headers=headers,
     )
     assert resubmitted.status_code == 202
     assert resubmitted.json()["params"] == {
