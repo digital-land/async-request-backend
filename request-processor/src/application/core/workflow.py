@@ -846,9 +846,11 @@ def add_data_workflow(
         )
 
         pipeline_issues = pipeline_summary.pop("pipeline-issues", [])
+        comparison_rows = pipeline_summary.pop("comparison-rows", [])
         response_data = {
             "pipeline-summary": pipeline_summary,
             "pipeline-issues": pipeline_issues,
+            "comparison-rows": comparison_rows,
             "endpoint-summary": endpoint_summary,
             "source-summary": source_summary,
             "converted-csv": (

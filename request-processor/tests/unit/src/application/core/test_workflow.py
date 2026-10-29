@@ -366,10 +366,16 @@ def test_add_data_workflow(monkeypatch):
 
     directories = DummyDirectories()
 
-    pipeline_response = {"status": "success", "data": "test"}
+    comparison_rows = [{"source": "resource", "entry_number": "1", "category": "new"}]
+    pipeline_response = {
+        "status": "success",
+        "data": "test",
+        "comparison-rows": comparison_rows,
+    }
     expected_response = {
         "pipeline-summary": pipeline_response,
         "pipeline-issues": [],
+        "comparison-rows": comparison_rows,
         "endpoint-summary": {"endpoint_summary": "mocked"},
         "source-summary": {"source_summary": "mocked"},
         "converted-csv": [],
