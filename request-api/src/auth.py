@@ -52,7 +52,10 @@ def verify_token(http_request, roles):
 
 
 def add_data_requires_auth(request):
-    return request.params.type == "add_data"
+    """Protect add-data processing and any request changing submission pointers."""
+    return (
+        request.params.type == "add_data" or request.add_data_submission_id is not None
+    )
 
 
 def require_auth(*, roles, when=None):
