@@ -50,6 +50,13 @@ To inspect the database tables and records via CLI, execute:
 ```shell
 docker-compose exec request-db psql -U postgres -d request_database
 ```
+### Local authentication
+
+Auth is on by default. Local Compose sets `AUTHENTICATION_ON=false`;
+
+Run `docker compose up -d --build` locally. To enable auth, configure the JWT keys
+and run `AUTHENTICATION_ON=true docker compose up -d --build`.
+
 ### Request API
 
 To create a new request, you can post via curl:

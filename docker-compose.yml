@@ -34,6 +34,7 @@ services:
       SENTRY_ENABLED: "false"
       SENTRY_DSN: https://secret.sentry.url/here
       SENTRY_ENVIRONMENT: docker-compose-local
+      AUTHENTICATION_ON: ${AUTHENTICATION_ON-false}
       AUTH_JWT_PUBLIC_KEY: ${AUTH_JWT_PUBLIC_KEY:-}
       AUTH_TRUSTED_ISSUERS: ${AUTH_TRUSTED_ISSUERS:-manage}
       AUTH_JWT_AUDIENCE: ${AUTH_JWT_AUDIENCE:-async}
@@ -42,7 +43,7 @@ services:
       SENTRY_DEBUG: "true"
     restart: on-failure
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
 
   request-db:
     image: postgres:16.2-alpine

@@ -65,6 +65,8 @@ def require_auth(*, roles, when=None):
         signature = inspect.signature(handler)
 
         def authorize(args, kwargs):
+            if os.environ.get("AUTHENTICATION_ON", "true").lower() == "false":
+                return
             arguments = signature.bind(*args, **kwargs).arguments
             if when is None or when(arguments["request"]):
                 verify_token(arguments["http_request"], roles)
