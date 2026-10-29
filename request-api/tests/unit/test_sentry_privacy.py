@@ -74,3 +74,49 @@ def test_email_detection_covers_event_messages_and_nested_lists():
 )
 def test_non_email_text_is_preserved(text):
     assert SensitiveFieldScrubber().safe_repr(text) is None
+
+
+def test_tuple_email_redaction_preserves_structure():
+    event = {"extra": {"items": ("user@example.org", {"nested": ("x@example.org", 1)})}}
+    SensitiveFieldScrubber().scrub_event(event)
+    assert event["extra"]["items"] == ("[Filtered]", {"nested": ("[Filtered]", 1)})
+
+
+@pytest.mark.parametrize("as_bytes", [False, True])
+def test_json_request_body_redaction(as_bytes):
+    body = '{"contact_name": "Private Name", "dataset": "tree"}'
+    if as_bytes:
+        body = body.encode()
+    event = {"request": {"data": body}}
+    SensitiveFieldScrubber(fields={"contact_name"}).scrub_event(event)
+    assert json.loads(event["request"]["data"]) == {
+        "contact_name": "[Filtered]",
+        "dataset": "tree",
+    }
+
+
+@pytest.mark.parametrize("body", ["raw user@example.org", b"raw user@example.org"])
+def test_non_json_request_body_is_unchanged(body):
+    event = {"request": {"data": body}}
+    SensitiveFieldScrubber().scrub_event(event)
+    assert event["request"]["data"] == body
+
+
+def test_log_body_and_attributes_are_scrubbed():
+    log = {
+        "body": '{"contact_name": "Private Name", "contact_email": "x@example.org", "dataset": "tree"}',
+        "attributes": {
+            "contact_name": "Private Name",
+            "contact_email": "not-an-email",
+            "note": "Sent to x@example.org",
+            "dataset": "tree",
+        },
+    }
+    result = SensitiveFieldScrubber(fields={"contact_name", "contact_email"}).scrub_log(
+        log, {}
+    )
+    assert "Private Name" not in json.dumps(result)
+    assert "not-an-email" not in json.dumps(result)
+    assert "x@example.org" not in json.dumps(result)
+    assert json.loads(result["body"])["dataset"] == "tree"
+    assert result["attributes"]["dataset"] == "tree"

@@ -72,6 +72,7 @@ if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
         enable_logs=True,
         event_scrubber=sentry_event_scrubber,
         custom_repr=sentry_event_scrubber.safe_repr,
+        before_send_log=sentry_event_scrubber.scrub_log,
     )
 
 app = FastAPI()
@@ -171,10 +172,12 @@ def healthcheck(
     "/add-data-submissions", status_code=201, response_model=AddDataSubmissionReceipt
 )
 def create_add_data_submission(
-    body: AddDataSubmissionCreate, response: Response, db: Session = Depends(_get_db)
+    request: AddDataSubmissionCreate,
+    response: Response,
+    db: Session = Depends(_get_db),
 ):
     add_data_submission, created = add_data_submissions.create_add_data_submission(
-        db, body
+        db, request
     )
     response.status_code = 201 if created else 200
     response.headers["Location"] = f"/add-data-submissions/{add_data_submission.id}"

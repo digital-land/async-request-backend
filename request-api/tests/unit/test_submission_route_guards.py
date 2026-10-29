@@ -1,9 +1,41 @@
 from unittest.mock import Mock, patch
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
 import main
+
+
+@pytest.mark.parametrize("creation_type", ["check_tool", "manage", "jira"])
+def test_creation_is_public(creation_type):
+    payload = {
+        "check_request_id": "check",
+        "dataset": "tree",
+        "documentation_url": "https://example.org/docs",
+    }
+    if creation_type == "manage":
+        payload["source"] = "manage"
+    else:
+        payload.update(
+            contact_name="Person",
+            contact_email="person@example.org",
+        )
+        if creation_type == "jira":
+            payload["jira_issue_key"] = "DATA-123"
+    with patch.dict(
+        main.app.dependency_overrides, {main._get_db: lambda: Mock()}
+    ), patch(
+        "main.add_data_submissions.create_add_data_submission",
+        return_value=(SimpleNamespace(id="id", reference="PDP-123456"), True),
+    ) as create:
+        response = TestClient(main.app).post(
+            "/add-data-submissions",
+            json=payload,
+        )
+    assert response.status_code == 201
+    assert response.json() == {"id": "id", "reference": "PDP-123456"}
+    create.assert_called_once()
 
 
 @pytest.mark.parametrize(

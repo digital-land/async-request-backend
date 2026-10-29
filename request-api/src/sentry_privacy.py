@@ -24,6 +24,8 @@ def _redact_emails(value):
     elif isinstance(value, list):
         for index, child in enumerate(value):
             value[index] = _redact_emails(child)
+    elif isinstance(value, tuple):
+        return tuple(_redact_emails(child) for child in value)
     return value
 
 
@@ -72,9 +74,40 @@ class SensitiveFieldScrubber(EventScrubber):
         return repr(redacted) if redacted is not None else None
 
     def scrub_event(self, event):
+        request = event.get("request", {})
+        body = request.get("data")
         super().scrub_event(event)
         # Sentry's default scrubber does not visit message/exception text.
         _redact_emails(event)
+        if isinstance(body, (str, bytes)):
+            try:
+                json.loads(body)
+            except (ValueError, UnicodeDecodeError):
+                # Raw request bodies are outside JSON field redaction.
+                request["data"] = body
+            else:
+                redacted = _redacted_json(body, self.fields)
+                request["data"] = _redact_emails(body if redacted is None else redacted)
+
+    def scrub_log(self, log, hint):
+        """Logs bypass event scrubbing; keep their values JSON-serialisable."""
+        attributes = log.get("attributes", {})
+        for key, value in attributes.items():
+            field = key.removeprefix("sentry.message.parameter.").lower()
+            if field in self.fields:
+                # The SDK may already have interpolated these attributes into body.
+                if (
+                    isinstance(value, str)
+                    and value
+                    and isinstance(log.get("body"), str)
+                ):
+                    log["body"] = log["body"].replace(value, "[Filtered]")
+                attributes[key] = "[Filtered]"
+        _filter_json_fields(log, self.fields)
+        body = _redacted_json(log.get("body"), self.fields)
+        if body is not None:
+            log["body"] = body
+        return _redact_emails(log)
 
     def scrub_dict(self, values):
         super().scrub_dict(values)

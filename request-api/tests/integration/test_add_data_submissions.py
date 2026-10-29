@@ -140,6 +140,17 @@ def test_create_read_and_idempotency_without_leaking_contacts(
         assert request.modified == origin["modified"]
 
 
+def test_public_check_tool_creation_omits_restricted_fields(api, origin):
+    body = payload(origin)
+    assert "source" not in body
+    assert "jira_issue_key" not in body
+    response = api.post(
+        "/add-data-submissions", json=body, headers={"Authorization": ""}
+    )
+    assert response.status_code == 201
+    assert set(response.json()) == {"id", "reference"}
+
+
 @pytest.mark.parametrize(
     "field,value",
     [("type", "check_file"), ("status", "PROCESSING"), ("status", "FAILED")],
