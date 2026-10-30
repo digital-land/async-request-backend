@@ -75,6 +75,15 @@ You can then go to GET http://localhost:8000/requests/{request.id} to see the re
 
 If changes are made, you can use the production async-backend at (http://production-pub-async-api-lb-636110663.eu-west-2.elb.amazonaws.com) with a POST to /requests. Then compare the results of production to what your localhost machine is producing.
 
+### Platform comparison
+
+Add Data jobs compare transformed rows with the published platform Parquet snapshot,
+reusing the duplicate-check download. The summary is in
+`response.data.pipeline-summary.platform-comparison`; detailed results are paginated
+at `GET /requests/{id}/platform-comparison` and kept out of normal response details.
+Comparisons cover authoritative entities for the organisation, up to 15,000 entities.
+Deploy the API update before the processor update, then update Manage.
+
 ### SQS
 
 To create an SQS queue, you can use the AWS CLI:

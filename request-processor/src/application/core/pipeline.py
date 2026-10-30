@@ -3,6 +3,7 @@ import csv
 import json
 import yaml
 from datetime import date
+from contextlib import ExitStack, nullcontext
 from application.logging.logger import get_logger
 from digital_land.organisation import Organisation
 from digital_land.api import API
@@ -12,7 +13,11 @@ from digital_land.pipeline.task import TaskPipeline, TaskPipelineStatus
 from digital_land.commands import get_resource_unidentified_lookups
 from pathlib import Path
 
-from application.core.duplicates import find_duplicate_redirect_candidates
+from application.core.duplicates import (
+    find_duplicate_redirect_candidates,
+    _download_platform_dataset_parquet,
+)
+from application.core.platform_comparison import prepare_platform_comparison
 from application.core.plan_datasets import (
     PLAN_CHECK_DATASETS,
     set_plan_issue_severity,
@@ -649,6 +654,7 @@ def _find_duplicate_candidates(
     redirect_lookups,
     organisation_provider,
     organisation_index,
+    download_platform_dataset_parquet=None,
 ):
     """
     Find possible redirects for the transformed add-data output.
@@ -656,6 +662,9 @@ def _find_duplicate_candidates(
     Failures are logged and propagated so they cannot be mistaken for an empty
     candidate list.
     """
+    kwargs = {}
+    if download_platform_dataset_parquet is not None:
+        kwargs["download_platform_dataset_parquet"] = download_platform_dataset_parquet
     try:
         return find_duplicate_redirect_candidates(
             dataset=dataset,
@@ -664,6 +673,7 @@ def _find_duplicate_candidates(
             redirect_lookups=redirect_lookups,
             organisation_provider=organisation_provider,
             organisation_index=organisation_index,
+            **kwargs,
         )
     except Exception as err:
         logger.exception("Duplicate analysis failed for dataset %s: %s", dataset, err)
@@ -770,14 +780,34 @@ def fetch_add_data_response(
         existing_entities_breakdown = _get_existing_entities_breakdown(
             existing_entities
         )
-        duplicate_candidates = _find_duplicate_candidates(
-            dataset,
-            specification,
-            output_path,
-            pipeline.redirect_lookups(),
-            organisations[0],
-            organisation,
-        )
+        # Reuse the same downloaded snapshot for deduplication and comparison.
+        # ExitStack keeps it alive until both consumers have finished.
+        with ExitStack() as snapshots:
+            downloaded = {}
+
+            def download_platform(dataset):
+                if dataset not in downloaded:
+                    downloaded[dataset] = snapshots.enter_context(
+                        _download_platform_dataset_parquet(dataset)
+                    )
+                return nullcontext(downloaded[dataset])
+
+            duplicate_candidates = _find_duplicate_candidates(
+                dataset,
+                specification,
+                output_path,
+                pipeline.redirect_lookups(),
+                organisations[0],
+                organisation,
+                download_platform,
+            )
+            platform_comparison, comparison_rows = prepare_platform_comparison(
+                dataset,
+                output_path,
+                organisations[0],
+                organisation,
+                download_platform_dataset_parquet=download_platform,
+            )
         selected_entity_ids = (
             {str(entity.get("entity")) for entity in selected_new_entities}
             if excluded_references is not None and excluded_references != []
@@ -808,6 +838,8 @@ def fetch_add_data_response(
             "entity-organisation": entity_org_mapping,
             "old-entity": old_entity_rows,
             "duplicate-candidates": duplicate_candidates,
+            "platform-comparison": platform_comparison,
+            "comparison-rows": comparison_rows,
             "pipeline-issues": (
                 [dict(issue) for issue in issues_log.rows] if issues_log else []
             ),

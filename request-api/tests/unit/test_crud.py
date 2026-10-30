@@ -9,6 +9,7 @@ def test_get_response_details_invalid_jsonpath_returns_empty(monkeypatch):
     base_query = MagicMock()
     base_query.join.return_value = base_query
     base_query.filter.return_value = base_query
+    base_query.order_by.return_value = base_query
     base_query.offset.return_value = base_query
     base_query.limit.return_value = base_query
     base_query.all.side_effect = ProgrammingError("bad jsonpath", None, None)

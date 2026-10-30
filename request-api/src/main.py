@@ -223,6 +223,30 @@ def read_response_details(
     return list(map(lambda detail: detail.detail, paginated_result.data))
 
 
+@app.get(
+    "/requests/{request_id}/platform-comparison", response_model=List[Dict[Any, Any]]
+)
+def read_platform_comparison(
+    request_id: str,
+    http_response: Response,
+    params: ReadResponseDetailsParams = Depends(),
+    db: Session = Depends(_get_db),
+):
+    result = crud.get_response_details(
+        db,
+        request_id,
+        jsonpath=params.jsonpath,
+        pagination_params=PaginationParams(offset=params.offset, limit=params.limit),
+        comparison_only=True,
+    )
+    http_response.headers["X-Pagination-Total-Results"] = str(
+        result.total_results_available
+    )
+    http_response.headers["X-Pagination-Offset"] = str(params.offset)
+    http_response.headers["X-Pagination-Limit"] = str(params.limit)
+    return [detail.detail["platform-comparison"] for detail in result.data]
+
+
 @app.get("/requests/{request_id}/geometries", response_model=List[str])
 def read_response_geometries(request_id: str, db: Session = Depends(_get_db)):
     return crud.get_response_geometries(db, request_id)
