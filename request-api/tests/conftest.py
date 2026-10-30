@@ -3,6 +3,7 @@ import os
 import alembic
 import boto3
 import pytest
+import database
 from alembic.config import Config
 from moto import mock_aws
 from sqlalchemy_utils import database_exists, create_database, drop_database
@@ -37,6 +38,8 @@ def postgres(request):
 
 @pytest.fixture(scope="module")
 def db(postgres, test_dir):
+    database.session_maker.cache_clear()
+    database.engine.cache_clear()
     if not database_exists(os.environ["DATABASE_URL"]):
         print("Database does not exist, creating...")
         create_database(os.environ["DATABASE_URL"])
@@ -47,8 +50,13 @@ def db(postgres, test_dir):
     )
     alembic.command.upgrade(config, "head")
 
-    yield
-    drop_database(os.environ["DATABASE_URL"])
+    try:
+        yield
+    finally:
+        database.engine().dispose()
+        database.session_maker.cache_clear()
+        database.engine.cache_clear()
+        drop_database(os.environ["DATABASE_URL"])
 
 
 @pytest.fixture(scope="module")
