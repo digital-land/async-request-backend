@@ -160,6 +160,36 @@ def _platform_rows(parquet_path, organisation_entity):
     ]
 
 
+def _compare_resource_entries(entries, platform_by_id):
+    entry_numbers = list(entries)
+
+    def compare(entry_number):
+        entry = entries[entry_number]
+        entity = entry["entity"]
+        on_platform = entity in platform_by_id
+        changed = (
+            _diff_entity_fields(entry["fields"], platform_by_id[entity])
+            if on_platform
+            else {}
+        )
+        return {
+            "source": "resource",
+            "entry_number": entry_number,
+            "entity": entity,
+            "category": (
+                ("changed" if changed else "in_both") if on_platform else "new"
+            ),
+            "changed_fields": changed,
+        }
+
+    if entry_numbers:
+        with ThreadPoolExecutor(max_workers=min(4, len(entry_numbers))) as executor:
+            rows = list(executor.map(compare, entry_numbers))
+    else:
+        rows = []
+    return rows
+
+
 def prepare_platform_comparison(
     dataset,
     transformed_csv_path,
@@ -202,32 +232,7 @@ def prepare_platform_comparison(
         }
         if len(platform_by_id) != count or "" in platform_by_id:
             raise ValueError("Platform snapshot has missing or repeated entity IDs")
-        entry_numbers = list(entries)
-
-        def compare(entry_number):
-            entry = entries[entry_number]
-            entity = entry["entity"]
-            on_platform = entity in platform_by_id
-            changed = (
-                _diff_entity_fields(entry["fields"], platform_by_id[entity])
-                if on_platform
-                else {}
-            )
-            return {
-                "source": "resource",
-                "entry_number": entry_number,
-                "entity": entity,
-                "category": (
-                    ("changed" if changed else "in_both") if on_platform else "new"
-                ),
-                "changed_fields": changed,
-            }
-
-        if entry_numbers:
-            with ThreadPoolExecutor(max_workers=min(4, len(entry_numbers))) as executor:
-                rows = list(executor.map(compare, entry_numbers))
-        else:
-            rows = []
+        rows = _compare_resource_entries(entries, platform_by_id)
         resource_ids = {entry["entity"] for entry in entries.values()}
         rows.extend(
             {
