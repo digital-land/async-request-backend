@@ -19,12 +19,18 @@ def get_response_details(
     request_id: int,
     jsonpath: str = None,
     pagination_params=PaginationParams(),
+    comparison_only=False,
 ):
     base_query = (
         db.query(models.ResponseDetails)
         .join(models.ResponseDetails.response)
         .filter(models.Response.request_id == request_id)
     )
+    has_comparison = models.ResponseDetails.detail.has_key("platform-comparison")
+    base_query = base_query.filter(
+        has_comparison if comparison_only else ~has_comparison
+    )
+    base_query = base_query.order_by(models.ResponseDetails.id)
     if jsonpath is not None:
         base_query = base_query.filter(
             func.jsonb_path_match(models.ResponseDetails.detail, jsonpath)

@@ -585,7 +585,12 @@ def _get_response(request_id):
 
 
 def _save_response_details(
-    session, response_id, converted_row_data, issue_log_data, transformed_data
+    session,
+    response_id,
+    converted_row_data,
+    issue_log_data,
+    transformed_data,
+    comparison_rows=None,
 ):
     issue_log_by_entry = {}
     for issue in issue_log_data:
@@ -618,6 +623,15 @@ def _save_response_details(
             session.flush()
             session.expunge_all()
 
+    for row_index, row in enumerate(comparison_rows or [], start=1):
+        session.add(
+            models.ResponseDetails(
+                response_id=response_id, detail={"platform-comparison": row}
+            )
+        )
+        if row_index % _DETAIL_BATCH_SIZE == 0:
+            session.flush()
+            session.expunge_all()
     session.commit()
 
 
@@ -680,6 +694,7 @@ def save_response_to_db(request_id, response_data):
                         response_data.get("converted-csv", []),
                         pipeline_issues,
                         response_data.get("transformed-csv", []),
+                        comparison_rows=response_data.get("comparison-rows", []),
                     )
 
                 elif "message" in response_data:
