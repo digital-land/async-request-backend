@@ -285,3 +285,49 @@ def test_add_data_requires_auth_before_creating_request(service):
         create.assert_not_called()
     finally:
         main.app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize("setting", [None, "true", "invalid", "", "false", "FALSE"])
+@pytest.mark.parametrize("async_handler", [False, True])
+def test_explicit_local_auth_opt_out(monkeypatch, setting, async_handler):
+    if setting is None:
+        monkeypatch.delenv("AUTHENTICATION_ON", raising=False)
+    else:
+        monkeypatch.setenv("AUTHENTICATION_ON", setting)
+    app = FastAPI()
+
+    if async_handler:
+
+        @app.get("/protected")
+        @require_auth(roles={"staff"})
+        async def protected(http_request: Request):
+            return {"ok": True}
+
+    else:
+
+        @app.get("/protected")
+        @require_auth(roles={"staff"})
+        def protected(http_request: Request):
+            return {"ok": True}
+
+    response = TestClient(app).get("/protected")
+    expected = 200 if setting in ("false", "FALSE") else 401
+    assert response.status_code == expected
+
+
+def test_local_add_data_without_token_is_queued(api, monkeypatch):
+    monkeypatch.setenv("AUTHENTICATION_ON", "false")
+    client, create, queue = api
+    create.return_value = models.Request(
+        id="local-test",
+        type="add_data",
+        status="NEW",
+        params=body()["params"],
+        created=datetime.now(),
+        modified=datetime.now(),
+        response=None,
+    )
+    response = client.post("/requests", json=body())
+    assert response.status_code == 202
+    create.assert_called_once()
+    queue.assert_called_once()
