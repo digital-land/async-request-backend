@@ -1,5 +1,6 @@
 import re
 import uuid
+from pathlib import Path
 from threading import Barrier
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
@@ -15,13 +16,16 @@ from alembic.config import Config
 from main import app, _get_db
 from request_model import models
 
+REQUEST_API_ROOT = Path(__file__).resolve().parents[2]
+
 
 @pytest.fixture(scope="module")
 def add_data_submission_engine():
     # A dedicated database, independent of the API's cached production engine.
     with PostgresContainer("postgres:16.2-alpine") as postgres:
         url = postgres.get_connection_url()
-        config = Config("alembic.ini")
+        config = Config(str(REQUEST_API_ROOT / "alembic.ini"))
+        config.set_main_option("script_location", str(REQUEST_API_ROOT / "migrations"))
         with patch.dict("os.environ", {"DATABASE_URL": url}):
             command.upgrade(config, "head")
         engine = create_engine(url)
@@ -379,7 +383,8 @@ def test_migration_preserves_old_requests_through_upgrade_and_downgrade():
     with PostgresContainer("postgres:16.2-alpine") as postgres:
         url = postgres.get_connection_url()
         engine = create_engine(url)
-        config = Config("alembic.ini")
+        config = Config(str(REQUEST_API_ROOT / "alembic.ini"))
+        config.set_main_option("script_location", str(REQUEST_API_ROOT / "migrations"))
         with patch.dict("os.environ", {"DATABASE_URL": url}):
             command.upgrade(config, "d45c986e2727")
             with engine.begin() as connection:

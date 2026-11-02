@@ -6,9 +6,9 @@ import re
 from sentry_sdk.scrubber import DEFAULT_DENYLIST, EventScrubber
 
 EMAIL_PATTERN = re.compile(
-    r"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@"
-    r"[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?"
-    r"(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)+"
+    r"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@"
+    r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
+    r"(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+"
 )
 
 

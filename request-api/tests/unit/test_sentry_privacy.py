@@ -4,7 +4,34 @@ import json
 import pytest
 from sentry_sdk.serializer import serialize
 
-from sentry_privacy import SensitiveFieldScrubber
+from sentry_privacy import EMAIL_PATTERN, SensitiveFieldScrubber
+
+
+@pytest.mark.parametrize("as_bytes", [False, True])
+@pytest.mark.parametrize("local_length", [1, 64])
+@pytest.mark.parametrize("label_length", [1, 63])
+def test_email_length_limits_preserve_unanchored_redaction(
+    as_bytes, local_length, label_length
+):
+    address = "a" * local_length + "@" + ".".join(["b" * label_length] * 2)
+    assert EMAIL_PATTERN.fullmatch(address)
+    text = f"Recipient <{address}> failed; dataset=tree"
+    value = text.encode() if as_bytes else text
+    result = ast.literal_eval(SensitiveFieldScrubber().safe_repr(value))
+    expected = "Recipient <[Filtered]> failed; dataset=tree"
+    assert result == (expected.encode() if as_bytes else expected)
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "a" * 65 + "@example.org",
+        "user@" + "b" * 64 + ".org",
+        "user@example." + "c" * 64,
+    ],
+)
+def test_email_pattern_does_not_consume_overlong_parts(address):
+    assert EMAIL_PATTERN.fullmatch(address) is None
 
 
 @pytest.mark.parametrize("as_bytes", [False, True])
