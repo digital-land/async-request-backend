@@ -60,6 +60,7 @@ class AddDataParams(Params):
 
 
 class RequestBase(BaseModel):
+    add_data_submission_id: Optional[str] = Field(default=None, min_length=1)
     params: Union[CheckUrlParams, CheckFileParams, AddDataParams] = Field(
         discriminator="type"
     )

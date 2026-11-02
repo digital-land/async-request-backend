@@ -6,6 +6,7 @@ from sqlalchemy.exc import ProgrammingError, DataError
 from pagination_model import PaginatedResult, PaginationParams
 from request_model import models
 from request_model import schemas
+from add_data_submissions import lock_for_request
 
 logger = logging.getLogger(__name__)
 
@@ -97,10 +98,22 @@ def get_response_geometries(db: Session, request_id: int):
 
 
 def create_request(db: Session, request: schemas.RequestCreate):
+    add_data_submission = (
+        lock_for_request(db, request) if request.add_data_submission_id else None
+    )
     db_request = models.Request(
-        status="NEW", type=request.params.type, params=request.params.model_dump()
+        status="NEW",
+        type=request.params.type,
+        params=request.params.model_dump(),
+        add_data_submission_id=request.add_data_submission_id,
     )
     db.add(db_request)
+    if add_data_submission is not None:
+        db.flush()
+        if request.params.type == "check_url":
+            add_data_submission.check_request_id = db_request.id
+        else:
+            add_data_submission.preview_request_id = db_request.id
     db.commit()
     db.refresh(db_request)
     return db_request

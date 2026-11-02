@@ -1,8 +1,13 @@
 import os
+import base64
+import time
 
 import alembic
 import boto3
 import pytest
+import jwt
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from alembic.config import Config
 from moto import mock_aws
 from sqlalchemy_utils import database_exists, create_database, drop_database
@@ -89,3 +94,31 @@ class Helpers:
 @pytest.fixture
 def helpers():
     return Helpers
+
+
+@pytest.fixture
+def auth_headers(monkeypatch):
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = key.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    monkeypatch.setenv("AUTH_JWT_PUBLIC_KEY", base64.b64encode(public_key).decode())
+    monkeypatch.setenv("AUTH_TRUSTED_ISSUERS", "manage-test")
+    monkeypatch.setenv("AUTH_JWT_AUDIENCE", "async-test")
+
+    def headers(role="staff"):
+        token = jwt.encode(
+            {
+                "iss": "manage-test",
+                "aud": "async-test",
+                "sub": "test-user",
+                "iat": int(time.time()),
+                "exp": int(time.time()) + 900,
+                "role": role,
+            },
+            key,
+            algorithm="RS256",
+        )
+        return {"Authorization": f"Bearer {token}"}
+
+    return headers

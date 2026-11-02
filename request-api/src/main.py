@@ -16,8 +16,15 @@ from sqlalchemy.orm import Session
 
 import crud
 from auth import add_data_requires_auth, require_auth
+import add_data_submissions
+from add_data_submission_schemas import (
+    AddDataSubmissionCreate,
+    AddDataSubmissionRead,
+    AddDataSubmissionReceipt,
+)
 from database import session_maker
 from pagination_model import PaginationParams
+from sentry_privacy import SensitiveFieldScrubber
 from request_model import models, schemas
 from schema import (
     ReadResponseDetailsParams,
@@ -44,6 +51,13 @@ def _queue_for_service(service: str | None) -> str:
     return high_queue if service == "manage" else standard_queue
 
 
+# Keep ordinary debugging context and Sentry's existing secret scrubbing, while
+# filtering contact fields in request data, nested dictionaries and frame locals.
+sentry_event_scrubber = SensitiveFieldScrubber(
+    fields={"contact_name", "contact_email", "email"}
+)
+
+
 if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
     sentry_sdk.init(
         enable_tracing=os.environ.get("SENTRY_TRACING_ENABLED", "false").lower()
@@ -56,6 +70,9 @@ if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
         ],
         debug=os.environ.get("SENTRY_DEBUG", "false").lower() == "true",
         enable_logs=True,
+        event_scrubber=sentry_event_scrubber,
+        custom_repr=sentry_event_scrubber.safe_repr,
+        before_send_log=sentry_event_scrubber.scrub_log,
     )
 
 app = FastAPI()
@@ -151,6 +168,44 @@ def healthcheck(
     )
 
 
+@app.post(
+    "/add-data-submissions", status_code=201, response_model=AddDataSubmissionReceipt
+)
+def create_add_data_submission(
+    request: AddDataSubmissionCreate,
+    response: Response,
+    db: Session = Depends(_get_db),
+):
+    add_data_submission, created = add_data_submissions.create_add_data_submission(
+        db, request
+    )
+    response.status_code = 201 if created else 200
+    response.headers["Location"] = f"/add-data-submissions/{add_data_submission.id}"
+    return add_data_submission
+
+
+@app.get(
+    "/add-data-submissions/by-reference/{reference}",
+    response_model=AddDataSubmissionRead,
+)
+@require_auth(roles={"staff", "admin"})
+def read_add_data_submission_by_reference(
+    reference: str, http_request: Request, db: Session = Depends(_get_db)
+):
+    return add_data_submissions.get_by_reference(db, reference)
+
+
+@app.get(
+    "/add-data-submissions/{add_data_submission_id}",
+    response_model=AddDataSubmissionRead,
+)
+@require_auth(roles={"staff", "admin"})
+def read_add_data_submission(
+    add_data_submission_id: str, http_request: Request, db: Session = Depends(_get_db)
+):
+    return add_data_submissions.get_add_data_submission(db, add_data_submission_id)
+
+
 @app.post("/requests", status_code=202, response_model=schemas.Request)
 @require_auth(roles={"staff", "admin"}, when=add_data_requires_auth)
 def create_request(
@@ -241,6 +296,7 @@ def _map_to_schema(request_model: models.Request) -> schemas.Request:
         )
 
     return schemas.Request(
+        add_data_submission_id=request_model.add_data_submission_id,
         type=request_model.type,
         id=request_model.id,
         status=request_model.status,
