@@ -4,6 +4,7 @@ import json
 import yaml
 from datetime import date
 from contextlib import ExitStack, nullcontext
+from time import monotonic
 from application.logging.logger import get_logger
 from digital_land.organisation import Organisation
 from digital_land.api import API
@@ -777,8 +778,24 @@ def fetch_add_data_response(
             new_entities, excluded_references
         )
         new_entities_breakdown = _get_entities_breakdown(selected_new_entities)
+        request_id = os.path.basename(os.path.dirname(output_path))
+        stage_started = monotonic()
+        logger.info(
+            "Existing entity breakdown started: request_id=%s dataset=%s rows=%s",
+            request_id,
+            dataset,
+            len(existing_entities),
+        )
         existing_entities_breakdown = _get_existing_entities_breakdown(
             existing_entities
+        )
+        logger.info(
+            "Existing entity breakdown completed: request_id=%s dataset=%s "
+            "rows=%s elapsed=%.3fs",
+            request_id,
+            dataset,
+            len(existing_entities_breakdown),
+            monotonic() - stage_started,
         )
         # Reuse the same downloaded snapshot for deduplication and comparison.
         # ExitStack keeps it alive until both consumers have finished.
@@ -787,11 +804,31 @@ def fetch_add_data_response(
 
             def download_platform(dataset):
                 if dataset not in downloaded:
+                    download_started = monotonic()
+                    logger.info(
+                        "Platform snapshot download started: request_id=%s dataset=%s",
+                        request_id,
+                        dataset,
+                    )
                     downloaded[dataset] = snapshots.enter_context(
                         _download_platform_dataset_parquet(dataset)
                     )
+                    logger.info(
+                        "Platform snapshot download completed: request_id=%s "
+                        "dataset=%s available=%s elapsed=%.3fs",
+                        request_id,
+                        dataset,
+                        downloaded[dataset] is not None,
+                        monotonic() - download_started,
+                    )
                 return nullcontext(downloaded[dataset])
 
+            stage_started = monotonic()
+            logger.info(
+                "Duplicate analysis started: request_id=%s dataset=%s",
+                request_id,
+                dataset,
+            )
             duplicate_candidates = _find_duplicate_candidates(
                 dataset,
                 specification,
@@ -801,12 +838,35 @@ def fetch_add_data_response(
                 organisation,
                 download_platform,
             )
+            logger.info(
+                "Duplicate analysis completed: request_id=%s dataset=%s "
+                "candidates=%s elapsed=%.3fs",
+                request_id,
+                dataset,
+                len(duplicate_candidates),
+                monotonic() - stage_started,
+            )
+            stage_started = monotonic()
+            logger.info(
+                "Platform comparison started: request_id=%s dataset=%s",
+                request_id,
+                dataset,
+            )
             platform_comparison, comparison_rows = prepare_platform_comparison(
                 dataset,
                 output_path,
                 organisations[0],
                 organisation,
                 download_platform_dataset_parquet=download_platform,
+            )
+            logger.info(
+                "Platform comparison completed: request_id=%s dataset=%s "
+                "status=%s rows=%s elapsed=%.3fs",
+                request_id,
+                dataset,
+                platform_comparison.get("status"),
+                len(comparison_rows),
+                monotonic() - stage_started,
             )
         selected_entity_ids = (
             {str(entity.get("entity")) for entity in selected_new_entities}
