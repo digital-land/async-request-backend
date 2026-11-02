@@ -1,4 +1,5 @@
 import json
+import logging
 from unittest.mock import patch
 
 import pytest
@@ -6,6 +7,7 @@ import sentry_sdk
 from sentry_sdk import logger as sentry_logger
 from fastapi.testclient import TestClient
 from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.logging import SentryLogsHandler
 from sentry_sdk.integrations.starlette import StarletteIntegration
 from sentry_sdk.transport import Transport
 
@@ -167,5 +169,35 @@ def test_log_transport_redacts_contacts_without_disabling_logs():
         assert "private@example.org" not in encoded
         assert transport.logs[0]["body"] == "Submission for [Filtered]: [Filtered]"
         assert transport.logs[0]["attributes"]["dataset"]["value"] == "tree"
+    finally:
+        client.close()
+
+
+def test_log_transport_redacts_json_string_positional_parameter():
+    transport = MemoryTransport()
+    client = sentry_sdk.Client(
+        dsn="http://public@localhost/1",
+        transport=transport,
+        default_integrations=False,
+        enable_logs=True,
+        before_send_log=main.sentry_event_scrubber.scrub_log,
+    )
+    payload = json.dumps({"contact_name": "PRIVATE_NAME_MARKER", "dataset": "tree"})
+    logger = logging.Logger("submission-test")
+    logger.addHandler(SentryLogsHandler())
+    try:
+        with sentry_sdk.isolation_scope() as scope:
+            scope.set_client(client)
+            logger.info("Submission: %s", payload)
+            client.flush()
+        assert transport.logs
+        log = transport.logs[0]
+        assert "PRIVATE_NAME_MARKER" not in json.dumps(log)
+        redacted = {"contact_name": "[Filtered]", "dataset": "tree"}
+        assert log["body"] == "Submission: " + json.dumps(redacted)
+        assert (
+            json.loads(log["attributes"]["sentry.message.parameter.0"]["value"])
+            == redacted
+        )
     finally:
         client.close()
