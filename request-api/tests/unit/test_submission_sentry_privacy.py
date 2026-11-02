@@ -54,7 +54,7 @@ def test_creation_exception_hides_contacts_but_keeps_debug_context(captured_even
         raise RuntimeError("Simulated database failure")
 
     with patch.dict(main.app.dependency_overrides, {main._get_db: lambda: None}), patch(
-        "main.add_data_submissions.create_add_data_submission", fail_creation
+        "add_data_submissions.create_add_data_submission", fail_creation
     ):
         response = TestClient(main.app, raise_server_exceptions=False).post(
             "/add-data-submissions",

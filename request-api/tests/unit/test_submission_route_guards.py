@@ -26,7 +26,7 @@ def test_creation_is_public(creation_type):
     with patch.dict(
         main.app.dependency_overrides, {main._get_db: lambda: Mock()}
     ), patch(
-        "main.add_data_submissions.create_add_data_submission",
+        "add_data_submissions.create_add_data_submission",
         return_value=(SimpleNamespace(id="id", reference="PDP-123456"), True),
     ) as create:
         response = TestClient(main.app).post(
@@ -99,3 +99,36 @@ def test_submission_link_requires_auth_before_persistence_or_dispatch(kind, serv
     db.add.assert_not_called()
     db.commit.assert_not_called()
     queued.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "method,path,body",
+    [
+        ("GET", "/add-data-submissions", None),
+        ("GET", "/add-data-submissions/test-id/events", None),
+        ("PATCH", "/add-data-submissions/test-id", {"add_data_details": {}}),
+        (
+            "POST",
+            "/add-data-submissions/test-id/transitions",
+            {"to": "IN_PROGRESS", "assignee": "alice", "expected_version": 1},
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "authentication,status", [("missing", 401), ("invalid", 401), ("viewer", 403)]
+)
+def test_workflow_routes_require_staff(
+    method, path, body, authentication, status, auth_headers
+):
+    headers = {} if authentication == "missing" else {"Authorization": "Bearer invalid"}
+    if authentication == "viewer":
+        headers = auth_headers("viewer")
+    db = Mock()
+    with patch.dict(main.app.dependency_overrides, {main._get_db: lambda: db}):
+        response = TestClient(main.app).request(
+            method, path, json=body, headers=headers
+        )
+    assert response.status_code == status
+    db.get.assert_not_called()
+    db.scalar.assert_not_called()
+    db.commit.assert_not_called()

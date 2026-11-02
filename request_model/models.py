@@ -108,6 +108,7 @@ class AddDataSubmission(Base):
     )
     source = Column(String, nullable=False)
     status = Column(String, nullable=False, server_default="TO_BE_ADDED", index=True)
+    version = Column(Integer, nullable=False, server_default="1")
     status_updated_at = Column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -153,4 +154,6 @@ class AddDataSubmissionEvent(Base):
     assignee = Column(String)
     actor = Column(String)
     note = Column(String)
+    closed_reason = Column(String)
+    related_add_data_submission_id = Column(String)
     created = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

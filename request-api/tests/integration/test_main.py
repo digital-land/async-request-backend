@@ -15,7 +15,8 @@ from botocore.exceptions import ClientError
 
 from crud import get_response_details
 import database
-from main import app, _get_db, _get_sqs_client, send_slack_alert
+from main import app
+from dependencies import _get_db, _get_sqs_client, send_slack_alert
 from request_model import schemas, models
 
 client = TestClient(app)
@@ -46,7 +47,7 @@ def auth_headers(monkeypatch):
     return {"Authorization": f"Bearer {token}"}
 
 
-@patch("main.boto3.client")
+@patch("dependencies.boto3.client")
 def test_get_sqs_client_success(mock_boto_client):
     mock_sqs_client = MagicMock()
     mock_boto_client.return_value = mock_sqs_client
@@ -55,7 +56,7 @@ def test_get_sqs_client_success(mock_boto_client):
     mock_boto_client.assert_called_once()
 
 
-@patch("main.boto3.client")
+@patch("dependencies.boto3.client")
 def test_get_sqs_client_retry(mock_boto_client):
     mock_sqs_client = MagicMock()
     mock_boto_client.return_value = mock_sqs_client
@@ -72,16 +73,16 @@ def test_get_sqs_client_retry(mock_boto_client):
     assert sqs_client_instance == mock_sqs_client
 
 
-@patch("main.boto3.client")
-@patch("main.send_slack_alert")
-@patch("main.is_connection_restored", return_value=False)
+@patch("dependencies.boto3.client")
+@patch("dependencies.send_slack_alert")
+@patch("dependencies.is_connection_restored", return_value=False)
 def test_get_sqs_client_fails_after_retries(
     mock_restored, mock_slack, mock_boto_client
 ):
     mock_boto_client.side_effect = ClientError(
         {"Error": {"Code": "ThrottlingException"}}, "CreateQueue"
     )
-    with patch("main.logging.exception") as mock_log:
+    with patch("dependencies.logging.exception") as mock_log:
         sqs_client = _get_sqs_client()
         assert sqs_client is None  # Should return None after all retries
 
@@ -94,7 +95,7 @@ def test_get_sqs_client_fails_after_retries(
 
 @pytest.fixture
 def mock_session_maker():
-    with mock.patch("main.session_maker") as mock_session:
+    with mock.patch("dependencies.session_maker") as mock_session:
         yield mock_session
 
 
@@ -128,11 +129,13 @@ def test_get_db_retry(mock_session_maker):
     db_instance.close.assert_called_once()
 
 
-@patch("main.session_maker", side_effect=SQLAlchemyError("DB connection failed"))
-@patch("main.send_slack_alert")
-@patch("main.is_connection_restored", return_value=False)
+@patch(
+    "dependencies.session_maker", side_effect=SQLAlchemyError("DB connection failed")
+)
+@patch("dependencies.send_slack_alert")
+@patch("dependencies.is_connection_restored", return_value=False)
 def test_get_db_fails_after_retries(mock_restored, mock_slack, mock_session_maker):
-    with patch("main.logging.exception") as mock_log:
+    with patch("dependencies.logging.exception") as mock_log:
         generator = _get_db()
         assert next(generator, None) is None
 
@@ -143,9 +146,9 @@ def test_get_db_fails_after_retries(mock_restored, mock_slack, mock_session_make
         mock_log.assert_called()
 
 
-@patch("main.WebClient")
+@patch("dependencies.WebClient")
 @patch(
-    "main.os.environ.get",
+    "dependencies.os.environ.get",
     side_effect=lambda k, d=None: (
         "fake_token" if k == "SLACK_BOT_TOKEN" else "fake_channel"
     ),

@@ -2,7 +2,9 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
+
+from pagination_model import PaginationParams
 
 from pydantic import (
     BaseModel,
@@ -22,6 +24,85 @@ class AddDataSubmissionStatus(str, Enum):
     QUERIED = "QUERIED"
     ADDED = "ADDED"
     CLOSED = "CLOSED"
+
+
+ClosedReason = Literal[
+    "duplicate", "withdrawn", "no_response", "not_suitable", "resubmitted"
+]
+GitHubLogin = Annotated[
+    str, Field(min_length=1, max_length=39, pattern=r"^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$")
+]
+
+
+class AddDataSubmissionTransition(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    to: AddDataSubmissionStatus
+    expected_version: int = Field(
+        ge=1,
+        strict=True,
+        description="Version from the last submission read; stale transitions return 409.",
+    )
+    assignee: Optional[GitHubLogin] = None
+    note: Optional[str] = Field(default=None, min_length=1)
+    closed_reason: Optional[ClosedReason] = None
+    related_add_data_submission_id: Optional[str] = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def validate_transition_fields(self):
+        if self.to == AddDataSubmissionStatus.IN_PROGRESS:
+            if not self.assignee:
+                raise ValueError("IN_PROGRESS requires an assignee")
+        elif "assignee" in self.model_fields_set:
+            raise ValueError("Assignees can only be supplied for IN_PROGRESS")
+        if self.to == AddDataSubmissionStatus.QUERIED and not self.note:
+            raise ValueError("QUERIED requires a note describing the question")
+        if self.to == AddDataSubmissionStatus.CLOSED:
+            if not self.closed_reason:
+                raise ValueError("CLOSED requires a closed_reason")
+        elif self.closed_reason or self.related_add_data_submission_id:
+            raise ValueError("Closure fields can only be supplied for CLOSED")
+        if self.related_add_data_submission_id and self.closed_reason not in (
+            "duplicate",
+            "resubmitted",
+        ):
+            raise ValueError(
+                "Related submissions are only allowed for duplicate or resubmitted closures"
+            )
+        return self
+
+
+class AddDataSubmissionPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    documentation_url: Optional[str] = None
+    add_data_details: Optional[dict[str, Any]] = Field(
+        default=None, description="Replaces the entire object; null clears it."
+    )
+
+    @field_validator("documentation_url")
+    @classmethod
+    def validate_url(cls, value):
+        TypeAdapter(HttpUrl).validate_python(value)
+        return value
+
+    @model_validator(mode="after")
+    def require_changes(self):
+        if not self.model_fields_set:
+            raise ValueError("Supply at least one editable field")
+        return self
+
+
+class AddDataSubmissionFilters(PaginationParams):
+    status: Optional[AddDataSubmissionStatus] = None
+    assignee: Optional[str] = None
+    organisation: Optional[str] = None
+    dataset: Optional[str] = None
+    source: Optional[Literal["check_tool", "manage"]] = None
+    reference: Optional[str] = Field(
+        default=None, description="Case-insensitive reference substring."
+    )
+    sort: Literal["submitted_at", "-submitted_at"] = "submitted_at"
 
 
 class AddDataSubmissionCreate(BaseModel):
@@ -80,6 +161,8 @@ class AddDataSubmissionEvent(BaseModel):
     actor: Optional[str]
     assignee: Optional[str]
     note: Optional[str]
+    closed_reason: Optional[ClosedReason]
+    related_add_data_submission_id: Optional[str]
     created: datetime
 
 
@@ -93,7 +176,13 @@ class AddDataSubmissionRead(BaseModel):
     submitted_at: datetime
     source: Literal["check_tool", "manage"]
     status: AddDataSubmissionStatus = Field(
-        description="Add Data Submission workflow state, separate from request processing status."
+        description=(
+            "Submission workflow state. ADDED means addition was dispatched; "
+            "request COMPLETE only means processing finished. ADDED and CLOSED are terminal."
+        )
+    )
+    version: int = Field(
+        description="Workflow version; send as expected_version when transitioning."
     )
     status_updated_at: datetime
     assignee: Optional[str]
@@ -114,3 +203,9 @@ class AddDataSubmissionRead(BaseModel):
     related_add_data_submission_id: Optional[str]
     jira_issue_key: Optional[str]
     events: list[AddDataSubmissionEvent]
+
+
+class AddDataSubmissionList(BaseModel):
+    params: PaginationParams
+    total_results_available: int
+    data: list[AddDataSubmissionRead]
