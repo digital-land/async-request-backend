@@ -114,16 +114,21 @@ def list_add_data_submissions(db: Session, filters: AddDataSubmissionFilters):
                 filters.reference.upper(), autoescape=True
             )
         )
-    total = db.scalar(select(func.count()).select_from(query.subquery()))
     order = models.AddDataSubmission.submitted_at
     if filters.sort == "-submitted_at":
         order = order.desc()
-    rows = db.scalars(
-        query.options(selectinload(models.AddDataSubmission.events))
-        .order_by(order, models.AddDataSubmission.id)
-        .offset(filters.offset)
-        .limit(filters.limit)
-    ).all()
+    # Use a fresh session: changing isolation on an already-started transaction
+    # is too late. Keep the count, page and eager-loaded events in one snapshot
+    # without committing or rolling back any caller-owned transaction.
+    bind = db.get_bind().engine.execution_options(isolation_level="REPEATABLE READ")
+    with Session(bind) as snapshot:
+        total = snapshot.scalar(select(func.count()).select_from(query.subquery()))
+        rows = snapshot.scalars(
+            query.options(selectinload(models.AddDataSubmission.events))
+            .order_by(order, models.AddDataSubmission.id)
+            .offset(filters.offset)
+            .limit(filters.limit)
+        ).all()
     return {
         "params": PaginationParams(offset=filters.offset, limit=filters.limit),
         "total_results_available": total,

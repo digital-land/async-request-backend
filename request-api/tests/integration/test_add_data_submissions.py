@@ -423,6 +423,85 @@ def test_workflow_listing_validates_query(api, params):
     assert api.get("/add-data-submissions", params=params).status_code == 422
 
 
+@pytest.mark.parametrize("existing_transaction", [False, True])
+@pytest.mark.parametrize("connection_bound", [False, True])
+def test_listing_count_rows_and_events_share_snapshot(
+    api, origin, add_data_submission_engine, existing_transaction, connection_bound
+):
+    from add_data_submission_schemas import (
+        AddDataSubmissionFilters,
+        AddDataSubmissionList,
+    )
+    from add_data_submissions import list_add_data_submissions
+
+    url = submission_url(api, origin)
+    before = api.get(url).json()
+    changed = False
+
+    def close_after_count(
+        connection, cursor, statement, parameters, context, executemany
+    ):
+        nonlocal changed
+        if changed or not statement.startswith("SELECT count("):
+            return
+        changed = True
+        with Session(add_data_submission_engine) as writer:
+            row = writer.get(models.AddDataSubmission, before["id"])
+            row.status = "CLOSED"
+            row.closed_reason = "withdrawn"
+            writer.add(
+                models.AddDataSubmissionEvent(
+                    add_data_submission_id=row.id,
+                    event_type="transition",
+                    from_status="TO_BE_ADDED",
+                    to_status="CLOSED",
+                    actor="alice",
+                )
+            )
+            writer.commit()
+
+    filters = AddDataSubmissionFilters(
+        reference=before["reference"], status="TO_BE_ADDED"
+    )
+    with add_data_submission_engine.connect() as connection:
+        bind = connection if connection_bound else add_data_submission_engine
+        with Session(bind) as reader:
+            if existing_transaction:
+                reader.execute(text("SELECT 1"))
+            original_transaction = reader.get_transaction()
+            event.listen(
+                add_data_submission_engine, "after_cursor_execute", close_after_count
+            )
+            try:
+                result = list_add_data_submissions(reader, filters)
+            finally:
+                event.remove(
+                    add_data_submission_engine,
+                    "after_cursor_execute",
+                    close_after_count,
+                )
+            assert changed
+            assert result["total_results_available"] == 1
+            assert [row.id for row in result["data"]] == [before["id"]]
+            # Serialisation must work after the listing's snapshot has been released.
+            row = AddDataSubmissionList.model_validate(result).model_dump()["data"][0]
+            assert row["status"] == "TO_BE_ADDED"
+            assert len(row["events"]) == 1
+            if existing_transaction:
+                assert reader.get_transaction() is original_transaction
+                assert (
+                    reader.scalar(text("SHOW transaction_isolation"))
+                    == "read committed"
+                )
+    # The concurrent change is committed and visible to a subsequent listing.
+    result = api.get(
+        "/add-data-submissions",
+        params={"reference": before["reference"], "status": "TO_BE_ADDED"},
+    )
+    assert result.json()["total_results_available"] == 0
+    assert result.json()["data"] == []
+
+
 @pytest.fixture(scope="module")
 def add_data_submission_engine():
     # A dedicated database, independent of the API's cached production engine.
