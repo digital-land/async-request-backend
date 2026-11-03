@@ -27,9 +27,7 @@ TRANSITIONS = {
 }
 
 
-def transition_add_data_submission(
-    db: Session, submission_id: str, body: AddDataSubmissionTransition, actor: str
-):
+def _lock_for_update(db: Session, submission_id: str, expected_version: int):
     submission = db.scalar(
         select(models.AddDataSubmission)
         .where(models.AddDataSubmission.id == submission_id)
@@ -37,8 +35,15 @@ def transition_add_data_submission(
     )
     if submission is None:
         raise HTTPException(404, "Add Data Submission not found")
-    if submission.version != body.expected_version:
+    if submission.version != expected_version:
         raise HTTPException(409, "Submission has changed; reload it before retrying")
+    return submission
+
+
+def transition_add_data_submission(
+    db: Session, submission_id: str, body: AddDataSubmissionTransition, actor: str
+):
+    submission = _lock_for_update(db, submission_id, body.expected_version)
     if body.to not in TRANSITIONS[submission.status]:
         raise HTTPException(
             409, f"Cannot transition from {submission.status} to {body.to.value}"
@@ -86,9 +91,12 @@ def transition_add_data_submission(
 def patch_add_data_submission(
     db: Session, submission_id: str, body: AddDataSubmissionPatch
 ):
-    submission = get_add_data_submission(db, submission_id)
-    for name, value in body.model_dump(exclude_unset=True).items():
+    submission = _lock_for_update(db, submission_id, body.expected_version)
+    for name, value in body.model_dump(
+        exclude_unset=True, exclude={"expected_version"}
+    ).items():
         setattr(submission, name, value)
+    submission.version += 1
     db.commit()
     db.refresh(submission)
     return submission

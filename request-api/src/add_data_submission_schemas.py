@@ -75,6 +75,11 @@ class AddDataSubmissionTransition(BaseModel):
 class AddDataSubmissionPatch(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
+    expected_version: int = Field(
+        ge=1,
+        strict=True,
+        description="Version from the last submission read; stale edits return 409.",
+    )
     documentation_url: Optional[str] = None
     add_data_details: Optional[dict[str, Any]] = Field(
         default=None, description="Replaces the entire object; null clears it."
@@ -88,7 +93,7 @@ class AddDataSubmissionPatch(BaseModel):
 
     @model_validator(mode="after")
     def require_changes(self):
-        if not self.model_fields_set:
+        if not self.model_fields_set - {"expected_version"}:
             raise ValueError("Supply at least one editable field")
         return self
 
@@ -182,7 +187,7 @@ class AddDataSubmissionRead(BaseModel):
         )
     )
     version: int = Field(
-        description="Workflow version; send as expected_version when transitioning."
+        description="Submission version; send as expected_version when editing or transitioning."
     )
     status_updated_at: datetime
     assignee: Optional[str]

@@ -201,6 +201,7 @@ def test_workflow_patch_only_edits_allowed_fields(api, origin):
     result = api.patch(
         url,
         json={
+            "expected_version": before["version"],
             "documentation_url": "https://example.org/new",
             "add_data_details": {"licence": "ogl", "start_date": "2026-01-01"},
         },
@@ -209,12 +210,22 @@ def test_workflow_patch_only_edits_allowed_fields(api, origin):
     updated = result.json()
     assert updated["documentation_url"] == "https://example.org/new"
     assert updated["add_data_details"] == {"licence": "ogl", "start_date": "2026-01-01"}
-    for field in ("status", "version", "assignee", "status_updated_at", "events"):
+    assert updated["version"] == before["version"] + 1
+    for field in ("status", "assignee", "status_updated_at", "events"):
         assert updated[field] == before[field]
-    replaced = api.patch(url, json={"add_data_details": {"licence": "other"}}).json()
+    replaced = api.patch(
+        url,
+        json={
+            "expected_version": updated["version"],
+            "add_data_details": {"licence": "other"},
+        },
+    ).json()
     assert replaced["add_data_details"] == {"licence": "other"}
     assert (
-        api.patch(url, json={"add_data_details": None}).json()["add_data_details"]
+        api.patch(
+            url,
+            json={"expected_version": replaced["version"], "add_data_details": None},
+        ).json()["add_data_details"]
         is None
     )
 
@@ -237,7 +248,7 @@ def test_workflow_patch_only_edits_allowed_fields(api, origin):
 def test_workflow_patch_rejects_forbidden_or_invalid_fields(api, origin, body):
     url = submission_url(api, origin)
     before = api.get(url).json()
-    assert api.patch(url, json=body).status_code == 422
+    assert api.patch(url, json={"expected_version": 1, **body}).status_code == 422
     assert api.get(url).json() == before
 
 
@@ -255,7 +266,8 @@ def test_workflow_events_endpoint_is_ordered_and_checks_missing_submission(api, 
     assert api.get("/add-data-submissions/missing/events").status_code == 404
     assert (
         api.patch(
-            "/add-data-submissions/missing", json={"add_data_details": {}}
+            "/add-data-submissions/missing",
+            json={"expected_version": 1, "add_data_details": {}},
         ).status_code
         == 404
     )
@@ -265,6 +277,76 @@ def test_workflow_events_endpoint_is_ordered_and_checks_missing_submission(api, 
         ).status_code
         == 404
     )
+
+
+@pytest.mark.parametrize(
+    "version_fields",
+    [
+        {},
+        {"expected_version": None},
+        {"expected_version": 0},
+        {"expected_version": "1"},
+        {"expected_version": True},
+    ],
+)
+def test_patch_requires_valid_expected_version(api, origin, version_fields):
+    url = submission_url(api, origin)
+    before = api.get(url).json()
+    result = api.patch(
+        url, json={**version_fields, "add_data_details": {"licence": "ogl"}}
+    )
+    assert result.status_code == 422
+    assert api.get(url).json() == before
+
+
+@pytest.mark.parametrize("first_is_transition", [False, True])
+def test_patch_and_transition_reject_stale_versions(api, origin, first_is_transition):
+    url = submission_url(api, origin)
+    patch_body = {"expected_version": 1, "add_data_details": {"licence": "ogl"}}
+    if first_is_transition:
+        first = transition(api, url, "IN_PROGRESS", assignee="alice")
+        stale = api.patch(url, json=patch_body)
+    else:
+        first = api.patch(url, json=patch_body)
+        stale = transition(api, url, "IN_PROGRESS", assignee="alice")
+    assert first.status_code == 200, first.text
+    assert first.json()["version"] == 2
+    assert stale.status_code == 409, stale.text
+    assert api.get(url).json() == first.json()
+
+
+@pytest.mark.parametrize("compete_with_transition", [False, True])
+def test_concurrent_detail_edits_have_one_winner(
+    api, origin, add_data_submission_engine, compete_with_transition
+):
+    url = submission_url(api, origin)
+    before = api.get(url).json()
+    barrier = Barrier(2)
+
+    def save(index):
+        barrier.wait(timeout=10)
+        if index == 1 and compete_with_transition:
+            return transition(api, url, "IN_PROGRESS", assignee="alice")
+        return api.patch(
+            url,
+            json={
+                "expected_version": 1,
+                "add_data_details": {"licence": f"licence-{index}"},
+            },
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(save, [0, 1]))
+    assert sorted(result.status_code for result in results) == [200, 409]
+    winner = next(result.json() for result in results if result.status_code == 200)
+    saved = api.get(url).json()
+    assert saved == winner
+    assert saved["version"] == 2
+    if saved["status"] == "TO_BE_ADDED":
+        assert saved["events"] == before["events"]
+        assert saved["status_updated_at"] == before["status_updated_at"]
+    with Session(add_data_submission_engine) as session:
+        assert session.get(models.Request, origin["id"]).modified == origin["modified"]
 
 
 def test_workflow_listing_filters_sort_and_pagination(

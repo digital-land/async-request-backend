@@ -83,11 +83,16 @@ Each entry uses the submission read schema, including contact details and events
 
 ## Edit details
 
-`PATCH /add-data-submissions/{id}` accepts only `documentation_url` (an HTTP/HTTPS
-URL) and `add_data_details` (a JSON object or null). Omitted fields are unchanged;
+`PATCH /add-data-submissions/{id}` requires `expected_version` from the last read,
+plus `documentation_url` (an HTTP/HTTPS URL) and/or `add_data_details` (a JSON object
+or null). Omitted fields are unchanged;
 the JSON object is replaced rather than merged, and null clears it. Empty patches
-and unknown fields return `422`. This endpoint does not change workflow status,
-assignee, workflow version, status timestamp or events. It may edit details on
+and unknown fields return `422`. The version is checked under the same row lock
+used by transitions, and incremented atomically with a successful edit. Stale saves
+return `409`; reload and review the latest details before retrying. Detail edits
+and transitions share this counter, so either makes an older version stale.
+This endpoint does not change workflow status,
+assignee, status timestamp or events. It may edit details on
 terminal submissions without reopening them.
 
 ## Migration and verification

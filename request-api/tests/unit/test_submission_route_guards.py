@@ -106,7 +106,11 @@ def test_submission_link_requires_auth_before_persistence_or_dispatch(kind, serv
     [
         ("GET", "/add-data-submissions", None),
         ("GET", "/add-data-submissions/test-id/events", None),
-        ("PATCH", "/add-data-submissions/test-id", {"add_data_details": {}}),
+        (
+            "PATCH",
+            "/add-data-submissions/test-id",
+            {"expected_version": 1, "add_data_details": {}},
+        ),
         (
             "POST",
             "/add-data-submissions/test-id/transitions",
