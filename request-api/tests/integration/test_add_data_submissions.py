@@ -19,6 +19,489 @@ from request_model import models
 REQUEST_API_ROOT = Path(__file__).resolve().parents[2]
 
 
+def submission_url(api, origin, **overrides):
+    response = api.post("/add-data-submissions", json=payload(origin, **overrides))
+    assert response.status_code == 201, response.text
+    return "/add-data-submissions/" + response.json()["id"]
+
+
+def transition(api, url, to, version=1, **fields):
+    return api.post(
+        url + "/transitions", json={"to": to, "expected_version": version, **fields}
+    )
+
+
+@pytest.mark.parametrize(
+    "initial,allowed",
+    [
+        ("TO_BE_ADDED", {"IN_PROGRESS", "QUERIED", "CLOSED"}),
+        ("IN_PROGRESS", {"TO_BE_ADDED", "IN_PROGRESS", "QUERIED", "ADDED", "CLOSED"}),
+        ("QUERIED", {"TO_BE_ADDED", "IN_PROGRESS", "CLOSED"}),
+        ("ADDED", set()),
+        ("CLOSED", set()),
+    ],
+)
+@pytest.mark.parametrize(
+    "target", ["TO_BE_ADDED", "IN_PROGRESS", "QUERIED", "ADDED", "CLOSED"]
+)
+def test_workflow_transition_table(
+    api, origin, add_data_submission_engine, initial, allowed, target
+):
+    url = submission_url(api, origin)
+    with Session(add_data_submission_engine) as session:
+        row = session.get(models.AddDataSubmission, url.rsplit("/", 1)[1])
+        row.status = initial
+        row.assignee = None if initial == "TO_BE_ADDED" else "alice"
+        session.commit()
+    fields = {"note": "Asked the authority to clarify"}
+    if target == "IN_PROGRESS":
+        fields["assignee"] = "bob"
+    if target == "CLOSED":
+        fields["closed_reason"] = "withdrawn"
+    before = api.get(url).json()
+    result = transition(api, url, target, **fields)
+    if target not in allowed:
+        assert result.status_code == 409, result.text
+        assert api.get(url).json() == before
+        return
+    assert result.status_code == 200, result.text
+    updated = result.json()
+    assert updated["status"] == target
+    assert updated["version"] == 2
+    assert updated["status_updated_at"] != before["status_updated_at"]
+    expected_assignee = "bob" if target == "IN_PROGRESS" else before["assignee"]
+    if target == "TO_BE_ADDED":
+        expected_assignee = None
+    assert updated["assignee"] == expected_assignee
+    assert len(updated["events"]) == 2
+    event_row = updated["events"][-1]
+    assert event_row["from_status"] == initial
+    assert event_row["to_status"] == target
+    assert event_row["actor"] == "test-user"
+    assert event_row["assignee"] == expected_assignee
+    assert event_row["note"] == fields["note"]
+    assert event_row["closed_reason"] == fields.get("closed_reason")
+    with Session(add_data_submission_engine) as session:
+        assert session.get(models.Request, origin["id"]).modified == origin["modified"]
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"to": "IN_PROGRESS"},
+        {"to": "IN_PROGRESS", "assignee": "  "},
+        {"to": "IN_PROGRESS", "assignee": "not a login"},
+        {"to": "QUERIED"},
+        {"to": "QUERIED", "note": "  "},
+        {"to": "QUERIED", "note": "Question", "assignee": "bob"},
+        {"to": "CLOSED"},
+        {"to": "CLOSED", "closed_reason": "invalid"},
+        {
+            "to": "CLOSED",
+            "closed_reason": "withdrawn",
+            "related_add_data_submission_id": "other",
+        },
+        {"to": "IN_PROGRESS", "assignee": "bob", "closed_reason": "duplicate"},
+        {"to": "IN_PROGRESS", "assignee": "bob", "actor": "spoofed"},
+        {"to": "IN_PROGRESS", "assignee": "bob", "expected_version": 0},
+    ],
+)
+def test_invalid_workflow_inputs_leave_submission_unchanged(api, origin, fields):
+    url = submission_url(api, origin)
+    before = api.get(url).json()
+    result = api.post(url + "/transitions", json={"expected_version": 1, **fields})
+    assert result.status_code == 422, result.text
+    assert api.get(url).json() == before
+
+
+def test_cannot_query_staff_submission(api, origin):
+    url = submission_url(
+        api, origin, source="manage", contact_name=None, contact_email=None
+    )
+    result = transition(api, url, "QUERIED", note="Please clarify")
+    assert result.status_code == 422
+    assert len(api.get(url).json()["events"]) == 1
+
+
+@pytest.mark.parametrize("reason", ["duplicate", "resubmitted"])
+def test_closure_links_are_validated_and_recorded(api, origin, reason):
+    url = submission_url(api, origin)
+    fields = {"closed_reason": reason, "related_add_data_submission_id": "missing"}
+    assert transition(api, url, "CLOSED", **fields).status_code == 422
+    fields["related_add_data_submission_id"] = url.rsplit("/", 1)[1]
+    assert transition(api, url, "CLOSED", **fields).status_code == 422
+    other = submission_url(api, origin, dataset="tree-preservation-zone")
+    fields["related_add_data_submission_id"] = other.rsplit("/", 1)[1]
+    result = transition(api, url, "CLOSED", **fields)
+    assert result.status_code == 200, result.text
+    assert (
+        result.json()["related_add_data_submission_id"]
+        == fields["related_add_data_submission_id"]
+    )
+    assert (
+        result.json()["events"][-1]["related_add_data_submission_id"]
+        == fields["related_add_data_submission_id"]
+    )
+
+
+@pytest.mark.parametrize("reassign", [False, True])
+def test_concurrent_workflow_assignments_have_one_winner(api, origin, reassign):
+    url = submission_url(api, origin)
+    version = 1
+    if reassign:
+        assert transition(api, url, "IN_PROGRESS", assignee="alice").status_code == 200
+        version = 2
+    barrier = Barrier(2)
+
+    def claim(login):
+        barrier.wait(timeout=10)
+        return transition(api, url, "IN_PROGRESS", version=version, assignee=login)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(claim, ["bob", "carol"]))
+    assert sorted(result.status_code for result in results) == [200, 409]
+    winner = next(result.json() for result in results if result.status_code == 200)
+    saved = api.get(url).json()
+    assert saved["assignee"] == winner["assignee"]
+    assert saved["version"] == version + 1
+    assert len(saved["events"]) == version + 1
+
+
+def test_transition_event_failure_rolls_back(api, origin, add_data_submission_engine):
+    url = submission_url(api, origin)
+    before = api.get(url).json()
+
+    def fail_event(mapper, connection, target):
+        raise RuntimeError("event write failed")
+
+    event.listen(models.AddDataSubmissionEvent, "before_insert", fail_event)
+    try:
+        with pytest.raises(RuntimeError, match="event write failed"):
+            transition(api, url, "IN_PROGRESS", assignee="alice")
+    finally:
+        event.remove(models.AddDataSubmissionEvent, "before_insert", fail_event)
+    assert api.get(url).json() == before
+
+
+def test_transition_requires_verified_login(api, origin, auth_headers):
+    url = submission_url(api, origin)
+    for username in (None, "", " "):
+        result = api.post(
+            url + "/transitions",
+            headers=auth_headers(username=username),
+            json={"to": "IN_PROGRESS", "assignee": "alice", "expected_version": 1},
+        )
+        assert result.status_code == 403, result.text
+    assert len(api.get(url).json()["events"]) == 1
+
+
+def test_workflow_patch_only_edits_allowed_fields(api, origin):
+    url = submission_url(api, origin)
+    before = api.get(url).json()
+    result = api.patch(
+        url,
+        json={
+            "expected_version": before["version"],
+            "documentation_url": "https://example.org/new",
+            "add_data_details": {"licence": "ogl", "start_date": "2026-01-01"},
+        },
+    )
+    assert result.status_code == 200, result.text
+    updated = result.json()
+    assert updated["documentation_url"] == "https://example.org/new"
+    assert updated["add_data_details"] == {"licence": "ogl", "start_date": "2026-01-01"}
+    assert updated["version"] == before["version"] + 1
+    for field in ("status", "assignee", "status_updated_at", "events"):
+        assert updated[field] == before[field]
+    replaced = api.patch(
+        url,
+        json={
+            "expected_version": updated["version"],
+            "add_data_details": {"licence": "other"},
+        },
+    ).json()
+    assert replaced["add_data_details"] == {"licence": "other"}
+    assert (
+        api.patch(
+            url,
+            json={"expected_version": replaced["version"], "add_data_details": None},
+        ).json()["add_data_details"]
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"status": "ADDED"},
+        {"assignee": "alice"},
+        {"closed_reason": "duplicate"},
+        {"related_add_data_submission_id": "other"},
+        {"version": 2},
+        {"dataset": "other"},
+        {"contact_email": "changed@example.org"},
+        {"documentation_url": None},
+        {"documentation_url": "invalid"},
+        {},
+    ],
+)
+def test_workflow_patch_rejects_forbidden_or_invalid_fields(api, origin, body):
+    url = submission_url(api, origin)
+    before = api.get(url).json()
+    assert api.patch(url, json={"expected_version": 1, **body}).status_code == 422
+    assert api.get(url).json() == before
+
+
+def test_workflow_events_endpoint_is_ordered_and_checks_missing_submission(api, origin):
+    url = submission_url(api, origin)
+    result = transition(api, url, "IN_PROGRESS", assignee="alice")
+    assert result.status_code == 200, result.text
+    events = api.get(url + "/events")
+    assert events.status_code == 200
+    assert events.json() == result.json()["events"]
+    assert [item["to_status"] for item in events.json()] == [
+        "TO_BE_ADDED",
+        "IN_PROGRESS",
+    ]
+    assert api.get("/add-data-submissions/missing/events").status_code == 404
+    assert (
+        api.patch(
+            "/add-data-submissions/missing",
+            json={"expected_version": 1, "add_data_details": {}},
+        ).status_code
+        == 404
+    )
+    assert (
+        transition(
+            api, "/add-data-submissions/missing", "IN_PROGRESS", assignee="alice"
+        ).status_code
+        == 404
+    )
+
+
+@pytest.mark.parametrize(
+    "version_fields",
+    [
+        {},
+        {"expected_version": None},
+        {"expected_version": 0},
+        {"expected_version": "1"},
+        {"expected_version": True},
+    ],
+)
+def test_patch_requires_valid_expected_version(api, origin, version_fields):
+    url = submission_url(api, origin)
+    before = api.get(url).json()
+    result = api.patch(
+        url, json={**version_fields, "add_data_details": {"licence": "ogl"}}
+    )
+    assert result.status_code == 422
+    assert api.get(url).json() == before
+
+
+@pytest.mark.parametrize("first_is_transition", [False, True])
+def test_patch_and_transition_reject_stale_versions(api, origin, first_is_transition):
+    url = submission_url(api, origin)
+    patch_body = {"expected_version": 1, "add_data_details": {"licence": "ogl"}}
+    if first_is_transition:
+        first = transition(api, url, "IN_PROGRESS", assignee="alice")
+        stale = api.patch(url, json=patch_body)
+    else:
+        first = api.patch(url, json=patch_body)
+        stale = transition(api, url, "IN_PROGRESS", assignee="alice")
+    assert first.status_code == 200, first.text
+    assert first.json()["version"] == 2
+    assert stale.status_code == 409, stale.text
+    assert api.get(url).json() == first.json()
+
+
+@pytest.mark.parametrize("compete_with_transition", [False, True])
+def test_concurrent_detail_edits_have_one_winner(
+    api, origin, add_data_submission_engine, compete_with_transition
+):
+    url = submission_url(api, origin)
+    before = api.get(url).json()
+    barrier = Barrier(2)
+
+    def save(index):
+        barrier.wait(timeout=10)
+        if index == 1 and compete_with_transition:
+            return transition(api, url, "IN_PROGRESS", assignee="alice")
+        return api.patch(
+            url,
+            json={
+                "expected_version": 1,
+                "add_data_details": {"licence": f"licence-{index}"},
+            },
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(save, [0, 1]))
+    assert sorted(result.status_code for result in results) == [200, 409]
+    winner = next(result.json() for result in results if result.status_code == 200)
+    saved = api.get(url).json()
+    assert saved == winner
+    assert saved["version"] == 2
+    if saved["status"] == "TO_BE_ADDED":
+        assert saved["events"] == before["events"]
+        assert saved["status_updated_at"] == before["status_updated_at"]
+    with Session(add_data_submission_engine) as session:
+        assert session.get(models.Request, origin["id"]).modified == origin["modified"]
+
+
+def test_workflow_listing_filters_sort_and_pagination(
+    api, origin, add_data_submission_engine
+):
+    from datetime import datetime, timezone
+
+    urls = [
+        submission_url(api, origin),
+        submission_url(api, origin, dataset="tree-preservation-zone"),
+    ]
+    marker = "list-" + uuid.uuid4().hex
+    with Session(add_data_submission_engine) as session:
+        for index, url in enumerate(urls):
+            row = session.get(models.AddDataSubmission, url.rsplit("/", 1)[1])
+            row.organisation = marker
+            row.submitted_at = datetime(2026, 1, index + 1, tzinfo=timezone.utc)
+        session.commit()
+    assert transition(api, urls[0], "IN_PROGRESS", assignee="alice").status_code == 200
+    first = api.get(urls[0]).json()
+    second = api.get(urls[1]).json()
+    filters = {"organisation": marker}
+    result = api.get("/add-data-submissions", params=filters)
+    assert result.status_code == 200, result.text
+    assert [row["id"] for row in result.json()["data"]] == [first["id"], second["id"]]
+    assert result.json()["total_results_available"] == 2
+    page = api.get(
+        "/add-data-submissions", params={**filters, "limit": 1, "offset": 1}
+    ).json()
+    assert page["params"] == {"limit": 1, "offset": 1}
+    assert page["total_results_available"] == 2
+    assert [row["id"] for row in page["data"]] == [second["id"]]
+    descending = api.get(
+        "/add-data-submissions", params={**filters, "sort": "-submitted_at"}
+    ).json()
+    assert [row["id"] for row in descending["data"]] == [second["id"], first["id"]]
+    for key, value in {
+        "status": "IN_PROGRESS",
+        "assignee": "alice",
+        "dataset": "tree",
+        "reference": first["reference"][2:].lower(),
+    }.items():
+        rows = api.get("/add-data-submissions", params={**filters, key: value}).json()[
+            "data"
+        ]
+        assert [row["id"] for row in rows] == [first["id"]]
+    assert (
+        len(
+            api.get(
+                "/add-data-submissions", params={**filters, "source": "check_tool"}
+            ).json()["data"]
+        )
+        == 2
+    )
+    for extra in ({"source": "manage"}, {"assignee": "nobody"}, {"reference": "%"}):
+        assert (
+            api.get("/add-data-submissions", params={**filters, **extra}).json()["data"]
+            == []
+        )
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"status": "COMPLETE"},
+        {"source": "unknown"},
+        {"sort": "anything"},
+        {"limit": 0},
+        {"limit": 501},
+        {"offset": -1},
+    ],
+)
+def test_workflow_listing_validates_query(api, params):
+    assert api.get("/add-data-submissions", params=params).status_code == 422
+
+
+@pytest.mark.parametrize("existing_transaction", [False, True])
+@pytest.mark.parametrize("connection_bound", [False, True])
+def test_listing_count_rows_and_events_share_snapshot(
+    api, origin, add_data_submission_engine, existing_transaction, connection_bound
+):
+    from add_data_submission_schemas import (
+        AddDataSubmissionFilters,
+        AddDataSubmissionList,
+    )
+    from add_data_submissions import list_add_data_submissions
+
+    url = submission_url(api, origin)
+    before = api.get(url).json()
+    changed = False
+
+    def close_after_count(
+        connection, cursor, statement, parameters, context, executemany
+    ):
+        nonlocal changed
+        if changed or not statement.startswith("SELECT count("):
+            return
+        changed = True
+        with Session(add_data_submission_engine) as writer:
+            row = writer.get(models.AddDataSubmission, before["id"])
+            row.status = "CLOSED"
+            row.closed_reason = "withdrawn"
+            writer.add(
+                models.AddDataSubmissionEvent(
+                    add_data_submission_id=row.id,
+                    event_type="transition",
+                    from_status="TO_BE_ADDED",
+                    to_status="CLOSED",
+                    actor="alice",
+                )
+            )
+            writer.commit()
+
+    filters = AddDataSubmissionFilters(
+        reference=before["reference"], status="TO_BE_ADDED"
+    )
+    with add_data_submission_engine.connect() as connection:
+        bind = connection if connection_bound else add_data_submission_engine
+        with Session(bind) as reader:
+            if existing_transaction:
+                reader.execute(text("SELECT 1"))
+            original_transaction = reader.get_transaction()
+            event.listen(
+                add_data_submission_engine, "after_cursor_execute", close_after_count
+            )
+            try:
+                result = list_add_data_submissions(reader, filters)
+            finally:
+                event.remove(
+                    add_data_submission_engine,
+                    "after_cursor_execute",
+                    close_after_count,
+                )
+            assert changed
+            assert result["total_results_available"] == 1
+            assert [row.id for row in result["data"]] == [before["id"]]
+            # Serialisation must work after the listing's snapshot has been released.
+            row = AddDataSubmissionList.model_validate(result).model_dump()["data"][0]
+            assert row["status"] == "TO_BE_ADDED"
+            assert len(row["events"]) == 1
+            if existing_transaction:
+                assert reader.get_transaction() is original_transaction
+                assert (
+                    reader.scalar(text("SHOW transaction_isolation"))
+                    == "read committed"
+                )
+    # The concurrent change is committed and visible to a subsequent listing.
+    result = api.get(
+        "/add-data-submissions",
+        params={"reference": before["reference"], "status": "TO_BE_ADDED"},
+    )
+    assert result.json()["total_results_available"] == 0
+    assert result.json()["data"] == []
+
+
 @pytest.fixture(scope="module")
 def add_data_submission_engine():
     # A dedicated database, independent of the API's cached production engine.

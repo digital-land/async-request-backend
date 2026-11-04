@@ -103,7 +103,12 @@ class ResponseModel(BaseModel):
 class Request(RequestBase):
     id: str
     type: RequestTypeEnum
-    status: str
+    status: str = Field(
+        description=(
+            "Processing status. COMPLETE means processing finished, not that data was added. "
+            "Submission workflow uses a separate status, including ADDED and CLOSED."
+        )
+    )
     created: datetime.datetime
     modified: datetime.datetime
     response: Optional[ResponseModel]

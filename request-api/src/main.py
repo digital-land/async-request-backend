@@ -4,25 +4,18 @@ from datetime import datetime
 from typing import List, Dict, Any
 import sentry_sdk
 
-import boto3
 from botocore.exceptions import ClientError, BotoCoreError
 from fastapi import FastAPI, Depends, Request, Response, HTTPException
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
-from slack_sdk import WebClient
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 import crud
 from auth import add_data_requires_auth, require_auth
-import add_data_submissions
-from add_data_submission_schemas import (
-    AddDataSubmissionCreate,
-    AddDataSubmissionRead,
-    AddDataSubmissionReceipt,
-)
-from database import session_maker
+from dependencies import _get_db, _get_sqs_client
+from routers.add_data_submissions import router as add_data_submissions_router
 from pagination_model import PaginationParams
 from sentry_privacy import SensitiveFieldScrubber
 from request_model import models, schemas
@@ -76,56 +69,7 @@ if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
     )
 
 app = FastAPI()
-
-
-def send_slack_alert(message):
-    slack_token = os.environ.get("SLACK_BOT_TOKEN", "")
-    slack_channel = os.environ.get("SLACK_CHANNEL", "")
-    if not slack_token or not slack_channel:
-        logging.warning("Slack token or channel is missing.")
-        return
-    client = WebClient(token=slack_token)
-    bot_name = "SQS and DB"
-    client.chat_postMessage(channel=slack_channel, text=message, username=bot_name)
-
-
-def is_connection_restored(last_attempt_time, max_retry_duration=60):
-    current_time = datetime.now().timestamp()
-    last_attempt_timestamp = last_attempt_time.timestamp()
-    return (current_time - last_attempt_timestamp) > max_retry_duration
-
-
-# Dependency
-def _get_db():
-    retries = 5
-    for attempt in range(retries):
-        try:
-            db = session_maker()()
-            try:
-                yield db
-            finally:
-                db.close()
-            return
-        except SQLAlchemyError as e:
-            logging.exception(f"Database connection failed (Attempt {attempt+1}): {e}")
-            if is_connection_restored(datetime.now()):
-                break
-    send_slack_alert("DB connection issue detected in async-request-backend..")
-
-
-def _get_sqs_client():
-    retries = 5
-    for attempt in range(retries):
-        try:
-            logging.info(f"SQS client successfully connected on attempt {attempt}.")
-            return boto3.client("sqs")
-        except (ClientError, BotoCoreError) as e:
-            logging.exception(
-                f"SQS connection failed on attempt {attempt}. Retrying...Error: {e}"
-            )
-            if is_connection_restored(datetime.now()):
-                break
-    send_slack_alert("SQS connection issue detected in async-request-backend..")
+app.include_router(add_data_submissions_router)
 
 
 @app.get("/health", response_model=HealthCheckResponse)
@@ -166,44 +110,6 @@ def healthcheck(
             ),
         ],
     )
-
-
-@app.post(
-    "/add-data-submissions", status_code=201, response_model=AddDataSubmissionReceipt
-)
-def create_add_data_submission(
-    request: AddDataSubmissionCreate,
-    response: Response,
-    db: Session = Depends(_get_db),
-):
-    add_data_submission, created = add_data_submissions.create_add_data_submission(
-        db, request
-    )
-    response.status_code = 201 if created else 200
-    response.headers["Location"] = f"/add-data-submissions/{add_data_submission.id}"
-    return add_data_submission
-
-
-@app.get(
-    "/add-data-submissions/by-reference/{reference}",
-    response_model=AddDataSubmissionRead,
-)
-@require_auth(roles={"staff", "admin"})
-def read_add_data_submission_by_reference(
-    reference: str, http_request: Request, db: Session = Depends(_get_db)
-):
-    return add_data_submissions.get_by_reference(db, reference)
-
-
-@app.get(
-    "/add-data-submissions/{add_data_submission_id}",
-    response_model=AddDataSubmissionRead,
-)
-@require_auth(roles={"staff", "admin"})
-def read_add_data_submission(
-    add_data_submission_id: str, http_request: Request, db: Session = Depends(_get_db)
-):
-    return add_data_submissions.get_add_data_submission(db, add_data_submission_id)
 
 
 @app.post("/requests", status_code=202, response_model=schemas.Request)

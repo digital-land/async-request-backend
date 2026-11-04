@@ -106,12 +106,13 @@ def auth_headers(monkeypatch):
     monkeypatch.setenv("AUTH_TRUSTED_ISSUERS", "manage-test")
     monkeypatch.setenv("AUTH_JWT_AUDIENCE", "async-test")
 
-    def headers(role="staff"):
+    def headers(role="staff", username="test-user"):
         token = jwt.encode(
             {
                 "iss": "manage-test",
                 "aud": "async-test",
                 "sub": "test-user",
+                "username": username,
                 "iat": int(time.time()),
                 "exp": int(time.time()) + 900,
                 "role": role,

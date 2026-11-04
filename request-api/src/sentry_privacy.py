@@ -95,14 +95,18 @@ class SensitiveFieldScrubber(EventScrubber):
         for key, value in attributes.items():
             field = key.removeprefix("sentry.message.parameter.").lower()
             if field in self.fields:
+                redacted = "[Filtered]"
+            else:
+                redacted = _redacted_json(value, self.fields)
+            if redacted is not None:
                 # The SDK may already have interpolated these attributes into body.
                 if (
                     isinstance(value, str)
                     and value
                     and isinstance(log.get("body"), str)
                 ):
-                    log["body"] = log["body"].replace(value, "[Filtered]")
-                attributes[key] = "[Filtered]"
+                    log["body"] = log["body"].replace(value, redacted)
+                attributes[key] = redacted
         _filter_json_fields(log, self.fields)
         body = _redacted_json(log.get("body"), self.fields)
         if body is not None:
