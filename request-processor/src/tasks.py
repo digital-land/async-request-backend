@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Dict
 import urllib.parse
 
@@ -35,10 +36,116 @@ _DETAIL_BATCH_SIZE = 1000
 # Threshold for s3_transfer_manager to automatically use multipart download
 max_file_size_mb = 30
 
+# request-api generates ids with shortuuid.uuid(): 22 alphanumeric characters.
+_REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9]{22}")
+# Submit stores uploads in S3 under a uuidv4 key.
+_UPLOADED_FILENAME_PATTERN = re.compile(
+    r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}"
+)
+_SLUG_PATTERN = re.compile(r"[a-z0-9-]+")
+
+
+class UntrustedTaskMessage(Exception):
+    """A task message on the broker that request-api could not have sent."""
+
+
+def _is_valid_request_id(request_id):
+    return isinstance(request_id, str) and bool(
+        _REQUEST_ID_PATTERN.fullmatch(request_id)
+    )
+
+
+def _validate_broker_message(args, kwargs):
+    """
+    Reject task messages that did not come from request-api.
+
+    request-api only ever enqueues args=[request] for a request row it has
+    just committed, so anything else (extra args such as a directories
+    override, unknown ids, or params that differ from the stored row) was put
+    on the queue by something else.
+    """
+    if kwargs or len(args) != 1 or not isinstance(args[0], dict):
+        raise UntrustedTaskMessage("Unexpected task arguments")
+
+    message = args[0]
+    request_id = message.get("id")
+    if not _is_valid_request_id(request_id):
+        raise UntrustedTaskMessage(f"Invalid request id {request_id!r}")
+
+    stored = _get_request(request_id)
+    if stored is None:
+        raise UntrustedTaskMessage(f"Request {request_id} not found in database")
+
+    message_params = schemas.RequestBase.model_validate(
+        {"params": message.get("params")}
+    ).params
+    stored_params = schemas.RequestBase.model_validate({"params": stored.params}).params
+    if message.get("type") != stored.type or message_params.model_dump(
+        mode="json"
+    ) != stored_params.model_dump(mode="json"):
+        raise UntrustedTaskMessage(
+            f"Params for request {request_id} do not match the stored request"
+        )
+
+    _validate_params(stored_params)
+
+
+def _validate_params(params):
+    uploaded_filename = getattr(params, "uploaded_filename", None)
+    if uploaded_filename is not None and not _UPLOADED_FILENAME_PATTERN.fullmatch(
+        uploaded_filename
+    ):
+        raise UntrustedTaskMessage(f"Invalid uploaded_filename {uploaded_filename!r}")
+
+    if not _SLUG_PATTERN.fullmatch(params.collection or ""):
+        raise UntrustedTaskMessage(f"Invalid collection {params.collection!r}")
+
+    if not _SLUG_PATTERN.fullmatch(params.dataset or ""):
+        raise UntrustedTaskMessage(f"Invalid dataset {params.dataset!r}")
+    if params.dataset not in utils.load_specification(Directories).dataset:
+        raise UntrustedTaskMessage(f"Dataset {params.dataset!r} not in specification")
+
+
+class _BrokerMessageGuard:
+    """
+    Validates messages delivered by the worker before the task body runs.
+
+    Celery's tracer calls a task's custom __call__ with called_directly=False.
+    Direct calls (tests, debug scripts) keep called_directly=True and are not
+    checked, so they can still pass a directories override.
+    """
+
+    def __call__(self, *args, **kwargs):
+        if not self.request.called_directly:
+            _validate_broker_message(args, kwargs)
+        return super().__call__(*args, **kwargs)
+
+
+class GuardedCheckDataFileTask(_BrokerMessageGuard, CheckDataFileTask):
+    pass
+
+
+class GuardedCheckDataUrlTask(_BrokerMessageGuard, CheckDataUrlTask):
+    pass
+
+
+class GuardedAddDataTask(_BrokerMessageGuard, AddDataTask):
+    pass
+
 
 # Remove resource directories created by Collector, necessary if exception occurs, workflow will not clean up
 def clean_up_request_files(request_id):
-    resource_dir = os.path.join(Directories.COLLECTION_DIR, "resource", request_id)
+    resource_parent = os.path.realpath(
+        os.path.join(Directories.COLLECTION_DIR, "resource")
+    )
+    resource_dir = os.path.realpath(os.path.join(resource_parent, str(request_id)))
+    # Only ever delete a direct child of the resource directory, so ids such as
+    # ".." or "/" cannot point the recursive delete somewhere else.
+    if os.path.dirname(resource_dir) != resource_parent:
+        logger.error(
+            f"Refusing to clean up {resource_dir!r}: outside {resource_parent!r}"
+        )
+        return
     try:
         if os.path.exists(resource_dir):
             for root, dirs, files in os.walk(resource_dir, topdown=False):
@@ -62,7 +169,7 @@ def clean_up_request_files(request_id):
         logger.error(f"Failed to clean up resource directory {resource_dir}: {e}")
 
 
-@celery.task(base=CheckDataFileTask, name=CheckDataFileTask.name)
+@celery.task(base=GuardedCheckDataFileTask, name=CheckDataFileTask.name)
 def check_datafile(request: Dict, directories=None):
     logger.info(
         f"Started check_datafile task for request_id={request.get('id', 'unknown')}"
@@ -242,7 +349,7 @@ def _get_resource_metadata(collection_dir, collection, dataset, resource):
     }
 
 
-@celery.task(base=CheckDataUrlTask, name=CheckDataUrlTask.name)
+@celery.task(base=GuardedCheckDataUrlTask, name=CheckDataUrlTask.name)
 def check_dataurl(request: Dict, directories=None):  # noqa
     logger.info(
         f"Started check_dataurl task for request_id = {request.get('id', 'unknown')}"
@@ -350,7 +457,7 @@ def check_dataurl(request: Dict, directories=None):  # noqa
     return _get_request(request_schema.id)
 
 
-@celery.task(base=AddDataTask, name=AddDataTask.name)
+@celery.task(base=GuardedAddDataTask, name=AddDataTask.name)
 def add_data_task(request: Dict, directories=None):
     logger.info(f"Started add_data task for request_id={request.get('id', 'unknown')}")
     logger.info(f"Request payload: {json.dumps(request, default=str)}")
@@ -450,16 +557,32 @@ def add_data_task(request: Dict, directories=None):
     return _get_request(request_schema.id)
 
 
+def _request_id_from_args(args):
+    """Return the request id from task args, or None if it is not a valid id."""
+    try:
+        request_id = args[0]["id"]
+    except (IndexError, KeyError, TypeError):
+        return None
+    if not _is_valid_request_id(request_id):
+        logger.error(f"Ignoring task signal for invalid request id {request_id!r}")
+        return None
+    return request_id
+
+
 @task_prerun.connect
 def before_task(task_id, task, args, **kwargs):
-    request_id = args[0]["id"]
+    request_id = _request_id_from_args(args)
+    if request_id is None:
+        return
     logger.debug(f"Set status to PROCESSING for request {request_id}")
     _update_request_status(request_id, "PROCESSING")
 
 
 @task_success.connect
 def after_task_success(sender, result, **kwargs):
-    request_id = sender.request.args[0]["id"]
+    request_id = _request_id_from_args(sender.request.args)
+    if request_id is None:
+        return
     logger.debug(f"Set status to PROCESSING for request {request_id}")
     _update_request_status(request_id, "COMPLETE")
     clean_up_request_files(request_id)
@@ -470,7 +593,13 @@ def after_task_success(sender, result, **kwargs):
 
 @task_failure.connect
 def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
-    request_id = args[0]["id"]
+    if isinstance(exception, UntrustedTaskMessage):
+        # The message was forged: don't touch the request row or the filesystem.
+        logger.error(f"Rejected untrusted task message {task_id}: {exception}")
+        return
+    request_id = _request_id_from_args(args)
+    if request_id is None:
+        return
     logger.debug(f"Set status to FAILED for request {request_id}")
     # Exception type only: request_id would give the metric unbounded cardinality.
     sentry_sdk.metrics.count(
@@ -505,6 +634,9 @@ def _update_request_status(request_id, status):
     db_session = database.session_maker()
     with db_session() as session:
         model = crud.get_request(session, request_id)
+        if model is None:
+            logger.error(f"Cannot set status {status}: request {request_id} not found")
+            return
         model.status = status
         session.commit()
         session.flush()

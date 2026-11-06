@@ -618,10 +618,21 @@ def add_extra_column_mappings(
 #         logger.error(f"An error occurred during cleanup: {e}")
 
 
+def _is_direct_child(path, parent):
+    return os.path.dirname(os.path.realpath(path)) == os.path.realpath(parent)
+
+
 def clean_up(request_id, *directories):
     try:
         for directory in directories:
             dir_path = os.path.join(directory, str(request_id))
+            # Only ever delete a direct child of the given directory, so ids such
+            # as ".." or "/" cannot point the delete at a parent directory.
+            if not _is_direct_child(dir_path, directory):
+                logger.error(
+                    f"Refusing to clean up {dir_path!r}: not inside {directory!r}"
+                )
+                continue
             if os.path.exists(dir_path):
                 files = os.listdir(dir_path)
                 for file in files:
