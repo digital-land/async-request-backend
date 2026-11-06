@@ -682,7 +682,7 @@ def test_dataset_selection_and_untrusted_metadata(api, origin):
     )
 
 
-def test_active_duplicate_returns_reference_but_terminal_allows_new(
+def test_active_duplicate_returns_no_details_but_terminal_allows_new(
     api, origin, add_data_submission_engine
 ):
     first = api.post("/add-data-submissions", json=payload(origin)).json()
@@ -697,7 +697,7 @@ def test_active_duplicate_returns_reference_but_terminal_allows_new(
         "/add-data-submissions", json=payload(origin, check_request_id=second_id)
     )
     assert result.status_code == 409
-    assert result.json()["detail"]["reference"] == first["reference"]
+    assert result.json() == {"detail": "An active Add Data Submission already exists"}
     with Session(add_data_submission_engine) as session:
         session.get(models.AddDataSubmission, first["id"]).status = "CLOSED"
         session.commit()
@@ -706,6 +706,96 @@ def test_active_duplicate_returns_reference_but_terminal_allows_new(
     )
     assert result.status_code == 201
     assert result.json()["reference"] != first["reference"]
+
+
+@pytest.mark.parametrize(
+    "status", ["TO_BE_ADDED", "IN_PROGRESS", "QUERIED", "ADDED", "CLOSED"]
+)
+def test_public_duplicate_check_returns_only_boolean(
+    api, origin, add_data_submission_engine, status
+):
+    body = {
+        "endpoint_url": origin["params"]["url"],
+        "organisation": "local-authority:ABC",
+        "dataset": "tree",
+    }
+    path = "/add-data-submissions/duplicate-check"
+    assert api.post(path, json=body, headers={"Authorization": ""}).json() == {
+        "duplicate": False
+    }
+    receipt = api.post("/add-data-submissions", json=payload(origin)).json()
+    with Session(add_data_submission_engine) as session:
+        session.get(models.AddDataSubmission, receipt["id"]).status = status
+        session.commit()
+    response = api.post(path, json=body, headers={"Authorization": ""})
+    assert response.status_code == 200
+    assert response.json() == {"duplicate": status not in {"ADDED", "CLOSED"}}
+    assert api.post(
+        path, json={**body, "dataset": "tree-preservation-zone"}
+    ).json() == {"duplicate": False}
+
+
+@pytest.mark.parametrize(
+    "changes,status",
+    [
+        ({"dataset": " "}, 422),
+        ({"check_request_id": "unused"}, 422),
+        ({"organisation": " "}, 422),
+        ({"endpoint_url": "file:///tmp/data.csv"}, 422),
+        ({"endpoint_url": "invalid"}, 422),
+    ],
+)
+def test_duplicate_check_rejects_invalid_inputs(api, origin, changes, status):
+    response = api.post(
+        "/add-data-submissions/duplicate-check",
+        json={
+            "endpoint_url": origin["params"]["url"],
+            "organisation": "local-authority:ABC",
+            "dataset": "tree",
+            **changes,
+        },
+    )
+    assert response.status_code == status
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("endpoint_url", "https://example.org/other"),
+        ("organisation", "local-authority:OTHER"),
+        ("dataset", "other-dataset"),
+    ],
+)
+def test_duplicate_check_matches_endpoint_and_organisation(
+    api, origin, add_data_submission_engine, field, value
+):
+    api.post("/add-data-submissions", json=payload(origin))
+    response = api.post(
+        "/add-data-submissions/duplicate-check",
+        json={
+            "endpoint_url": origin["params"]["url"],
+            "organisation": "local-authority:ABC",
+            "dataset": "tree",
+            field: value,
+        },
+        headers={"Authorization": ""},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"duplicate": False}
+
+
+def test_duplicate_check_does_not_require_a_check_request(api):
+    response = api.post(
+        "/add-data-submissions/duplicate-check",
+        json={
+            "endpoint_url": "https://example.org/never-checked.csv",
+            "organisation": "local-authority:NEW",
+            "dataset": "tree",
+        },
+        headers={"Authorization": ""},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"duplicate": False}
 
 
 def test_concurrent_idempotency(api, origin):
@@ -765,9 +855,8 @@ def test_concurrent_active_duplicates(api, origin, add_data_submission_engine):
             )
         )
     assert sorted(result.status_code for result in results) == [201, 409]
-    winner = next(result.json() for result in results if result.status_code == 201)
     loser = next(result.json() for result in results if result.status_code == 409)
-    assert loser["detail"]["reference"] == winner["reference"]
+    assert loser == {"detail": "An active Add Data Submission already exists"}
 
 
 def test_pointer_update_failure_rolls_back_new_request(
@@ -971,6 +1060,23 @@ def test_invalid_link_does_not_create_request_or_change_pointer(
     )
 
 
+def test_check_tool_submission_with_null_contacts_and_jira_key(api, origin):
+    body = payload(
+        origin, contact_name=None, contact_email=None, jira_issue_key="DATA-215"
+    )
+    response = api.post("/add-data-submissions", json=body)
+    assert response.status_code == 201, response.text
+    receipt = response.json()
+    submission = api.get("/add-data-submissions/" + receipt["id"]).json()
+    assert submission["source"] == "check_tool"
+    assert submission["jira_issue_key"] == "DATA-215"
+    assert submission["contact_name"] is None
+    assert submission["contact_email"] is None
+    retry = api.post("/add-data-submissions", json=body)
+    assert retry.status_code == 200
+    assert retry.json() == receipt
+
+
 def test_manage_contacts_and_missing_records(api, origin):
     response = api.post(
         "/add-data-submissions",
@@ -998,6 +1104,8 @@ def test_manage_contacts_and_missing_records(api, origin):
         {"contact_name": " "},
         {"documentation_url": "file:///etc/passwd"},
         {"contact_email": None},
+        {"contact_name": None},
+        {"contact_name": "", "contact_email": ""},
     ],
 )
 def test_invalid_contact_and_documentation(api, origin, changes):

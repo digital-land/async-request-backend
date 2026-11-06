@@ -110,7 +110,29 @@ class AddDataSubmissionFilters(PaginationParams):
     sort: Literal["submitted_at", "-submitted_at"] = "submitted_at"
 
 
+class AddDataSubmissionDuplicateCheck(BaseModel):
+    """Look up active submissions by their endpoint, dataset and organisation."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    endpoint_url: str
+    organisation: str = Field(min_length=1)
+    dataset: str = Field(min_length=1)
+
+    @field_validator("endpoint_url")
+    @classmethod
+    def validate_url(cls, value):
+        TypeAdapter(HttpUrl).validate_python(value)
+        return value
+
+
+class AddDataSubmissionDuplicateResult(BaseModel):
+    duplicate: bool
+
+
 class AddDataSubmissionCreate(BaseModel):
+    """Create a submission linked to its originating completed check."""
+
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     check_request_id: str = Field(min_length=1)
@@ -135,11 +157,11 @@ class AddDataSubmissionCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_contacts(self):
-        if self.source == "check_tool" and not (
-            self.contact_name and self.contact_email
+        if self.source == "check_tool" and (
+            (self.contact_name is None) != (self.contact_email is None)
         ):
             raise ValueError(
-                "Check tool Add Data Submissions require contact name and email"
+                "Provide both contact name and email, or leave both absent"
             )
         if self.source == "manage" and (self.contact_name or self.contact_email):
             raise ValueError("Manage Add Data Submissions do not have contact details")
