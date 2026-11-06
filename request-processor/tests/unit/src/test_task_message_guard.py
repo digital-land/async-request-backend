@@ -40,7 +40,7 @@ def stored_request(monkeypatch):
 
 
 def test_accepts_message_matching_stored_request(stored_request):
-    tasks._validate_broker_message([_message()], {})
+    tasks._validate_broker_message([_message()], {}, "check_file")
 
 
 @pytest.mark.parametrize(
@@ -54,7 +54,7 @@ def test_accepts_message_matching_stored_request(stored_request):
 )
 def test_rejects_unexpected_arguments(stored_request, args, kwargs):
     with pytest.raises(tasks.UntrustedTaskMessage):
-        tasks._validate_broker_message(args, kwargs)
+        tasks._validate_broker_message(args, kwargs, "check_file")
 
 
 @pytest.mark.parametrize(
@@ -62,12 +62,16 @@ def test_rejects_unexpected_arguments(stored_request, args, kwargs):
 )
 def test_rejects_invalid_request_ids(stored_request, request_id):
     with pytest.raises(tasks.UntrustedTaskMessage):
-        tasks._validate_broker_message([_message(request_id=request_id)], {})
+        tasks._validate_broker_message(
+            [_message(request_id=request_id)], {}, "check_file"
+        )
 
 
 def test_rejects_unknown_request_id(stored_request):
     with pytest.raises(tasks.UntrustedTaskMessage, match="not found"):
-        tasks._validate_broker_message([_message(request_id="Z" * 22)], {})
+        tasks._validate_broker_message(
+            [_message(request_id="Z" * 22)], {}, "check_file"
+        )
 
 
 def test_rejects_params_that_differ_from_stored_request(stored_request):
@@ -76,7 +80,7 @@ def test_rejects_params_that_differ_from_stored_request(stored_request):
         uploaded_filename="usr/local/lib/python3.12/site-packages/zzz.pth",
     )
     with pytest.raises(tasks.UntrustedTaskMessage, match="do not match"):
-        tasks._validate_broker_message([_message(params=params)], {})
+        tasks._validate_broker_message([_message(params=params)], {}, "check_file")
 
 
 @pytest.mark.parametrize(
@@ -94,7 +98,7 @@ def test_rejects_bad_stored_params(stored_request, field, value):
     stored_request.params[field] = value
     params = dict(VALID_PARAMS, **{field: value})
     with pytest.raises(tasks.UntrustedTaskMessage):
-        tasks._validate_broker_message([_message(params=params)], {})
+        tasks._validate_broker_message([_message(params=params)], {}, "check_file")
 
 
 def test_worker_delivered_call_is_guarded(stored_request):
@@ -184,3 +188,122 @@ def test_workflow_clean_up_removes_request_dir(tmp_path):
     workflow.clean_up(VALID_ID, str(base))
     assert not (base / VALID_ID).exists()
     assert (base / "keep.csv").exists()
+
+
+@pytest.mark.parametrize("status", ["COMPLETE", "PROCESSING", None])
+def test_rejects_status_other_than_new(stored_request, status):
+    message = _message()
+    message["status"] = status
+    with pytest.raises(tasks.UntrustedTaskMessage, match="status"):
+        tasks._validate_broker_message([message], {}, "check_file")
+
+
+def test_rejects_request_type_sent_to_wrong_task(stored_request):
+    with pytest.raises(tasks.UntrustedTaskMessage, match="check_url task"):
+        tasks._validate_broker_message([_message()], {}, "check_url")
+
+
+def test_malformed_params_are_untrusted(stored_request):
+    params = dict(VALID_PARAMS, unexpected_field="x")
+    with pytest.raises(tasks.UntrustedTaskMessage, match="Malformed"):
+        tasks._validate_broker_message([_message(params=params)], {}, "check_file")
+
+
+@pytest.mark.parametrize(
+    "resource", ["../../etc/passwd", "/etc/passwd", "resource-hash", "A" * 64]
+)
+def test_rejects_invalid_resource(monkeypatch, resource):
+    monkeypatch.setattr(
+        tasks.utils,
+        "load_specification",
+        lambda _dirs: SimpleNamespace(dataset={"article-4-direction-area": {}}),
+    )
+    params = SimpleNamespace(
+        resource=resource,
+        collection="article-4-direction",
+        dataset="article-4-direction-area",
+    )
+    with pytest.raises(tasks.UntrustedTaskMessage, match="resource"):
+        tasks._validate_params(params)
+
+
+def test_accepts_sha256_resource(monkeypatch):
+    monkeypatch.setattr(
+        tasks.utils,
+        "load_specification",
+        lambda _dirs: SimpleNamespace(dataset={"article-4-direction-area": {}}),
+    )
+    params = SimpleNamespace(
+        resource="a" * 64,
+        collection="article-4-direction",
+        dataset="article-4-direction-area",
+    )
+    tasks._validate_params(params)
+
+
+def test_before_task_does_not_set_processing_for_rejected_message(
+    stored_request, monkeypatch
+):
+    calls = []
+    monkeypatch.setattr(tasks, "_update_request_status", lambda *a: calls.append(a))
+    task = tasks.check_datafile
+    message = _message()
+    message["status"] = "COMPLETE"
+    task.push_request(called_directly=False)
+    try:
+        tasks.before_task("task-id", task, [message], kwargs={})
+        assert calls == []
+        # __call__ re-raises the cached rejection without running the task body.
+        with pytest.raises(tasks.UntrustedTaskMessage, match="status"):
+            task(message)
+    finally:
+        task.pop_request()
+
+
+def test_before_task_sets_processing_for_valid_message(stored_request, monkeypatch):
+    calls = []
+    monkeypatch.setattr(tasks, "_update_request_status", lambda *a: calls.append(a))
+    task = tasks.check_datafile
+    task.push_request(called_directly=False)
+    try:
+        tasks.before_task("task-id", task, [_message()], kwargs={})
+    finally:
+        task.pop_request()
+    assert calls == [(VALID_ID, "PROCESSING")]
+
+
+def test_clean_up_request_files_refuses_symlinked_request_dir(tmp_path, monkeypatch):
+    collection_dir, resource_dir = _make_collection_dir(tmp_path, monkeypatch)
+    link_id = "B" * 22
+    (resource_dir / link_id).symlink_to(resource_dir / "other-request")
+    tasks.clean_up_request_files(link_id)
+    assert (resource_dir / "other-request" / "keep.csv").exists()
+
+
+def test_clean_up_request_files_does_not_follow_nested_symlinks(tmp_path, monkeypatch):
+    collection_dir, resource_dir = _make_collection_dir(tmp_path, monkeypatch)
+    (resource_dir / VALID_ID / "link").symlink_to(resource_dir / "other-request")
+    tasks.clean_up_request_files(VALID_ID)
+    assert not (resource_dir / VALID_ID).exists()
+    assert (resource_dir / "other-request" / "keep.csv").exists()
+
+
+def test_workflow_clean_up_refuses_symlinked_request_dir(tmp_path):
+    base = tmp_path / "resource"
+    (base / "other").mkdir(parents=True)
+    (base / "other" / "keep.csv").write_text("x")
+    (base / VALID_ID).symlink_to(base / "other")
+    workflow.clean_up(VALID_ID, str(base))
+    assert (base / "other" / "keep.csv").exists()
+
+
+def test_workflow_clean_up_does_not_follow_nested_symlinks(tmp_path):
+    base = tmp_path / "resource"
+    outside = tmp_path / "outside"
+    (outside / VALID_ID).mkdir(parents=True)
+    (outside / VALID_ID / "keep.csv").write_text("x")
+    (base / VALID_ID).mkdir(parents=True)
+    (base / VALID_ID / "link").symlink_to(outside)
+    workflow.clean_up(VALID_ID, str(base))
+    assert (outside / VALID_ID / "keep.csv").exists()
+    assert not (base / VALID_ID).exists()

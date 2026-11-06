@@ -627,17 +627,19 @@ def clean_up(request_id, *directories):
         for directory in directories:
             dir_path = os.path.join(directory, str(request_id))
             # Only ever delete a direct child of the given directory, so ids such
-            # as ".." or "/" cannot point the delete at a parent directory.
-            if not _is_direct_child(dir_path, directory):
+            # as ".." or "/" cannot point the delete at a parent directory, and
+            # never follow a symlinked request directory.
+            if os.path.islink(dir_path) or not _is_direct_child(dir_path, directory):
                 logger.error(
-                    f"Refusing to clean up {dir_path!r}: not inside {directory!r}"
+                    f"Refusing to clean up {dir_path!r}: not a directory inside {directory!r}"
                 )
                 continue
             if os.path.exists(dir_path):
                 files = os.listdir(dir_path)
                 for file in files:
                     file_path = os.path.join(dir_path, file)
-                    if os.path.isfile(file_path):
+                    # Remove symlinks as links; never recurse into their targets.
+                    if os.path.islink(file_path) or os.path.isfile(file_path):
                         os.remove(file_path)
                     elif os.path.isdir(file_path):
                         clean_up(request_id, file_path)

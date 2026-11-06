@@ -4,6 +4,7 @@ from typing import Dict
 import urllib.parse
 
 import sentry_sdk
+from pydantic import ValidationError
 from sentry_sdk.integrations.logging import ignore_logger
 from celery.utils.log import get_task_logger
 from celery.signals import task_prerun, task_success, task_failure, celeryd_init
@@ -43,6 +44,8 @@ _UPLOADED_FILENAME_PATTERN = re.compile(
     r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}"
 )
 _SLUG_PATTERN = re.compile(r"[a-z0-9-]+")
+# digital-land resource ids are the sha256 hex digest of the content.
+_RESOURCE_PATTERN = re.compile(r"[0-9a-f]{64}")
 
 
 class UntrustedTaskMessage(Exception):
@@ -55,14 +58,15 @@ def _is_valid_request_id(request_id):
     )
 
 
-def _validate_broker_message(args, kwargs):
+def _validate_broker_message(args, kwargs, expected_type):
     """
     Reject task messages that did not come from request-api.
 
-    request-api only ever enqueues args=[request] for a request row it has
-    just committed, so anything else (extra args such as a directories
-    override, unknown ids, or params that differ from the stored row) was put
-    on the queue by something else.
+    request-api only ever enqueues args=[request] for a NEW request row it has
+    just committed, on the task matching the request type. Anything else (extra
+    args such as a directories override, unknown ids, another status or type,
+    or params that differ from the stored row) was put on the queue by
+    something else.
     """
     if kwargs or len(args) != 1 or not isinstance(args[0], dict):
         raise UntrustedTaskMessage("Unexpected task arguments")
@@ -71,16 +75,28 @@ def _validate_broker_message(args, kwargs):
     request_id = message.get("id")
     if not _is_valid_request_id(request_id):
         raise UntrustedTaskMessage(f"Invalid request id {request_id!r}")
+    if message.get("status") != "NEW":
+        raise UntrustedTaskMessage(
+            f"Unexpected status {message.get('status')!r} for request {request_id}"
+        )
+    if message.get("type") != expected_type:
+        raise UntrustedTaskMessage(
+            f"Request type {message.get('type')!r} sent to the {expected_type} task"
+        )
+
+    try:
+        message_params = schemas.RequestBase.model_validate(
+            {"params": message.get("params")}
+        ).params
+    except ValidationError as e:
+        raise UntrustedTaskMessage(f"Malformed params for request {request_id}") from e
 
     stored = _get_request(request_id)
     if stored is None:
         raise UntrustedTaskMessage(f"Request {request_id} not found in database")
 
-    message_params = schemas.RequestBase.model_validate(
-        {"params": message.get("params")}
-    ).params
     stored_params = schemas.RequestBase.model_validate({"params": stored.params}).params
-    if message.get("type") != stored.type or message_params.model_dump(
+    if stored.type != expected_type or message_params.model_dump(
         mode="json"
     ) != stored_params.model_dump(mode="json"):
         raise UntrustedTaskMessage(
@@ -91,6 +107,10 @@ def _validate_broker_message(args, kwargs):
 
 
 def _validate_params(params):
+    resource = getattr(params, "resource", None)
+    if resource is not None and not _RESOURCE_PATTERN.fullmatch(resource):
+        raise UntrustedTaskMessage(f"Invalid resource {resource!r}")
+
     uploaded_filename = getattr(params, "uploaded_filename", None)
     if uploaded_filename is not None and not _UPLOADED_FILENAME_PATTERN.fullmatch(
         uploaded_filename
@@ -113,47 +133,90 @@ class _BrokerMessageGuard:
     Celery's tracer calls a task's custom __call__ with called_directly=False.
     Direct calls (tests, debug scripts) keep called_directly=True and are not
     checked, so they can still pass a directories override.
+
+    before_task (task_prerun) runs first and calls validate_message too, so a
+    rejected message never sets the request to PROCESSING. The result is cached
+    on the task request so each delivery is only validated once.
     """
+
+    expected_type = None
+
+    def validate_message(self, args, kwargs):
+        request = self.request
+        if not hasattr(request, "broker_message_error"):
+            try:
+                _validate_broker_message(args, kwargs, self.expected_type)
+                request.broker_message_error = None
+            except UntrustedTaskMessage as e:
+                request.broker_message_error = e
+        if request.broker_message_error is not None:
+            raise request.broker_message_error
 
     def __call__(self, *args, **kwargs):
         if not self.request.called_directly:
-            _validate_broker_message(args, kwargs)
+            self.validate_message(args, kwargs)
         return super().__call__(*args, **kwargs)
 
 
 class GuardedCheckDataFileTask(_BrokerMessageGuard, CheckDataFileTask):
-    pass
+    expected_type = schemas.RequestTypeEnum.check_file.value
 
 
 class GuardedCheckDataUrlTask(_BrokerMessageGuard, CheckDataUrlTask):
-    pass
+    expected_type = schemas.RequestTypeEnum.check_url.value
 
 
 class GuardedAddDataTask(_BrokerMessageGuard, AddDataTask):
-    pass
+    expected_type = schemas.RequestTypeEnum.add_data.value
 
 
 # Remove resource directories created by Collector, necessary if exception occurs, workflow will not clean up
-def clean_up_request_files(request_id):
+def _request_resource_dir(request_id):
+    """
+    Return the request's resource directory, or None if it is unsafe to delete.
+
+    Only a direct child of the resource directory that is not a symlink is
+    returned, so ids such as ".." or "/", or a symlinked request directory,
+    cannot point the recursive delete somewhere else.
+    """
     resource_parent = os.path.realpath(
         os.path.join(Directories.COLLECTION_DIR, "resource")
     )
-    resource_dir = os.path.realpath(os.path.join(resource_parent, str(request_id)))
-    # Only ever delete a direct child of the resource directory, so ids such as
-    # ".." or "/" cannot point the recursive delete somewhere else.
+    candidate = os.path.join(resource_parent, str(request_id))
+    if os.path.islink(candidate):
+        logger.error(f"Refusing to clean up {candidate!r}: it is a symlink")
+        return None
+    resource_dir = os.path.realpath(candidate)
     if os.path.dirname(resource_dir) != resource_parent:
         logger.error(
             f"Refusing to clean up {resource_dir!r}: outside {resource_parent!r}"
         )
+        return None
+    return resource_dir
+
+
+def _remove_tree_without_following_links(path):
+    # os.walk does not follow symlinks; symlinked dirs are listed in dirs and
+    # removed as links, never traversed.
+    for root, dirs, files in os.walk(path, topdown=False):
+        for name in files:
+            os.remove(os.path.join(root, name))
+        for name in dirs:
+            child = os.path.join(root, name)
+            if os.path.islink(child):
+                os.remove(child)
+            else:
+                os.rmdir(child)
+    os.rmdir(path)
+
+
+def clean_up_request_files(request_id):
+    resource_dir = _request_resource_dir(request_id)
+    if resource_dir is None:
         return
     try:
         if os.path.exists(resource_dir):
-            for root, dirs, files in os.walk(resource_dir, topdown=False):
-                for name in files:
-                    os.remove(os.path.join(root, name))
-                for name in dirs:
-                    os.rmdir(os.path.join(root, name))
-            os.rmdir(resource_dir)
+            _remove_tree_without_following_links(resource_dir)
 
             # Clean up parent directories if empty
             resource_parent_dir = os.path.dirname(resource_dir)
@@ -571,6 +634,13 @@ def _request_id_from_args(args):
 
 @task_prerun.connect
 def before_task(task_id, task, args, **kwargs):
+    if isinstance(task, _BrokerMessageGuard):
+        try:
+            task.validate_message(args, kwargs.get("kwargs") or {})
+        except UntrustedTaskMessage as e:
+            # Leave the request untouched; __call__ raises the same error.
+            logger.error(f"Rejected untrusted task message {task_id}: {e}")
+            return
     request_id = _request_id_from_args(args)
     if request_id is None:
         return
