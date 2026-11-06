@@ -7,6 +7,8 @@ import add_data_submissions
 from auth import require_auth
 from add_data_submission_schemas import (
     AddDataSubmissionCreate,
+    AddDataSubmissionDuplicateCheck,
+    AddDataSubmissionDuplicateResult,
     AddDataSubmissionRead,
     AddDataSubmissionReceipt,
     AddDataSubmissionEvent,
@@ -32,6 +34,14 @@ def create_add_data_submission(
     response.status_code = 201 if created else 200
     response.headers["Location"] = f"/add-data-submissions/{add_data_submission.id}"
     return add_data_submission
+
+
+@router.post("/duplicate-check", response_model=AddDataSubmissionDuplicateResult)
+def check_add_data_submission_duplicate(
+    request: AddDataSubmissionDuplicateCheck,
+    db: Session = Depends(_get_db),
+):
+    return {"duplicate": add_data_submissions.check_duplicate(db, request)}
 
 
 @router.get("/by-reference/{reference}", response_model=AddDataSubmissionRead)

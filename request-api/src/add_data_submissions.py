@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 from request_model import models
 from add_data_submission_schemas import (
     AddDataSubmissionCreate,
+    AddDataSubmissionDuplicateCheck,
     AddDataSubmissionFilters,
     AddDataSubmissionPatch,
     AddDataSubmissionTransition,
@@ -183,13 +184,14 @@ def _active_duplicate(db, endpoint_url, dataset, organisation):
     )
 
 
-def _conflict(existing):
-    raise HTTPException(
-        409,
-        {
-            "message": "An active Add Data Submission already exists",
-            "reference": existing.reference,
-        },
+def _conflict():
+    raise HTTPException(409, "An active Add Data Submission already exists")
+
+
+def check_duplicate(db: Session, body: AddDataSubmissionDuplicateCheck) -> bool:
+    return (
+        _active_duplicate(db, body.endpoint_url, body.dataset, body.organisation)
+        is not None
     )
 
 
@@ -238,7 +240,7 @@ def create_add_data_submission(db: Session, body: AddDataSubmissionCreate):
         db, values["endpoint_url"], body.dataset, values["organisation"]
     )
     if existing is not None:
-        _conflict(existing)
+        _conflict()
 
     for _ in range(10):
         add_data_submission = models.AddDataSubmission(
@@ -270,7 +272,7 @@ def create_add_data_submission(db: Session, body: AddDataSubmissionCreate):
                 db, values["endpoint_url"], body.dataset, values["organisation"]
             )
             if existing is not None:
-                _conflict(existing)
+                _conflict()
             # A terminal transition may have released a competing endpoint;
             # retry in that case as well as for random reference collisions.
             continue
