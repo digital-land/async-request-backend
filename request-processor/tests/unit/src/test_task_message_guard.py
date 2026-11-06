@@ -307,3 +307,21 @@ def test_workflow_clean_up_does_not_follow_nested_symlinks(tmp_path):
     workflow.clean_up(VALID_ID, str(base))
     assert (outside / VALID_ID / "keep.csv").exists()
     assert not (base / VALID_ID).exists()
+
+
+@pytest.mark.parametrize("resource", ["", None])
+def test_accepts_empty_resource_on_url_requests(monkeypatch, resource):
+    # add_data_task only uses resource when it is non-empty; otherwise the URL
+    # path is taken.
+    monkeypatch.setattr(
+        tasks.utils,
+        "load_specification",
+        lambda _dirs: SimpleNamespace(dataset={"article-4-direction-area": {}}),
+    )
+    params = SimpleNamespace(
+        resource=resource,
+        url="https://example.com/data.csv",
+        collection="article-4-direction",
+        dataset="article-4-direction-area",
+    )
+    tasks._validate_params(params)

@@ -107,8 +107,10 @@ def _validate_broker_message(args, kwargs, expected_type):
 
 
 def _validate_params(params):
+    # add_data_task only downloads a resource when it is non-empty, so an empty
+    # resource alongside a URL is fine.
     resource = getattr(params, "resource", None)
-    if resource is not None and not _RESOURCE_PATTERN.fullmatch(resource):
+    if resource and not _RESOURCE_PATTERN.fullmatch(resource):
         raise UntrustedTaskMessage(f"Invalid resource {resource!r}")
 
     uploaded_filename = getattr(params, "uploaded_filename", None)
