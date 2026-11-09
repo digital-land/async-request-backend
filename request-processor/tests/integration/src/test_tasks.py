@@ -1,13 +1,14 @@
 import datetime
 import time
 import pytest
-import json
 import shutil
 import os
 import database
 from request_model import models, schemas
 from src.tasks import check_datafile, check_dataurl
 from digital_land.collect import FetchStatus
+from unittest import mock
+from application.configurations.config import Directories
 
 
 @pytest.fixture(scope="module")
@@ -23,7 +24,8 @@ def test_data_dir(test_dir):
             "492f15d8-45e4-427e-bde0-f60d69889f40",
             "COMPLETE",
         ),
-        ("invalid.csv", "invalid", "FAILED"),
+        # A well-formed upload key that is not in the bucket.
+        ("invalid.csv", "00000000-0000-4000-8000-000000000000", "FAILED"),
     ],
 )
 def test_check_datafile(
@@ -83,7 +85,7 @@ def test_check_datafile(
     [
         (
             "valid_url_no_plugin",
-            "exampleurl.csv",
+            "https://example.com/exampleurl.csv",
             (
                 None,
                 '{"type":"FeatureCollection","properties":{"exceededTransferLimit":true}, "features":[{"type":"Feature","id":1,"geometry":{"type":"Point", "coordinates":[-1.59153574212325,54.9392094142866]}, "properties": {"reference": "CA01","name": "Ashleworth Conservation Area"}}]}'.encode(  # noqa
@@ -122,7 +124,7 @@ def test_check_datafile(
         ),
         (
             "invalid_url",
-            "exampleurl.csv",
+            "https://example.com/exampleurl.csv",
             ('{"status": "404", "message": "Unable to process"}', None),
             "COMPLETE",
             False,
@@ -291,12 +293,14 @@ def _handle_pipeline_config_csvs(
 def _register_and_check_request(
     mock_directories_str, celery_app, request, expected_status
 ):
-    mock_directories_json = json.dumps(mock_directories_str)
     if request.type == schemas.RequestTypeEnum.check_file:
         task = celery_app.register_task(check_datafile)
     elif request.type == schemas.RequestTypeEnum.check_url:
         task = celery_app.register_task(check_dataurl)
     else:
         raise ValueError(f"Unknown request type: {request.type}")
-    task.delay(request.model_dump(), directories=mock_directories_json)
-    _wait_for_request_status(request.id, expected_status)
+    # The worker rejects broker messages carrying a directories override, so
+    # point the worker's default Directories at the test dirs instead.
+    with mock.patch.multiple(Directories, **mock_directories_str):
+        task.delay(request.model_dump())
+        _wait_for_request_status(request.id, expected_status)

@@ -1,7 +1,9 @@
 import datetime
 from enum import Enum
 from typing import Union, Literal, Optional, List, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
+
+from request_model.url_safety import UnsafeUrlError, check_fetch_url
 
 
 class RequestTypeEnum(str, Enum):
@@ -68,6 +70,18 @@ class RequestBase(BaseModel):
 
 class RequestCreate(RequestBase):
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def url_is_safe_to_fetch(self):
+        # Only checked when a request is created, so stored requests created
+        # before this check can still be read back.
+        url = getattr(self.params, "url", None)
+        if url:
+            try:
+                check_fetch_url(url)
+            except UnsafeUrlError as e:
+                raise ValueError(f"Invalid url: {e}") from e
+        return self
 
 
 class ResponseData(BaseModel):
