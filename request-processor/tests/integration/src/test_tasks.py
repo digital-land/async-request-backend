@@ -85,7 +85,7 @@ def test_check_datafile(
     [
         (
             "valid_url_no_plugin",
-            "exampleurl.csv",
+            "https://example.com/exampleurl.csv",
             (
                 None,
                 '{"type":"FeatureCollection","properties":{"exceededTransferLimit":true}, "features":[{"type":"Feature","id":1,"geometry":{"type":"Point", "coordinates":[-1.59153574212325,54.9392094142866]}, "properties": {"reference": "CA01","name": "Ashleworth Conservation Area"}}]}'.encode(  # noqa
@@ -124,7 +124,7 @@ def test_check_datafile(
         ),
         (
             "invalid_url",
-            "exampleurl.csv",
+            "https://example.com/exampleurl.csv",
             ('{"status": "404", "message": "Unable to process"}', None),
             "COMPLETE",
             False,

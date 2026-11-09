@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
+import requests
 
 from src import tasks
 from application.core import workflow
@@ -325,3 +326,61 @@ def test_accepts_empty_resource_on_url_requests(monkeypatch, resource):
         dataset="article-4-direction-area",
     )
     tasks._validate_params(params)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "file:///proc/self/environ",
+        "http://169.254.170.2/v2/credentials/x",
+        "http://2852039166/",
+        "exampleurl.csv",
+    ],
+)
+def test_rejects_unsafe_urls_in_stored_params(monkeypatch, url):
+    monkeypatch.setattr(
+        tasks.utils,
+        "load_specification",
+        lambda _dirs: SimpleNamespace(dataset={"article-4-direction-area": {}}),
+    )
+    params = SimpleNamespace(
+        url=url, collection="article-4-direction", dataset="article-4-direction-area"
+    )
+    with pytest.raises(tasks.UntrustedTaskMessage, match="URL not allowed"):
+        tasks._validate_params(params)
+
+
+@pytest.mark.parametrize(
+    "url", ["file:///proc/self/environ", "http://169.254.169.254/latest/meta-data/"]
+)
+def test_fetch_resource_refuses_unsafe_urls(tmp_path, url):
+    with pytest.raises(tasks.CustomException) as raised:
+        tasks._fetch_resource(tmp_path, url)
+    assert "not allowed" in str(raised.value)
+
+
+def test_fetch_resource_removes_file_adapter(tmp_path, monkeypatch):
+    seen = {}
+
+    def fake_fetch(self, url, **kwargs):
+        seen["adapters"] = list(self.session.adapters)
+        # A redirect to file: would be resolved by the same session.
+        with pytest.raises(requests.exceptions.InvalidSchema):
+            self.session.get("file:///etc/hosts")
+        return tasks.FetchStatus.FAILED, {"status": "404"}
+
+    monkeypatch.setattr(tasks.Collector, "fetch", fake_fetch)
+    with pytest.raises(tasks.CustomException):
+        tasks._fetch_resource(tmp_path, "https://example.org/data.csv")
+    assert "file:" not in seen["adapters"]
+
+
+def test_fetch_resource_checks_dns_for_paged_wfs(tmp_path, monkeypatch):
+    def refuse(url):
+        raise tasks.UnsafeUrlError("resolves to a non-public address")
+
+    monkeypatch.setattr(tasks, "check_host_resolves_publicly", refuse)
+    with pytest.raises(tasks.CustomException):
+        tasks._fetch_resource(
+            tmp_path, "https://wfs.example.org/wfs", {"page_size": 100}
+        )

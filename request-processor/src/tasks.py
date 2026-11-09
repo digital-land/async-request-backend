@@ -10,6 +10,7 @@ from celery.utils.log import get_task_logger
 from celery.signals import task_prerun, task_success, task_failure, celeryd_init
 import request_model.schemas as schemas
 import request_model.models as models
+from request_model.url_safety import UnsafeUrlError, check_fetch_url
 import s3_transfer_manager
 import crud
 import database
@@ -21,6 +22,10 @@ from task_interface.base_tasks import (
 )
 import json
 from application.core import workflow
+from application.core.safe_fetch import (
+    check_host_resolves_publicly,
+    untrusted_fetches,
+)
 from application.core.plan_datasets import split_dataset_values
 from application.configurations.config import DATASTORE_URL, Directories
 import application.core.utils as utils
@@ -107,6 +112,13 @@ def _validate_broker_message(args, kwargs, expected_type):
 
 
 def _validate_params(params):
+    url = getattr(params, "url", None)
+    if url:
+        try:
+            check_fetch_url(url)
+        except UnsafeUrlError as e:
+            raise UntrustedTaskMessage(f"URL not allowed: {e}") from e
+
     # add_data_task only downloads a resource when it is non-empty, so an empty
     # resource alongside a URL is fine.
     resource = getattr(params, "resource", None)
@@ -909,13 +921,47 @@ def save_response_to_db(request_id, response_data):
             raise e
 
 
+def _uses_paged_wfs(endpoint_parameters):
+    return isinstance(endpoint_parameters, dict) and bool(
+        endpoint_parameters.get("page_size")
+    )
+
+
 def _fetch_resource(resource_dir, url, endpoint_parameters=None):
     """
     Fetches resource files using Collector, trying different plugins.
     Raises CustomException and logs error if fetch fails.
+
+    The URL is user-supplied, so only public http(s) addresses may be fetched.
     """
+    try:
+        check_fetch_url(url)
+        # ogr2ogr fetches outside urllib3, so check its host up front.
+        if _uses_paged_wfs(endpoint_parameters):
+            check_host_resolves_publicly(url)
+    except UnsafeUrlError as e:
+        raise CustomException(
+            {
+                "message": "The URL is not allowed",
+                "status": "",
+                "exception_type": "UnsafeUrlError",
+                "detail": str(e),
+            }
+        )
+
     Path(resource_dir).mkdir(parents=True, exist_ok=True)
     collector = Collector(resource_dir=Path(resource_dir))
+    # digital-land's Collector mounts a file: adapter. Remove it so neither the
+    # URL nor a redirect can read local files.
+    session = getattr(collector, "session", None)
+    if session is not None:
+        session.adapters.pop("file:", None)
+
+    with untrusted_fetches():
+        return _fetch_with_plugins(collector, url, endpoint_parameters)
+
+
+def _fetch_with_plugins(collector, url, endpoint_parameters):
     plugins = [None, "arcgis", "wfs"]
     content_type = None
     response_headers = {}
