@@ -102,14 +102,13 @@ def auth_headers(monkeypatch):
     public_key = key.public_key().public_bytes(
         serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
     )
-    monkeypatch.setenv("AUTH_JWT_PUBLIC_KEY", base64.b64encode(public_key).decode())
-    monkeypatch.setenv("AUTH_TRUSTED_ISSUERS", "manage-test")
+    monkeypatch.setenv("MANAGE_JWT_PUBLIC_KEY", base64.b64encode(public_key).decode())
     monkeypatch.setenv("AUTH_JWT_AUDIENCE", "async-test")
 
     def headers(role="staff", username="test-user"):
         token = jwt.encode(
             {
-                "iss": "manage-test",
+                "iss": "manage",
                 "aud": "async-test",
                 "sub": "test-user",
                 "username": username,

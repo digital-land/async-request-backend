@@ -21,15 +21,14 @@ def signing_key(monkeypatch):
     public = key.public_key().public_bytes(
         serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
     )
-    monkeypatch.setenv("AUTH_JWT_PUBLIC_KEY", base64.b64encode(public).decode())
-    monkeypatch.setenv("AUTH_TRUSTED_ISSUERS", "manage-test")
+    monkeypatch.setenv("MANAGE_JWT_PUBLIC_KEY", base64.b64encode(public).decode())
     monkeypatch.setenv("AUTH_JWT_AUDIENCE", "async-test")
     return key
 
 
 def claims():
     return {
-        "iss": "manage-test",
+        "iss": "manage",
         "aud": "async-test",
         "sub": "123",
         "auth_provider": "github",
@@ -40,20 +39,16 @@ def claims():
 
 
 @pytest.mark.parametrize(
-    "trusted,issuer,status",
+    "issuer,status",
     [
-        ("manage,submit", "manage", 200),
-        ("manage,submit", "submit", 200),
-        (" manage, , submit, ", "submit", 200),
-        ("manage,submit", "other", 401),
-        ("manage,submit", "man", 401),
-        ("manage,submit", "manage,submit", 401),
-        ("", "manage", 503),
-        (" , , ", "manage", 503),
+        ("manage", 200),
+        ("other", 401),
+        ("man", 401),
+        ("manage,submit", 401),
+        (" manage ", 401),
     ],
 )
-def test_trusted_issuer_allowlist(signing_key, monkeypatch, trusted, issuer, status):
-    monkeypatch.setenv("AUTH_TRUSTED_ISSUERS", trusted)
+def test_issuer_matches_exactly(signing_key, issuer, status):
     app = FastAPI()
 
     @app.get("/protected")
@@ -209,7 +204,7 @@ def test_rejects_invalid_signature(api, signing_key, kind):
 
 
 @pytest.mark.parametrize("kind", ["check_file", "check_url"])
-def test_checks_remain_public(api, kind):
+def test_checks_require_auth(api, kind):
     client, create, _ = api
     payload = body(kind)
     if kind == "check_file":
@@ -228,12 +223,13 @@ def test_checks_remain_public(api, kind):
         "main.CheckDataUrlTask.apply_async"
     ):
         response = client.post("/requests", json=payload)
-    assert response.status_code == 202
+    assert response.status_code == 401
+    create.assert_not_called()
 
 
 def test_missing_verification_key_fails_closed(api, signing_key, monkeypatch):
     client, create, _ = api
-    monkeypatch.delenv("AUTH_JWT_PUBLIC_KEY")
+    monkeypatch.delenv("MANAGE_JWT_PUBLIC_KEY")
     token = jwt.encode(claims(), signing_key, algorithm="RS256")
     response = client.post(
         "/requests", json=body(), headers={"Authorization": f"Bearer {token}"}

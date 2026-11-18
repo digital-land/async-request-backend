@@ -570,7 +570,6 @@ def test_create_read_and_idempotency_without_leaking_contacts(
     response = api.post(
         "/add-data-submissions",
         json=payload(origin, jira_issue_key="DATA-123"),
-        headers={"Authorization": ""},
     )
     assert response.status_code == 201, response.text
     receipt = response.json()
@@ -609,7 +608,6 @@ def test_create_read_and_idempotency_without_leaking_contacts(
     again = api.post(
         "/add-data-submissions",
         json=payload(origin, contact_name="Changed"),
-        headers={"Authorization": ""},
     )
     assert again.status_code == 200
     assert again.json() == receipt
@@ -627,13 +625,11 @@ def test_create_read_and_idempotency_without_leaking_contacts(
         assert request.modified == origin["modified"]
 
 
-def test_public_check_tool_creation_omits_restricted_fields(api, origin):
+def test_check_tool_creation_omits_restricted_fields(api, origin):
     body = payload(origin)
     assert "source" not in body
     assert "jira_issue_key" not in body
-    response = api.post(
-        "/add-data-submissions", json=body, headers={"Authorization": ""}
-    )
+    response = api.post("/add-data-submissions", json=body)
     assert response.status_code == 201
     assert set(response.json()) == {"id", "reference"}
 

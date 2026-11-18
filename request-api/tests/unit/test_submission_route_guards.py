@@ -8,7 +8,7 @@ import main
 
 
 @pytest.mark.parametrize("creation_type", ["check_tool", "manage", "jira"])
-def test_creation_is_public(creation_type):
+def test_creation_requires_auth(creation_type):
     payload = {
         "check_request_id": "check",
         "dataset": "tree",
@@ -33,9 +33,8 @@ def test_creation_is_public(creation_type):
             "/add-data-submissions",
             json=payload,
         )
-    assert response.status_code == 201
-    assert response.json() == {"id": "id", "reference": "PDP-123456"}
-    create.assert_called_once()
+    assert response.status_code == 401
+    create.assert_not_called()
 
 
 @pytest.mark.parametrize(

@@ -9,6 +9,14 @@ from request_model import models, schemas
 
 client = TestClient(app)
 
+
+@pytest.fixture(autouse=True)
+def authenticate_client(auth_headers):
+    client.headers.update(auth_headers())
+    yield
+    client.headers.pop("Authorization", None)
+
+
 expected_json = [
     {
         "line": 1,

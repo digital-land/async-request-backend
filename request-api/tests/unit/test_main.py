@@ -45,11 +45,13 @@ def _create_request_model(service=None):
     side_effect=OperationalError(exception_msg),
 )
 def test_create_request_when_celery_throws_exception(
-    mock_task_delay, mock_create_request, helpers
+    mock_task_delay, mock_create_request, helpers, auth_headers
 ):
     with pytest.raises(OperationalError) as error:
         main.create_request(
-            helpers.build_request_create(), http_request=None, http_response=None
+            helpers.build_request_create(),
+            http_request=Mock(headers=auth_headers()),
+            http_response=None,
         )
         assert exception_msg == error.value
 
@@ -67,14 +69,19 @@ def test_create_request_when_celery_throws_exception(
 @patch("main.standard_queue", "async-request-standard")
 @patch("main.high_queue", "async-request-high")
 def test_create_request_routes_by_service(
-    mock_create_request, mock_apply_async, service, expected_queue, helpers
+    mock_create_request,
+    mock_apply_async,
+    service,
+    expected_queue,
+    helpers,
+    auth_headers,
 ):
     request_model = _create_request_model(service=service)
     mock_create_request.return_value = request_model
 
     main.create_request(
         helpers.build_request_create(),
-        http_request=Mock(headers={"Host": "test"}),
+        http_request=Mock(headers={"Host": "test", **auth_headers()}),
         http_response=MagicMock(),
     )
 
@@ -84,9 +91,9 @@ def test_create_request_routes_by_service(
 
 
 @patch("crud.get_request", return_value=None)
-def test_read_request_when_not_found(mock_get_request):
+def test_read_request_when_not_found(mock_get_request, auth_headers):
     with pytest.raises(HTTPException) as exception:
-        main.read_request("unknown")
+        main.read_request("unknown", http_request=Mock(headers=auth_headers()))
         assert 400 == exception.value.detail["errCode"]
 
 
