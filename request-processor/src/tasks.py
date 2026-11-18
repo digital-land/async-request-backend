@@ -19,6 +19,10 @@ from task_interface.base_tasks import (
 )
 import json
 from application.core import workflow
+from application.utils.resource_safety import (
+    UnsafeResourceError,
+    check_resource_is_safe,
+)
 from application.core.plan_datasets import split_dataset_values
 from application.configurations.config import DATASTORE_URL, Directories
 import application.core.utils as utils
@@ -140,6 +144,22 @@ def handle_check_file(request_schema, request_data, tmp_dir):
         log["message"] = "The uploaded file not found in S3 bucket"
         log["status"] = ""
         log["exception_type"] = type(e).__name__
+        save_response_to_db(request_schema.id, log)
+        raise CustomException(log)
+
+    # An uploaded file can point GDAL at local files, other S3 objects or
+    # internal addresses; see resource_safety.
+    try:
+        check_resource_is_safe(os.path.join(tmp_dir, fileName))
+    except UnsafeResourceError as e:
+        logger.warning(f"Rejected uploaded file {fileName}: {e}")
+        log = {
+            "message": "The uploaded file is not supported",
+            "status": "",
+            "exception_type": "UnsafeResourceError",
+            "exception": "UnsafeResourceError",
+            "user_message_detail": str(e),
+        }
         save_response_to_db(request_schema.id, log)
         raise CustomException(log)
     return fileName
@@ -705,6 +725,24 @@ def save_response_to_db(request_id, response_data):
             raise e
 
 
+def _check_fetched_resource(resource_dir, file_name):
+    """
+    A public URL can still serve a file that points GDAL at internal
+    locations, so check the content before anything converts it.
+    """
+    try:
+        check_resource_is_safe(os.path.join(resource_dir, file_name))
+    except UnsafeResourceError as e:
+        raise CustomException(
+            {
+                "message": "The file at this URL is not supported",
+                "status": "",
+                "exception": "UnsafeResourceError",
+                "user_message_detail": str(e),
+            }
+        )
+
+
 def _fetch_resource(resource_dir, url, endpoint_parameters=None):
     """
     Fetches resource files using Collector, trying different plugins.
@@ -735,7 +773,6 @@ def _fetch_resource(resource_dir, url, endpoint_parameters=None):
             log["plugin"] = plugin
             try:
                 file_name = next(reversed(list(collector.resource_dir.iterdir()))).name
-                return file_name, log
             except StopIteration:
                 raise CustomException(
                     {
@@ -743,6 +780,8 @@ def _fetch_resource(resource_dir, url, endpoint_parameters=None):
                         **log,
                     }
                 )
+            _check_fetched_resource(resource_dir, file_name)
+            return file_name, log
         elif log.get("exception") or log.get("status", "").startswith("4"):
             log["plugin"] = plugin  # Save plugin used for arcgis error context
             break
