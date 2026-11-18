@@ -8,6 +8,7 @@ from celery.utils.log import get_task_logger
 from celery.signals import task_prerun, task_success, task_failure, celeryd_init
 import request_model.schemas as schemas
 import request_model.models as models
+from request_model.url_safety import UnsafeUrlError, check_fetch_url
 import s3_transfer_manager
 import crud
 import database
@@ -22,6 +23,10 @@ from application.core import workflow
 from application.utils.resource_safety import (
     UnsafeResourceError,
     check_resource_is_safe,
+)
+from application.utils.safe_fetch import (
+    check_host_resolves_publicly,
+    untrusted_fetches,
 )
 from application.core.plan_datasets import split_dataset_values
 from application.configurations.config import DATASTORE_URL, Directories
@@ -725,31 +730,63 @@ def save_response_to_db(request_id, response_data):
             raise e
 
 
-def _check_fetched_resource(resource_dir, file_name):
-    """
-    A public URL can still serve a file that points GDAL at internal
-    locations, so check the content before anything converts it.
-    """
-    try:
-        check_resource_is_safe(os.path.join(resource_dir, file_name))
-    except UnsafeResourceError as e:
-        raise CustomException(
-            {
-                "message": "The file at this URL is not supported",
-                "status": "",
-                "exception": "UnsafeResourceError",
-                "user_message_detail": str(e),
-            }
-        )
+def _uses_paged_wfs(endpoint_parameters):
+    return isinstance(endpoint_parameters, dict) and bool(
+        endpoint_parameters.get("page_size")
+    )
 
 
 def _fetch_resource(resource_dir, url, endpoint_parameters=None):
     """
     Fetches resource files using Collector, trying different plugins.
     Raises CustomException and logs error if fetch fails.
+
+    The URL is user-supplied, so only public http(s) addresses may be fetched.
     """
+    try:
+        check_fetch_url(url)
+        # ogr2ogr fetches outside urllib3, so check its host up front.
+        if _uses_paged_wfs(endpoint_parameters):
+            check_host_resolves_publicly(url)
+    except UnsafeUrlError as e:
+        raise CustomException(
+            {
+                "message": "The URL is not allowed",
+                "status": "",
+                "exception": "UnsafeUrlError",
+                "user_message_detail": str(e),
+            }
+        )
+
     Path(resource_dir).mkdir(parents=True, exist_ok=True)
     collector = Collector(resource_dir=Path(resource_dir))
+    # digital-land's Collector mounts a file: adapter. Remove it so neither the
+    # URL nor a redirect can read local files.
+    session = getattr(collector, "session", None)
+    if session is not None:
+        session.adapters.pop("file:", None)
+
+    with untrusted_fetches():
+        file_name, log = _fetch_with_plugins(collector, url, endpoint_parameters)
+
+    # A public URL can still serve a file that points GDAL at internal
+    # locations, so check the content before anything converts it.
+    if file_name:
+        try:
+            check_resource_is_safe(os.path.join(resource_dir, file_name))
+        except UnsafeResourceError as e:
+            raise CustomException(
+                {
+                    "message": "The file at this URL is not supported",
+                    "status": "",
+                    "exception": "UnsafeResourceError",
+                    "user_message_detail": str(e),
+                }
+            )
+    return file_name, log
+
+
+def _fetch_with_plugins(collector, url, endpoint_parameters):
     plugins = [None, "arcgis", "wfs"]
     content_type = None
     response_headers = {}
@@ -773,6 +810,7 @@ def _fetch_resource(resource_dir, url, endpoint_parameters=None):
             log["plugin"] = plugin
             try:
                 file_name = next(reversed(list(collector.resource_dir.iterdir()))).name
+                return file_name, log
             except StopIteration:
                 raise CustomException(
                     {
@@ -780,8 +818,6 @@ def _fetch_resource(resource_dir, url, endpoint_parameters=None):
                         **log,
                     }
                 )
-            _check_fetched_resource(resource_dir, file_name)
-            return file_name, log
         elif log.get("exception") or log.get("status", "").startswith("4"):
             log["plugin"] = plugin  # Save plugin used for arcgis error context
             break
