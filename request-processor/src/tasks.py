@@ -8,6 +8,7 @@ from celery.utils.log import get_task_logger
 from celery.signals import task_prerun, task_success, task_failure, celeryd_init
 import request_model.schemas as schemas
 import request_model.models as models
+from request_model.url_safety import UnsafeUrlError, check_fetch_url
 import s3_transfer_manager
 import crud
 import database
@@ -19,6 +20,20 @@ from task_interface.base_tasks import (
 )
 import json
 from application.core import workflow
+from application.utils.resource_safety import (
+    UnsafeResourceError,
+    check_resource_is_safe,
+)
+from application.utils.request_cleanup import clean_up_request_files
+from application.utils.safe_fetch import (
+    check_host_resolves_publicly,
+    untrusted_fetches,
+)
+from application.utils.task_guard import (
+    BrokerMessageGuard,
+    UntrustedTaskMessage,
+    is_valid_request_id,
+)
 from application.core.plan_datasets import split_dataset_values
 from application.configurations.config import DATASTORE_URL, Directories
 import application.core.utils as utils
@@ -36,33 +51,26 @@ _DETAIL_BATCH_SIZE = 1000
 max_file_size_mb = 30
 
 
-# Remove resource directories created by Collector, necessary if exception occurs, workflow will not clean up
-def clean_up_request_files(request_id):
-    resource_dir = os.path.join(Directories.COLLECTION_DIR, "resource", request_id)
-    try:
-        if os.path.exists(resource_dir):
-            for root, dirs, files in os.walk(resource_dir, topdown=False):
-                for name in files:
-                    os.remove(os.path.join(root, name))
-                for name in dirs:
-                    os.rmdir(os.path.join(root, name))
-            os.rmdir(resource_dir)
+class _DatabaseBrokerMessageGuard(BrokerMessageGuard):
+    """Checks delivered messages against the request rows in the database."""
 
-            # Clean up parent directories if empty
-            resource_parent_dir = os.path.dirname(resource_dir)
-            if os.path.exists(resource_parent_dir) and not os.listdir(
-                resource_parent_dir
-            ):
-                os.rmdir(resource_parent_dir)
-                collection_dir = os.path.dirname(resource_parent_dir)
-                if os.path.exists(collection_dir) and not os.listdir(collection_dir):
-                    os.rmdir(collection_dir)
-
-    except Exception as e:
-        logger.error(f"Failed to clean up resource directory {resource_dir}: {e}")
+    def get_stored_request(self, request_id):
+        return _get_request(request_id)
 
 
-@celery.task(base=CheckDataFileTask, name=CheckDataFileTask.name)
+class GuardedCheckDataFileTask(_DatabaseBrokerMessageGuard, CheckDataFileTask):
+    expected_type = schemas.RequestTypeEnum.check_file.value
+
+
+class GuardedCheckDataUrlTask(_DatabaseBrokerMessageGuard, CheckDataUrlTask):
+    expected_type = schemas.RequestTypeEnum.check_url.value
+
+
+class GuardedAddDataTask(_DatabaseBrokerMessageGuard, AddDataTask):
+    expected_type = schemas.RequestTypeEnum.add_data.value
+
+
+@celery.task(base=GuardedCheckDataFileTask, name=CheckDataFileTask.name)
 def check_datafile(request: Dict, directories=None):
     logger.info(
         f"Started check_datafile task for request_id={request.get('id', 'unknown')}"
@@ -140,6 +148,22 @@ def handle_check_file(request_schema, request_data, tmp_dir):
         log["message"] = "The uploaded file not found in S3 bucket"
         log["status"] = ""
         log["exception_type"] = type(e).__name__
+        save_response_to_db(request_schema.id, log)
+        raise CustomException(log)
+
+    # An uploaded file can point GDAL at local files, other S3 objects or
+    # internal addresses just as a fetched one can; see resource_safety.
+    try:
+        check_resource_is_safe(os.path.join(tmp_dir, fileName))
+    except UnsafeResourceError as e:
+        logger.warning(f"Rejected uploaded file {fileName}: {e}")
+        log = {
+            "message": "The uploaded file is not supported",
+            "status": "",
+            "exception_type": "UnsafeResourceError",
+            "exception": "UnsafeResourceError",
+            "user_message_detail": str(e),
+        }
         save_response_to_db(request_schema.id, log)
         raise CustomException(log)
     return fileName
@@ -242,7 +266,7 @@ def _get_resource_metadata(collection_dir, collection, dataset, resource):
     }
 
 
-@celery.task(base=CheckDataUrlTask, name=CheckDataUrlTask.name)
+@celery.task(base=GuardedCheckDataUrlTask, name=CheckDataUrlTask.name)
 def check_dataurl(request: Dict, directories=None):  # noqa
     logger.info(
         f"Started check_dataurl task for request_id = {request.get('id', 'unknown')}"
@@ -350,7 +374,7 @@ def check_dataurl(request: Dict, directories=None):  # noqa
     return _get_request(request_schema.id)
 
 
-@celery.task(base=AddDataTask, name=AddDataTask.name)
+@celery.task(base=GuardedAddDataTask, name=AddDataTask.name)
 def add_data_task(request: Dict, directories=None):
     logger.info(f"Started add_data task for request_id={request.get('id', 'unknown')}")
     logger.info(f"Request payload: {json.dumps(request, default=str)}")
@@ -450,16 +474,39 @@ def add_data_task(request: Dict, directories=None):
     return _get_request(request_schema.id)
 
 
+def _request_id_from_args(args):
+    """Return the request id from task args, or None if it is not a valid id."""
+    try:
+        request_id = args[0]["id"]
+    except (IndexError, KeyError, TypeError):
+        return None
+    if not is_valid_request_id(request_id):
+        logger.error(f"Ignoring task signal for invalid request id {request_id!r}")
+        return None
+    return request_id
+
+
 @task_prerun.connect
 def before_task(task_id, task, args, **kwargs):
-    request_id = args[0]["id"]
+    if isinstance(task, BrokerMessageGuard):
+        try:
+            task.validate_message(args, kwargs.get("kwargs") or {})
+        except UntrustedTaskMessage as e:
+            # Leave the request untouched; __call__ raises the same error.
+            logger.error(f"Rejected untrusted task message {task_id}: {e}")
+            return
+    request_id = _request_id_from_args(args)
+    if request_id is None:
+        return
     logger.debug(f"Set status to PROCESSING for request {request_id}")
     _update_request_status(request_id, "PROCESSING")
 
 
 @task_success.connect
 def after_task_success(sender, result, **kwargs):
-    request_id = sender.request.args[0]["id"]
+    request_id = _request_id_from_args(sender.request.args)
+    if request_id is None:
+        return
     logger.debug(f"Set status to PROCESSING for request {request_id}")
     _update_request_status(request_id, "COMPLETE")
     clean_up_request_files(request_id)
@@ -470,7 +517,13 @@ def after_task_success(sender, result, **kwargs):
 
 @task_failure.connect
 def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
-    request_id = args[0]["id"]
+    if isinstance(exception, UntrustedTaskMessage):
+        # The message was forged: don't touch the request row or the filesystem.
+        logger.error(f"Rejected untrusted task message {task_id}: {exception}")
+        return
+    request_id = _request_id_from_args(args)
+    if request_id is None:
+        return
     logger.debug(f"Set status to FAILED for request {request_id}")
     # Exception type only: request_id would give the metric unbounded cardinality.
     sentry_sdk.metrics.count(
@@ -505,6 +558,9 @@ def _update_request_status(request_id, status):
     db_session = database.session_maker()
     with db_session() as session:
         model = crud.get_request(session, request_id)
+        if model is None:
+            logger.error(f"Cannot set status {status}: request {request_id} not found")
+            return
         model.status = status
         session.commit()
         session.flush()
@@ -705,13 +761,63 @@ def save_response_to_db(request_id, response_data):
             raise e
 
 
+def _uses_paged_wfs(endpoint_parameters):
+    return isinstance(endpoint_parameters, dict) and bool(
+        endpoint_parameters.get("page_size")
+    )
+
+
 def _fetch_resource(resource_dir, url, endpoint_parameters=None):
     """
     Fetches resource files using Collector, trying different plugins.
     Raises CustomException and logs error if fetch fails.
+
+    The URL is user-supplied, so only public http(s) addresses may be fetched.
     """
+    try:
+        check_fetch_url(url)
+        # ogr2ogr fetches outside urllib3, so check its host up front.
+        if _uses_paged_wfs(endpoint_parameters):
+            check_host_resolves_publicly(url)
+    except UnsafeUrlError as e:
+        raise CustomException(
+            {
+                "message": "The URL is not allowed",
+                "status": "",
+                "exception": "UnsafeUrlError",
+                "user_message_detail": str(e),
+            }
+        )
+
     Path(resource_dir).mkdir(parents=True, exist_ok=True)
     collector = Collector(resource_dir=Path(resource_dir))
+    # digital-land's Collector mounts a file: adapter. Remove it so neither the
+    # URL nor a redirect can read local files.
+    session = getattr(collector, "session", None)
+    if session is not None:
+        session.adapters.pop("file:", None)
+
+    with untrusted_fetches():
+        file_name, log = _fetch_with_plugins(collector, url, endpoint_parameters)
+
+    # A public URL can still serve a file that points GDAL at internal
+    # locations, so check the content before anything converts it.
+    if file_name:
+        try:
+            check_resource_is_safe(os.path.join(resource_dir, file_name))
+        except UnsafeResourceError as e:
+            raise CustomException(
+                {
+                    "message": "The file at this URL is not supported",
+                    "status": "",
+                    "exception": "UnsafeResourceError",
+                    "user_message_detail": str(e),
+                }
+            )
+    return file_name, log
+
+
+def _fetch_with_plugins(collector, url, endpoint_parameters):
     plugins = [None, "arcgis", "wfs"]
     content_type = None
     response_headers = {}

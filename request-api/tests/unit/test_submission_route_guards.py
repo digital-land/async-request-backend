@@ -84,7 +84,10 @@ def test_authorised_reads_reach_the_handler(role, path, auth_headers):
 def test_submission_link_requires_auth_before_persistence_or_dispatch(kind, service):
     params = {"type": kind, "dataset": "tree", "collection": "tpo", "service": service}
     if kind == "check_file":
-        params.update(original_filename="trees.csv", uploaded_filename="uploaded.csv")
+        params.update(
+            original_filename="trees.csv",
+            uploaded_filename="492f15d8-45e4-427e-bde0-f60d69889f40",
+        )
     else:
         params["url"] = "https://example.org/trees.csv"
     db = Mock()

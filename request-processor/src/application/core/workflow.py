@@ -39,6 +39,7 @@ from application.core.pipeline import (
     run_task_pipeline,
 )
 from application.configurations.config import source_url, CONFIG_URL
+from application.utils.request_cleanup import clean_up
 
 logger = get_logger(__name__)
 
@@ -155,7 +156,14 @@ def _download_headers(url):
     return headers
 
 
+_DOWNLOAD_SCHEMES = {"http", "https"}
+
+
 def download_file(url, destination):
+    # urlopen also reads file:// (and ftp://) URLs, so only allow http(s).
+    scheme = urllib.parse.urlsplit(url).scheme.lower()
+    if scheme not in _DOWNLOAD_SCHEMES:
+        raise ValueError(f"Only http and https downloads are allowed, not {scheme!r}")
     request = urllib.request.Request(url, headers=_download_headers(url))
     try:
         with urllib.request.urlopen(
@@ -607,38 +615,6 @@ def add_extra_column_mappings(
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writerow(mappings)
     return not_mapped_columns
-
-
-# def clean_up(*directories):
-#     try:
-#         for directory in directories:
-#             if os.path.exists(directory):
-#                 shutil.rmtree(directory)
-#     except Exception as e:
-#         logger.error(f"An error occurred during cleanup: {e}")
-
-
-def clean_up(request_id, *directories):
-    try:
-        for directory in directories:
-            dir_path = os.path.join(directory, str(request_id))
-            if os.path.exists(dir_path):
-                files = os.listdir(dir_path)
-                for file in files:
-                    file_path = os.path.join(dir_path, file)
-                    if os.path.isfile(file_path):
-                        os.remove(file_path)
-                    elif os.path.isdir(file_path):
-                        clean_up(request_id, file_path)
-                # Check if the directory is empty after removing files
-                if not os.listdir(dir_path):
-                    os.rmdir(dir_path)
-            if os.path.exists(directory) and not os.listdir(directory):
-                os.rmdir(directory)
-    except Exception as e:
-        logger.error(
-            f"An error occurred during cleanup of {directory}: {e}", exc_info=True
-        )
 
 
 def csv_to_json(csv_file):

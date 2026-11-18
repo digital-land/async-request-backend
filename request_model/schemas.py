@@ -1,7 +1,19 @@
 import datetime
+import re
 from enum import Enum
 from typing import Union, Literal, Optional, List, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
+
+from request_model.url_safety import UnsafeUrlError, check_fetch_url
+
+# Submit stores each upload in S3 under a uuidv4 key, which the worker joins
+# onto a local path. Anything else could point outside the request's folder.
+UPLOADED_FILENAME_PATTERN = re.compile(
+    r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}"
+)
+# The user's own filename; only stored and shown back. 255 is the usual
+# filesystem limit for a file name.
+MAX_ORIGINAL_FILENAME_LENGTH = 255
 
 
 class RequestTypeEnum(str, Enum):
@@ -68,6 +80,31 @@ class RequestBase(BaseModel):
 
 class RequestCreate(RequestBase):
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def url_is_safe_to_fetch(self):
+        url = getattr(self.params, "url", None)
+        if url:
+            try:
+                check_fetch_url(url)
+            except UnsafeUrlError as e:
+                raise ValueError(f"Invalid url: {e}") from e
+        return self
+
+    @model_validator(mode="after")
+    def uploaded_file_names_are_safe(self):
+        # Only checked when a request is created, like the url check above.
+        if not isinstance(self.params, CheckFileParams):
+            return self
+        if not UPLOADED_FILENAME_PATTERN.fullmatch(self.params.uploaded_filename):
+            raise ValueError("Invalid uploaded_filename: must be the upload's id")
+        original = self.params.original_filename
+        if not original.strip() or len(original) > MAX_ORIGINAL_FILENAME_LENGTH:
+            raise ValueError(
+                "Invalid original_filename: must be 1 to "
+                f"{MAX_ORIGINAL_FILENAME_LENGTH} characters"
+            )
+        return self
 
 
 class ResponseData(BaseModel):
