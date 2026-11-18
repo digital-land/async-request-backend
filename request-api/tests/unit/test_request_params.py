@@ -118,6 +118,14 @@ UNSAFE_URLS = [
     "https://user:pass@example.org/trees.csv",
     "https://example.org@169.254.169.254/",
     "https://" + "a" * 2048 + ".example.org/",
+    # Encoded hosts that HTTP clients decode to an internal address.
+    "http://%31%36%39.254.170.2/v2/credentials/abc",
+    "http://169.254.170.%32/",
+    "http://%6c%6f%63%61%6c%68%6f%73%74/",
+    "http://[fe80::1%25eth0]/",
+    "http://１６９.254.170.2/",
+    "http://169。254。169。254/",
+    "http://LOCALHOST。/",
 ]
 
 
@@ -138,6 +146,9 @@ def test_unsafe_urls_are_rejected(kind, url):
         "https://example.org/my%20trees.csv",
         "https://example.org/visitor/vsi-data/trees.csv",
         "https://example.org/arcgis/rest/services/x/FeatureServer/0/query?where=1%3D1",
+        "https://example.org./trees.csv",
+        "https://bücher.example/trees.csv",
+        "http://[2001:4860:4860::8888]/",
     ],
 )
 def test_public_http_urls_are_accepted(url):

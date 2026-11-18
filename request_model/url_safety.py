@@ -60,11 +60,27 @@ def is_public_ip(ip):
     return ip.is_global
 
 
-def check_fetch_url(url):
+def _canonical_host(host):
     """
-    Raise UnsafeUrlError unless url is an http(s) URL whose host is not an
-    internal address. Returns the url unchanged.
+    Return host as an HTTP client would send it, so the checks below see the
+    same host that is contacted.
+
+    Clients decode percent-escapes in a host (%31%36%39.254.170.2 is
+    169.254.170.2) and IDNA-encode non-ASCII hosts, which maps full-width
+    digits and ideographic full stops to ASCII. A real hostname never needs
+    percent-escapes, so those are refused rather than decoded.
     """
+    if "%" in host:
+        raise UnsafeUrlError("URL host must not contain percent-encoding")
+    try:
+        host = host.encode("idna").decode("ascii")
+    except UnicodeError as e:
+        raise UnsafeUrlError("URL host is not a valid hostname") from e
+    return host.rstrip(".").lower()
+
+
+def _check_url_text(url):
+    """Checks on the URL as a whole, before it is parsed."""
     if not isinstance(url, str) or not url.strip():
         raise UnsafeUrlError("A URL is required")
     if len(url) > MAX_URL_LENGTH:
@@ -75,6 +91,14 @@ def check_fetch_url(url):
         raise UnsafeUrlError("URL contains encoded characters that are not allowed")
     if _GDAL_VIRTUAL_PATH.search(url):
         raise UnsafeUrlError("URL contains a path that is not allowed")
+
+
+def check_fetch_url(url):
+    """
+    Raise UnsafeUrlError unless url is an http(s) URL whose host is not an
+    internal address. Returns the url unchanged.
+    """
+    _check_url_text(url)
 
     try:
         parts = urlsplit(url)
@@ -91,7 +115,7 @@ def check_fetch_url(url):
     if parts.username is not None or parts.password is not None:
         raise UnsafeUrlError("URL must not include a username or password")
 
-    host = host.rstrip(".").lower()
+    host = _canonical_host(host)
     if host in _BLOCKED_HOSTNAMES or host.endswith(".localhost"):
         raise UnsafeUrlError("URL must not point at this machine")
 
