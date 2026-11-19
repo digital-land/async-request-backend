@@ -4,9 +4,27 @@ import pytest
 import requests
 
 from src import tasks
+from application.utils import task_guard
 
 VALID_ID = "AbCdEfGhIjKlMnOpQrStUv"
 UPLOAD_ID = "492f15d8-45e4-427e-bde0-f60d69889f40"
+VALID_PARAMS = {
+    "type": "check_file",
+    "collection": "article-4-direction",
+    "dataset": "article-4-direction-area",
+    "original_filename": "data.csv",
+    "uploaded_filename": "492f15d8-45e4-427e-bde0-f60d69889f40",
+}
+
+
+def _message(request_id=VALID_ID, params=None):
+    return {
+        "id": request_id,
+        "type": "check_file",
+        "status": "NEW",
+        "params": dict(params or VALID_PARAMS),
+    }
+
 
 VRT_POINTING_ELSEWHERE = (
     b"<OGRVRTDataSource><OGRVRTLayer name='x'><SrcDataSource>"
@@ -206,4 +224,111 @@ def test_paged_wfs_host_that_does_not_resolve_is_not_counted(
         tasks._fetch_resource(
             tmp_path, "https://wfs.example.org/wfs", {"page_size": 100}
         )
+    assert rejections == []
+
+
+@pytest.fixture
+def stored_request(monkeypatch):
+    """Pretend the request row exists with VALID_PARAMS, and stub the spec."""
+    stored = SimpleNamespace(type="check_file", params=dict(VALID_PARAMS))
+    monkeypatch.setattr(
+        tasks, "_get_request", lambda rid: stored if rid == VALID_ID else None
+    )
+    monkeypatch.setattr(
+        task_guard.core_utils,
+        "load_specification",
+        lambda _dirs: SimpleNamespace(dataset={"article-4-direction-area": {}}),
+    )
+    return stored
+
+
+def test_worker_delivered_call_is_guarded(stored_request):
+    task = tasks.check_datafile
+    task.push_request(called_directly=False)
+    try:
+        with pytest.raises(tasks.UntrustedTaskMessage):
+            task(_message(request_id=".."), '{"COLLECTION_DIR": "/"}')
+    finally:
+        task.pop_request()
+
+
+def test_failure_handler_ignores_untrusted_messages(monkeypatch):
+    calls = []
+    monkeypatch.setattr(tasks, "_update_request_status", lambda *a: calls.append(a))
+    monkeypatch.setattr(tasks, "clean_up_request_files", lambda *a: calls.append(a))
+    tasks.after_task_failure(
+        "task-id",
+        tasks.UntrustedTaskMessage("forged"),
+        None,
+        None,
+        [_message()],
+    )
+    assert calls == []
+
+
+@pytest.mark.parametrize("handler", ["before_task", "after_task_failure"])
+def test_signal_handlers_ignore_invalid_request_ids(monkeypatch, handler):
+    calls = []
+    monkeypatch.setattr(tasks, "_update_request_status", lambda *a: calls.append(a))
+    monkeypatch.setattr(tasks, "clean_up_request_files", lambda *a: calls.append(a))
+    if handler == "before_task":
+        tasks.before_task("task-id", None, [_message(request_id="..")])
+    else:
+        tasks.after_task_failure(
+            "task-id", ValueError("boom"), None, None, [_message(request_id="..")]
+        )
+    assert calls == []
+
+
+def test_before_task_does_not_set_processing_for_rejected_message(
+    stored_request, monkeypatch
+):
+    calls = []
+    monkeypatch.setattr(tasks, "_update_request_status", lambda *a: calls.append(a))
+    task = tasks.check_datafile
+    message = _message()
+    message["status"] = "COMPLETE"
+    task.push_request(called_directly=False)
+    try:
+        tasks.before_task("task-id", task, [message], kwargs={})
+        assert calls == []
+        # __call__ re-raises the cached rejection without running the task body.
+        with pytest.raises(tasks.UntrustedTaskMessage, match="status"):
+            task(message)
+    finally:
+        task.pop_request()
+
+
+def test_before_task_sets_processing_for_valid_message(stored_request, monkeypatch):
+    calls = []
+    monkeypatch.setattr(tasks, "_update_request_status", lambda *a: calls.append(a))
+    task = tasks.check_datafile
+    task.push_request(called_directly=False)
+    try:
+        tasks.before_task("task-id", task, [_message()], kwargs={})
+    finally:
+        task.pop_request()
+    assert calls == [(VALID_ID, "PROCESSING")]
+
+
+def test_forged_message_is_counted(stored_request, monkeypatch, rejections):
+    monkeypatch.setattr(tasks, "_update_request_status", lambda *a: None)
+    task = tasks.check_datafile
+    message = _message(request_id="Z" * 22)  # well-formed id, no stored row
+    task.push_request(called_directly=False)
+    try:
+        tasks.before_task("task-id", task, [message], kwargs={})
+    finally:
+        task.pop_request()
+    assert rejections == [("message", "broker")]
+
+
+def test_trusted_message_is_not_counted(stored_request, monkeypatch, rejections):
+    monkeypatch.setattr(tasks, "_update_request_status", lambda *a: None)
+    task = tasks.check_datafile
+    task.push_request(called_directly=False)
+    try:
+        tasks.before_task("task-id", task, [_message()], kwargs={})
+    finally:
+        task.pop_request()
     assert rejections == []

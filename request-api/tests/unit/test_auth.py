@@ -209,7 +209,10 @@ def test_checks_require_auth(api, kind):
     payload = body(kind)
     if kind == "check_file":
         payload["params"].pop("url")
-        payload["params"].update(original_filename="a.csv", uploaded_filename="b.csv")
+        payload["params"].update(
+            original_filename="a.csv",
+            uploaded_filename="492f15d8-45e4-427e-bde0-f60d69889f40",
+        )
     create.return_value = models.Request(
         id="test",
         type=kind,

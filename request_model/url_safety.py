@@ -7,8 +7,9 @@ internal services such as the ECS credentials endpoint (169.254.170.2) or the
 EC2 metadata service (169.254.169.254).
 
 check_fetch_url is a static check: it needs no network access, so request-api
-can use it to reject bad URLs before a request is stored. It does not cover a
-hostname that resolves to an internal address, or a redirect to one.
+can use it to reject bad URLs before a request is stored. The worker also checks
+the addresses it actually connects to (see request-processor application/utils/safe_fetch.py),
+which covers hostnames that resolve to internal addresses and redirects.
 """
 
 import ipaddress

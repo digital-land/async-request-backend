@@ -16,10 +16,11 @@ def count_security_rejection(layer, source):
     Count one refused input.
 
     layer: the check that refused it: "url" (the URL text), "connection" (the
-        address a host resolves to, including after a redirect) or "content"
-        (a file that points GDAL at another data source).
-    source: where the input came from: "fetch" (a user-supplied URL) or
-        "upload" (a file uploaded through Submit).
+        address a host resolves to, including after a redirect), "content"
+        (a file that points GDAL at another data source) or "message" (a task
+        message that request-api could not have sent).
+    source: where the input came from: "fetch" (a user-supplied URL),
+        "upload" (a file uploaded through Submit) or "broker" (the task queue).
     """
     sentry_sdk.metrics.count(
         SECURITY_REJECTED_METRIC,
