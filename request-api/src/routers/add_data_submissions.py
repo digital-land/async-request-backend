@@ -21,11 +21,16 @@ router = APIRouter(prefix="/add-data-submissions")
 
 
 @router.post("", status_code=201, response_model=AddDataSubmissionReceipt)
+@require_auth(roles={"submit", "staff", "admin"})
 def create_add_data_submission(
     request: AddDataSubmissionCreate,
+    http_request: Request,
     response: Response,
     db: Session = Depends(_get_db),
 ):
+    principal = getattr(http_request.state, "principal", {})
+    if principal.get("role") == "submit" and request.source != "check_tool":
+        raise HTTPException(403, "Submit may only create check-tool submissions")
     add_data_submission, created = add_data_submissions.create_add_data_submission(
         db, request
     )

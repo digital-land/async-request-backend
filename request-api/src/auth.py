@@ -1,4 +1,4 @@
-"""Verify Manage-issued JWTs before executing protected handlers."""
+"""Verify client JWTs with issuer-specific keys and role limits."""
 
 import base64
 import binascii
@@ -7,36 +7,55 @@ import os
 from functools import wraps
 
 import jwt
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from fastapi import HTTPException
+
+
+def _issuer_settings(issuer, unauthorized):
+    if issuer == "manage":
+        return os.environ["MANAGE_JWT_PUBLIC_KEY"], {"staff", "admin"}
+    if issuer == "submit":
+        return os.environ["SUBMIT_JWT_PUBLIC_KEY"], {"submit"}
+    raise unauthorized
+
+
+def _verification_config(issuer, unauthorized):
+    try:
+        encoded_key, roles = _issuer_settings(issuer, unauthorized)
+        key = load_pem_public_key(base64.b64decode(encoded_key, validate=True))
+        if not isinstance(key, RSAPublicKey) or key.key_size < 2048:
+            raise ValueError("Expected RSA public key of at least 2048 bits")
+        audience = os.environ["AUTH_JWT_AUDIENCE"]
+        if not audience:
+            raise ValueError("Missing JWT configuration")
+        return key, roles, audience
+    except (KeyError, ValueError, TypeError, binascii.Error):
+        raise HTTPException(status_code=503, detail="Authentication unavailable")
 
 
 def verify_token(http_request, roles):
     scheme, _, token = http_request.headers.get("Authorization", "").partition(" ")
     unauthorized = HTTPException(
         status_code=401,
-        detail="Valid Manage authentication required",
+        detail="Valid authentication required",
         headers={"WWW-Authenticate": "Bearer"},
     )
     if scheme.lower() != "bearer" or not token:
         raise unauthorized
     try:
-        key = base64.b64decode(os.environ.get("AUTH_JWT_PUBLIC_KEY", ""), validate=True)
-        issuers = [
-            value.strip()
-            for value in os.environ["AUTH_TRUSTED_ISSUERS"].split(",")
-            if value.strip()
-        ]
-        audience = os.environ["AUTH_JWT_AUDIENCE"]
-        if not key or not issuers or not audience:
-            raise ValueError("Missing JWT configuration")
-    except (KeyError, ValueError, binascii.Error):
-        raise HTTPException(status_code=503, detail="Authentication unavailable")
+        issuer = jwt.decode(token, options={"verify_signature": False}).get("iss")
+        if not isinstance(issuer, str) or not issuer:
+            raise unauthorized
+    except jwt.InvalidTokenError:
+        raise unauthorized
+    key, allowed_roles, audience = _verification_config(issuer, unauthorized)
     try:
         claims = jwt.decode(
             token,
             key,
             algorithms=["RS256"],
-            issuer=issuers,
+            issuer=issuer,
             audience=audience,
             options={"require": ["iss", "aud", "sub", "iat", "exp", "role"]},
         )
@@ -46,7 +65,11 @@ def verify_token(http_request, roles):
         raise unauthorized
     if not claims["sub"]:
         raise unauthorized
-    if not isinstance(claims["role"], str) or claims["role"] not in roles:
+    if (
+        not isinstance(claims["role"], str)
+        or claims["role"] not in roles
+        or claims["role"] not in allowed_roles
+    ):
         raise HTTPException(status_code=403, detail="Insufficient role")
     http_request.state.principal = claims
 

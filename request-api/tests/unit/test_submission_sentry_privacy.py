@@ -47,7 +47,9 @@ def captured_events():
         yield transport.events
 
 
-def test_creation_exception_hides_contacts_but_keeps_debug_context(captured_events):
+def test_creation_exception_hides_contacts_but_keeps_debug_context(
+    captured_events, auth_headers
+):
     def fail_creation(db, body):
         values = body.model_dump()
         # This mirrors the dictionary built by the persistence service before
@@ -60,6 +62,7 @@ def test_creation_exception_hides_contacts_but_keeps_debug_context(captured_even
     ):
         response = TestClient(main.app, raise_server_exceptions=False).post(
             "/add-data-submissions",
+            headers=auth_headers(),
             json={
                 "check_request_id": "privacy-check",
                 "dataset": "tree",

@@ -68,7 +68,7 @@ if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
         before_send_log=sentry_event_scrubber.scrub_log,
     )
 
-app = FastAPI()
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(add_data_submissions_router)
 
 
@@ -113,6 +113,7 @@ def healthcheck(
 
 
 @app.post("/requests", status_code=202, response_model=schemas.Request)
+@require_auth(roles={"submit", "staff", "admin"})
 @require_auth(roles={"staff", "admin"}, when=add_data_requires_auth)
 def create_request(
     request: schemas.RequestCreate,
@@ -149,7 +150,10 @@ def create_request(
 
 
 @app.get("/requests/{request_id}", response_model=schemas.Request)
-def read_request(request_id: str, db: Session = Depends(_get_db)):
+@require_auth(roles={"submit", "staff", "admin"})
+def read_request(
+    request_id: str, http_request: Request, db: Session = Depends(_get_db)
+):
     request_model = crud.get_request(db, request_id)
     if request_model is None:
         raise HTTPException(
@@ -166,8 +170,10 @@ def read_request(request_id: str, db: Session = Depends(_get_db)):
 
 
 @app.get("/requests/{request_id}/response-details", response_model=List[Dict[Any, Any]])
+@require_auth(roles={"submit", "staff", "admin"})
 def read_response_details(
     request_id: str,
+    http_request: Request,
     http_response: Response,
     params: ReadResponseDetailsParams = Depends(),
     db: Session = Depends(_get_db),
@@ -185,7 +191,10 @@ def read_response_details(
 
 
 @app.get("/requests/{request_id}/geometries", response_model=List[str])
-def read_response_geometries(request_id: str, db: Session = Depends(_get_db)):
+@require_auth(roles={"submit", "staff", "admin"})
+def read_response_geometries(
+    request_id: str, http_request: Request, db: Session = Depends(_get_db)
+):
     return crud.get_response_geometries(db, request_id)
 
 
