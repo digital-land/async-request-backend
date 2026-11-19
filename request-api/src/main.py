@@ -6,6 +6,8 @@ import sentry_sdk
 
 from botocore.exceptions import ClientError, BotoCoreError
 from fastapi import FastAPI, Depends, Request, Response, HTTPException
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
 from sqlalchemy import text
@@ -70,6 +72,26 @@ if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
 
 app = FastAPI()
 app.include_router(add_data_submissions_router)
+
+SECURITY_REJECTED_METRIC = "async.security.rejected"
+
+
+@app.exception_handler(RequestValidationError)
+async def count_unsafe_urls(request: Request, exc: RequestValidationError):
+    """
+    Count requests refused because their URL is unsafe, then return FastAPI's
+    usual 422 response. Matches the worker's async.security.rejected metric;
+    no URL or request detail is recorded.
+    """
+    if any(
+        error.get("type") == schemas.UNSAFE_URL_ERROR_TYPE for error in exc.errors()
+    ):
+        sentry_sdk.metrics.count(
+            SECURITY_REJECTED_METRIC,
+            1,
+            attributes={"service": "request-api", "layer": "url", "source": "api"},
+        )
+    return await request_validation_exception_handler(request, exc)
 
 
 @app.get("/health", response_model=HealthCheckResponse)

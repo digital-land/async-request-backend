@@ -158,3 +158,66 @@ def test_add_data_without_url_is_accepted():
         "resource": "a" * 64,
     }
     RequestCreate.model_validate({"params": params})
+
+
+def _post_counting_metrics(body):
+    from unittest.mock import Mock, patch
+
+    import sentry_sdk
+    from fastapi.testclient import TestClient
+    from main import app, _get_db
+
+    db = Mock()
+    counted = []
+    with patch.dict(app.dependency_overrides, {_get_db: lambda: db}), patch.object(
+        sentry_sdk.metrics,
+        "count",
+        side_effect=lambda *args, **kwargs: counted.append((args, kwargs)),
+    ):
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/requests", json=body
+        )
+    db.add.assert_not_called()
+    return response, counted
+
+
+def test_unsafe_url_is_refused_and_counted():
+    params = {
+        "type": "check_url",
+        "dataset": "tree",
+        "collection": "tree",
+        "url": "http://169.254.170.2/v2/credentials/abc",
+    }
+    response, counted = _post_counting_metrics({"params": params})
+
+    assert response.status_code == 422
+    error = response.json()["detail"][0]
+    assert error["type"] == "unsafe_url"
+    assert error["msg"].startswith("Invalid url:")
+    assert counted == [
+        (
+            ("async.security.rejected", 1),
+            {
+                "attributes": {
+                    "service": "request-api",
+                    "layer": "url",
+                    "source": "api",
+                }
+            },
+        )
+    ]
+
+
+def test_other_validation_errors_are_not_counted():
+    params = {
+        "type": "check_url",
+        "dataset": "tree",
+        "collection": "tree",
+        "url": "https://example.org/trees.csv",
+        "unknown_field": "x",
+    }
+    response, counted = _post_counting_metrics({"params": params})
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["type"] == "extra_forbidden"
+    assert counted == []
