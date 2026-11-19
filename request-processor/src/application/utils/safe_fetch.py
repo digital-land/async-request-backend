@@ -23,6 +23,7 @@ from urllib.parse import urlsplit
 
 import urllib3.util.connection as urllib3_connection
 
+from application.utils.security_metrics import count_security_rejection
 from request_model.url_safety import UnsafeUrlError, is_public_ip
 
 _state = threading.local()
@@ -30,7 +31,11 @@ _original_create_connection = urllib3_connection.create_connection
 
 
 class BlockedAddressError(OSError):
-    """A fetch tried to connect to a non-public address."""
+    """A fetch tried to connect to a host that is not allowed."""
+
+
+class NonPublicAddressError(BlockedAddressError):
+    """A host resolved to an internal address."""
 
 
 def _public_addresses(host, port):
@@ -41,7 +46,10 @@ def _public_addresses(host, port):
     for *_, sockaddr in addresses:
         ip = ipaddress.ip_address(sockaddr[0].split("%", 1)[0])
         if not is_public_ip(ip):
-            raise BlockedAddressError(f"{host} resolves to a non-public address")
+            # Counted here so both the connection guard and the paged WFS
+            # up-front check report it, once.
+            count_security_rejection("connection", "fetch")
+            raise NonPublicAddressError(f"{host} resolves to a non-public address")
     return [sockaddr[0] for *_, sockaddr in addresses]
 
 

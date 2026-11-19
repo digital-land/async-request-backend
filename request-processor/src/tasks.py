@@ -24,6 +24,7 @@ from application.utils.resource_safety import (
     UnsafeResourceError,
     check_resource_is_safe,
 )
+from application.utils.security_metrics import count_security_rejection
 from application.utils.safe_fetch import (
     check_host_resolves_publicly,
     untrusted_fetches,
@@ -157,6 +158,7 @@ def handle_check_file(request_schema, request_data, tmp_dir):
     try:
         check_resource_is_safe(os.path.join(tmp_dir, fileName))
     except UnsafeResourceError as e:
+        count_security_rejection("content", "upload")
         logger.warning(f"Rejected uploaded file {fileName}: {e}")
         log = {
             "message": "The uploaded file is not supported",
@@ -736,6 +738,17 @@ def _uses_paged_wfs(endpoint_parameters):
     )
 
 
+def _url_not_allowed(error):
+    return CustomException(
+        {
+            "message": "The URL is not allowed",
+            "status": "",
+            "exception": "UnsafeUrlError",
+            "user_message_detail": str(error),
+        }
+    )
+
+
 def _fetch_resource(resource_dir, url, endpoint_parameters=None):
     """
     Fetches resource files using Collector, trying different plugins.
@@ -745,23 +758,21 @@ def _fetch_resource(resource_dir, url, endpoint_parameters=None):
     """
     try:
         check_fetch_url(url)
-        # ogr2ogr fetches outside urllib3, so check its host up front.
-        if _uses_paged_wfs(endpoint_parameters):
-            check_host_resolves_publicly(url)
     except UnsafeUrlError as e:
-        raise CustomException(
-            {
-                "message": "The URL is not allowed",
-                "status": "",
-                "exception": "UnsafeUrlError",
-                "user_message_detail": str(e),
-            }
-        )
+        count_security_rejection("url", "fetch")
+        raise _url_not_allowed(e)
+    # ogr2ogr fetches outside urllib3, so check its host up front. A host that
+    # resolves to an internal address is counted by safe_fetch.
+    if _uses_paged_wfs(endpoint_parameters):
+        try:
+            check_host_resolves_publicly(url)
+        except UnsafeUrlError as e:
+            raise _url_not_allowed(e)
 
     Path(resource_dir).mkdir(parents=True, exist_ok=True)
     collector = Collector(resource_dir=Path(resource_dir))
-    # digital-land's Collector mounts a file: adapter. Remove it so neither the
-    # URL nor a redirect can read local files.
+    # Older digital-land versions mount a file: adapter on the Collector's
+    # session. Remove it so neither the URL nor a redirect can read local files.
     session = getattr(collector, "session", None)
     if session is not None:
         session.adapters.pop("file:", None)
@@ -775,6 +786,7 @@ def _fetch_resource(resource_dir, url, endpoint_parameters=None):
         try:
             check_resource_is_safe(os.path.join(resource_dir, file_name))
         except UnsafeResourceError as e:
+            count_security_rejection("content", "fetch")
             raise CustomException(
                 {
                     "message": "The file at this URL is not supported",

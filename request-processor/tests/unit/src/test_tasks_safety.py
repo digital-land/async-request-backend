@@ -140,3 +140,70 @@ def test_fetch_resource_checks_dns_for_paged_wfs(tmp_path, monkeypatch):
         tasks._fetch_resource(
             tmp_path, "https://wfs.example.org/wfs", {"page_size": 100}
         )
+
+
+@pytest.fixture
+def rejections(monkeypatch):
+    """Security rejections counted by tasks, as (layer, source) pairs."""
+    counted = []
+    monkeypatch.setattr(
+        tasks,
+        "count_security_rejection",
+        lambda layer, source: counted.append((layer, source)),
+    )
+    return counted
+
+
+def test_refused_url_is_counted(tmp_path, rejections):
+    with pytest.raises(tasks.CustomException):
+        tasks._fetch_resource(tmp_path, "file:///etc/passwd")
+    assert rejections == [("url", "fetch")]
+
+
+def test_refused_fetched_file_is_counted(tmp_path, monkeypatch, rejections):
+    monkeypatch.setattr(
+        tasks.Collector, "fetch", _fake_fetch_writing(VRT_POINTING_ELSEWHERE)
+    )
+    with pytest.raises(tasks.CustomException):
+        tasks._fetch_resource(tmp_path, "https://example.org/boundary.gml")
+    assert rejections == [("content", "fetch")]
+
+
+def test_refused_upload_is_counted(tmp_path, monkeypatch, rejections):
+    monkeypatch.setenv("REQUEST_FILES_BUCKET_NAME", "bucket")
+    monkeypatch.setattr(
+        tasks.s3_transfer_manager,
+        "download_with_default_configuration",
+        _fake_s3_download(UPLOADED_VRT_READING_S3),
+    )
+    monkeypatch.setattr(tasks, "save_response_to_db", lambda request_id, log: None)
+    with pytest.raises(tasks.CustomException):
+        tasks.handle_check_file(
+            SimpleNamespace(id=VALID_ID),
+            SimpleNamespace(uploaded_filename=UPLOAD_ID),
+            tmp_path,
+        )
+    assert rejections == [("content", "upload")]
+
+
+def test_ordinary_fetch_is_not_counted(tmp_path, monkeypatch, rejections):
+    content = b'{"type": "FeatureCollection", "features": []}'
+    monkeypatch.setattr(tasks.Collector, "fetch", _fake_fetch_writing(content))
+    tasks._fetch_resource(tmp_path, "https://example.org/a.json")
+    assert rejections == []
+
+
+def test_paged_wfs_host_that_does_not_resolve_is_not_counted(
+    tmp_path, monkeypatch, rejections
+):
+    # Only internal addresses are security rejections; safe_fetch counts
+    # those. A DNS failure must not be counted here as a URL rejection.
+    def unresolvable(url):
+        raise tasks.UnsafeUrlError("URL host is not allowed: did not resolve")
+
+    monkeypatch.setattr(tasks, "check_host_resolves_publicly", unresolvable)
+    with pytest.raises(tasks.CustomException):
+        tasks._fetch_resource(
+            tmp_path, "https://wfs.example.org/wfs", {"page_size": 100}
+        )
+    assert rejections == []

@@ -152,6 +152,42 @@ def test_check_host_resolves_publicly_rejects_internal(monkeypatch):
         safe_fetch.check_host_resolves_publicly("https://wfs.example.org/wfs")
 
 
+@pytest.fixture
+def rejections(monkeypatch):
+    """Security rejections counted, as (layer, source) pairs."""
+    counted = []
+    monkeypatch.setattr(
+        safe_fetch,
+        "count_security_rejection",
+        lambda layer, source: counted.append((layer, source)),
+    )
+    return counted
+
+
+def test_each_internal_address_rejection_is_counted_once(monkeypatch, rejections):
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo("169.254.170.2"))
+    with safe_fetch.untrusted_fetches():
+        with pytest.raises(safe_fetch.NonPublicAddressError):
+            urllib3_connection.create_connection(("public-looking.example", 80))
+    with pytest.raises(UnsafeUrlError):
+        safe_fetch.check_host_resolves_publicly("https://wfs.example.org/wfs")
+    assert rejections == [("connection", "fetch"), ("connection", "fetch")]
+
+
+def test_host_that_does_not_resolve_is_not_counted(monkeypatch, rejections):
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: [])
+    with safe_fetch.untrusted_fetches():
+        with pytest.raises(safe_fetch.BlockedAddressError):
+            urllib3_connection.create_connection(("missing.example", 80))
+    assert rejections == []
+
+
+def test_public_address_is_not_counted(monkeypatch, rejections):
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo("93.184.216.34"))
+    safe_fetch.check_host_resolves_publicly("https://wfs.example.org/wfs")
+    assert rejections == []
+
+
 def test_check_host_resolves_publicly_accepts_public(monkeypatch):
     monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo("93.184.216.34"))
     safe_fetch.check_host_resolves_publicly("https://wfs.example.org/wfs")
