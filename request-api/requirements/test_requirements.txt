@@ -266,7 +266,7 @@ s3transfer==0.10.1
     # via
     #   -r requirements/requirements.txt
     #   boto3
-sentry-sdk[celery,fastapi]==2.35.0
+sentry-sdk[celery,fastapi]==2.44.0
     # via -r requirements/requirements.txt
 shellingham==1.5.4
     # via

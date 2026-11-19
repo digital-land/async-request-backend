@@ -7,7 +7,7 @@ alembic==1.13.1
 boto3>=1.26.79
 celery[sqs]==5.3.6
 shortuuid==1.0.13
-sentry-sdk[fastapi,celery]==2.35.0
+sentry-sdk[fastapi,celery]==2.44.0
 slack-sdk==3.33.5
 PyJWT[crypto]>=2.12.0
 cryptography>=48.0.1

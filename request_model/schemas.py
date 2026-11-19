@@ -1,7 +1,14 @@
 import datetime
 from enum import Enum
 from typing import Union, Literal, Optional, List, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
+from pydantic_core import PydanticCustomError
+
+from request_model.url_safety import UnsafeUrlError, check_fetch_url
+
+# Pydantic error type for a URL refused by check_fetch_url, so callers can tell
+# it apart from other validation errors (request-api counts these).
+UNSAFE_URL_ERROR_TYPE = "unsafe_url"
 
 
 class RequestTypeEnum(str, Enum):
@@ -68,6 +75,20 @@ class RequestBase(BaseModel):
 
 class RequestCreate(RequestBase):
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def url_is_safe_to_fetch(self):
+        # Only checked when a request is created, so stored requests created
+        # before this check can still be read back.
+        url = getattr(self.params, "url", None)
+        if url:
+            try:
+                check_fetch_url(url)
+            except UnsafeUrlError as e:
+                raise PydanticCustomError(
+                    UNSAFE_URL_ERROR_TYPE, "Invalid url: {reason}", {"reason": str(e)}
+                ) from e
+        return self
 
 
 class ResponseData(BaseModel):
