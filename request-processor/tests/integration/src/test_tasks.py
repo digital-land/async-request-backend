@@ -453,7 +453,19 @@ def test_add_data_errors_are_published(db, result_bucket, monkeypatch, failure):
         assert payload["response"]["error"]
 
 
-def test_failed_upload_preserves_original_error(db, result_bucket, monkeypatch, caplog):
+@pytest.fixture
+def task_logs(caplog):
+    # Celery can route task logs to stderr without propagating to pytest's root handler.
+    tasks.logger.addHandler(caplog.handler)
+    try:
+        yield caplog
+    finally:
+        tasks.logger.removeHandler(caplog.handler)
+
+
+def test_failed_upload_preserves_original_error(
+    db, result_bucket, monkeypatch, task_logs
+):
     request = create_request()
 
     def fetch(*args, **kwargs):
@@ -467,7 +479,7 @@ def test_failed_upload_preserves_original_error(db, result_bucket, monkeypatch, 
     assert str(result.result) == "Original processing failure"
     assert tasks._get_request(request["id"]).status == "FAILED"
     assert tasks._get_request(request["id"]).published_at is None
-    assert "Failed to publish failed add-data request" in caplog.text
+    assert "Failed to publish failed add-data request" in task_logs.text
 
 
 def test_republication_records_latest_success(db, result_bucket, monkeypatch):
@@ -493,7 +505,7 @@ def test_republication_records_latest_success(db, result_bucket, monkeypatch):
 
 @pytest.mark.parametrize("processing_failed", [False, True])
 def test_timestamp_failure_preserves_published_result(
-    db, result_bucket, monkeypatch, caplog, processing_failed
+    db, result_bucket, monkeypatch, task_logs, processing_failed
 ):
     request = create_request(saved=not processing_failed)
     original_commit = Session.commit
@@ -529,7 +541,7 @@ def test_timestamp_failure_preserves_published_result(
     assert payload["status"] == expected_status
     if not processing_failed:
         assert payload["response"]["data"] == summaries()
-    assert "Failed to record publication timestamp" in caplog.text
+    assert "Failed to record publication timestamp" in task_logs.text
 
 
 @pytest.mark.parametrize("pause_at", ["status_update", "s3_upload"])

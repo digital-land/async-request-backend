@@ -134,5 +134,6 @@ class Request(RequestBase):
     )
     created: datetime.datetime
     modified: datetime.datetime
+    published_at: Optional[datetime.datetime] = None
     response: Optional[ResponseModel]
     model_config = ConfigDict(from_attributes=True)
