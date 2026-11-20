@@ -2,6 +2,44 @@
 
 Backend providing asynchronous request processing for frontends handling intensive workloads.
 
+Completed and failed `add_data` results are published to `<request-id>.json` in
+the private bucket configured by `REQUEST_DETAILS_BUCKET_NAME` on the worker.
+Grant its runtime role `s3:PutObject` on `arn:aws:s3:::<bucket>/*`; Config's GitHub OIDC role
+needs `s3:GetObject` (and corresponding KMS permissions if applicable).
+Local Compose creates `dluhc-data-platform-request-details-local` in LocalStack.
+
+`request.published_at` records the latest successful S3 upload time in UTC, for both
+success and error results. It is NULL until publication is recorded; a failed later
+upload preserves the previous timestamp. If recording the timestamp fails after
+upload, the error is logged without failing the task or replacing the S3 result.
+A NULL timestamp therefore does not prove the object is absent from S3.
+It is database-only publication metadata,
+not part of the request API/S3 JSON. No automatic publication retry is scheduled.
+Apply migration `f3b152a01c01` before deploying the updated API or workers. Existing
+rows remain NULL because their publication history is unknown.
+
+Publication must succeed before the request becomes COMPLETE, including when the
+workflow returns an error response. Raised exceptions are marked FAILED first,
+then the failure handler attempts to publish that saved request. If this upload
+also fails, it is logged without replacing the original error. Unexpected failures
+may have no saved response; the JSON then contains `response: null`.
+Overlapping deliveries are possible. Failure uploads use S3 `If-None-Match: *`
+so they cannot replace an existing object; a successful upload can replace a
+failure result. Skipped failure uploads do not update `published_at`. Completed
+add-data requests cannot be downgraded by a late failure or reopened by redelivery.
+Re-delivering a task with a saved response republishes it without reallocating
+entities. Check requests are not exported. The JSON contains the
+full `GET /requests/{id}` response using the shared `Request` schema: identity,
+timestamps, submission ID, all parameters and response data. Contact fields belong
+to the separate Add Data Submission record and are not in this schema. Detailed
+rows from `/response-details` are also separate. Returned errors retain the API's
+COMPLETE-with-error convention; raised exceptions export FAILED. Config rejects
+both non-COMPLETE requests and requests containing `response.error`.
+
+Deploy the bucket, permissions and worker configuration before Config's S3 reader.
+Publish saved results for older completed requests before confirming them in
+Manage, and retain objects long enough for delayed confirmation and reruns.
+
 This repository implements open design proposal 001:
 
 https://digital-land.github.io/technical-documentation/architecture/design/proposals/001-publish-async/index.html

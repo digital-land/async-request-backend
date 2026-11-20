@@ -221,24 +221,4 @@ def read_response_geometries(
 
 
 def _map_to_schema(request_model: models.Request) -> schemas.Request:
-    response = None
-    if request_model.response:
-        response_details = None
-        if request_model.response.details:
-            response_details = []
-            for detail in request_model.response.details:
-                response_details.append(detail.detail)
-        response = schemas.ResponseModel(
-            data=request_model.response.data, error=request_model.response.error
-        )
-
-    return schemas.Request(
-        add_data_submission_id=request_model.add_data_submission_id,
-        type=request_model.type,
-        id=request_model.id,
-        status=request_model.status,
-        created=request_model.created,
-        modified=request_model.modified,
-        params=request_model.params,
-        response=response,
-    )
+    return schemas.Request.model_validate(request_model)

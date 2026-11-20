@@ -24,6 +24,10 @@ upload_file_to_bucket() {
 }
 
 create_upload_bucket "dluhc-data-platform-request-files-local"
+awslocal s3api create-bucket \
+  --bucket dluhc-data-platform-request-details-local \
+  --region "${AWS_REGION}" \
+  --create-bucket-configuration LocationConstraint="${AWS_REGION}"
 upload_file_to_bucket "492f15d8-45e4-427e-bde0-f60d69889f40" \
   "/etc/localstack/init/ready.d/article-direction-area.csv" \
   "dluhc-data-platform-request-files-local"

@@ -117,6 +117,8 @@ class ResponseError(BaseModel):
 
 
 class ResponseModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     data: Optional[Dict[str, Any]]
     error: Optional[Dict[str, Any]]
 
