@@ -1,6 +1,8 @@
 import os
+from datetime import datetime, timezone
 from typing import Dict
 import urllib.parse
+from sqlalchemy import or_
 
 import sentry_sdk
 from sentry_sdk.integrations.logging import ignore_logger
@@ -10,6 +12,7 @@ import request_model.schemas as schemas
 import request_model.models as models
 from request_model.url_safety import UnsafeUrlError, check_fetch_url
 import s3_transfer_manager
+from request_results import publish_request_result
 import crud
 import database
 from task_interface.base_tasks import (
@@ -384,7 +387,10 @@ def add_data_task(request: Dict, directories=None):
     request_schema = schemas.Request.model_validate(request)
     request_data = request_schema.params
     logger.info(f"request_payload_params: {json.dumps(request_data, default=str)}")
-    if not request_schema.status == "COMPLETE":
+    # A saved response may exist after an S3 failure or a worker redelivery.
+    # Publish that exact result rather than allocating entity numbers again.
+    saved_response = _get_response(request_schema.id)
+    if saved_response is None and request_schema.status != "COMPLETE":
         if not directories:
             directories = Directories
         else:
@@ -474,7 +480,9 @@ def add_data_task(request: Dict, directories=None):
         else:
             save_response_to_db(request_schema.id, log)
             raise CustomException(log)
-    return _get_request(request_schema.id)
+    result = _get_request(request_schema.id)
+    _publish_request_result(result)
+    return result
 
 
 @task_prerun.connect
@@ -506,6 +514,13 @@ def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
         attributes={"exception": type(exception).__name__},
     )
     _update_request_status(request_id, "FAILED")
+    if args[0].get("type") == schemas.RequestTypeEnum.add_data:
+        try:
+            _publish_request_result(_get_request(request_id), status="FAILED")
+        except Exception:
+            # S3 may itself be the cause of failure. Keep the original error
+            # and database status, and still clean up the request files.
+            logger.exception("Failed to publish failed add-data request %s", request_id)
     clean_up_request_files(request_id)
 
 
@@ -528,11 +543,36 @@ def init_sentry(**_kwargs):
         )
 
 
+def _publish_request_result(request, status="COMPLETE"):
+    if not publish_request_result(request, status=status):
+        return
+    published_at = datetime.now(timezone.utc)
+    try:
+        with database.session_maker()() as session:
+            model = crud.get_request(session, request.id)
+            model.published_at = published_at
+            session.commit()
+    except Exception:
+        # S3 already accepted the result; bookkeeping must not fail the task.
+        logger.exception(
+            "Failed to record publication timestamp for request %s", request.id
+        )
+
+
 def _update_request_status(request_id, status):
     db_session = database.session_maker()
     with db_session() as session:
-        model = crud.get_request(session, request_id)
-        model.status = status
+        query = session.query(models.Request).filter(models.Request.id == request_id)
+        if status != "COMPLETE":
+            # Keep completed add-data requests terminal across overlapping deliveries.
+            # The predicate must be part of the UPDATE, not a separate read/check.
+            query = query.filter(
+                or_(
+                    models.Request.type != schemas.RequestTypeEnum.add_data,
+                    models.Request.status != "COMPLETE",
+                )
+            )
+        query.update({models.Request.status: status}, synchronize_session=False)
         session.commit()
         session.flush()
 
