@@ -1056,3 +1056,25 @@ def test_read_existing_source_entry_not_found(tmp_path):
 def test_read_existing_source_entry_file_missing(tmp_path):
     result = _read_existing_source_entry(str(tmp_path / "source.csv"), "s1")
     assert result is None
+
+
+def test_create_user_friendly_error_log_unsafe_url_does_not_say_try_again():
+    result = create_user_friendly_error_log(
+        {
+            "exceptionType": "UnsafeUrlError",
+            "errMsgDetail": "URL must not point at an internal address",
+        }
+    )
+
+    assert result["message"] == (
+        "We cannot check this link. Use a publicly accessible link to the " "data file."
+    )
+    assert "internal" not in result["message"]
+
+
+def test_create_user_friendly_error_log_unsafe_resource_is_unsupported_file():
+    result = create_user_friendly_error_log({"exceptionType": "UnsafeResourceError"})
+
+    assert result["message"] == (
+        "The selected file must be a CSV, GeoJSON, GML or GeoPackage file"
+    )

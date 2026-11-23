@@ -446,13 +446,26 @@ def test_add_data_task_fail(monkeypatch):
         raise tasks.CustomException({"message": "fail", "status": "404"})
 
     monkeypatch.setattr(tasks, "_fetch_resource", raise_custom)
-    monkeypatch.setattr(tasks, "save_response_to_db", lambda *a, **kw: None)
+    saved = []
+    monkeypatch.setattr(
+        tasks, "save_response_to_db", lambda rid, data: saved.append((rid, data))
+    )
     monkeypatch.setattr(
         tasks, "_get_request", lambda rid: {"id": rid, "status": "FAILED"}
     )
 
     with pytest.raises(tasks.CustomException):
         tasks.add_data_task(request, directories_json)
+
+    # The fetch error is saved so the request explains why it failed.
+    assert len(saved) == 1
+    request_id, error = saved[0]
+    assert request_id == "req-123"
+    assert error["errCode"] == "404"
+    assert error["message"] == (
+        "The URL does not exist. Check the URL you've entered is correct "
+        "(HTTP 404 error)"
+    )
 
 
 def test_check_dataurl_success(monkeypatch):

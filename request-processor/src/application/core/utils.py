@@ -288,9 +288,21 @@ def create_user_friendly_error_log(exception_detail):
     )
 
     user_message = "We could not check this link. Please try again later."
+    unsupported_file_message = (
+        "The selected file must be a CSV, GeoJSON, GML or GeoPackage file"
+    )
 
     # The ordering here has been considered to show the most relevant message to users in the front end
-    if exception_type in ["SSLError", "SSLCertVerificationError"]:
+    # Safety refusals come first: retrying will not help, and the reason is
+    # deliberately not shown.
+    if exception_type == "UnsafeUrlError":
+        user_message = (
+            "We cannot check this link. Use a publicly accessible link to the "
+            "data file."
+        )
+    elif exception_type == "UnsafeResourceError":
+        user_message = unsupported_file_message
+    elif exception_type in ["SSLError", "SSLCertVerificationError"]:
         user_message = "SSL certificate verification failed"
     elif status_code == "403" and is_cloudflare_challenge:
         user_message = (
@@ -308,9 +320,7 @@ def create_user_friendly_error_log(exception_detail):
             "website may be blocking automated downloads."
         )
     elif content_type and "text/html" in content_type:
-        user_message = (
-            "The selected file must be a CSV, GeoJSON, GML or GeoPackage file"
-        )
+        user_message = unsupported_file_message
     elif status_code == "404":
         user_message = "The URL does not exist. Check the URL you've entered is correct (HTTP 404 error)"
     elif plugin == "arcgis" and status_code == "200":

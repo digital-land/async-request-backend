@@ -396,11 +396,7 @@ def add_data_task(request: Dict, directories=None):
             directories.COLLECTION_DIR, "resource", request_schema.id
         )
         if request_data.url:
-            file_name, log = _fetch_resource(
-                resource_dir,
-                request_data.url,
-                endpoint_parameters=request_data.endpoint_parameters,
-            )
+            file_name, log = _fetch_add_data_resource(request_schema, resource_dir)
             organisations = request_data.organisation
             endpoints = None
             resource_start_date = request_data.start_date
@@ -474,6 +470,25 @@ def add_data_task(request: Dict, directories=None):
             save_response_to_db(request_schema.id, log)
             raise CustomException(log)
     return _get_request(request_schema.id)
+
+
+def _fetch_add_data_resource(request_schema, resource_dir):
+    """
+    Fetch an add_data request's URL. If the fetch fails, save why, as
+    check_dataurl does, so the request is not just marked FAILED with no error.
+    """
+    request_data = request_schema.params
+    try:
+        return _fetch_resource(
+            resource_dir,
+            request_data.url,
+            endpoint_parameters=request_data.endpoint_parameters,
+        )
+    except CustomException as e:
+        save_response_to_db(
+            request_schema.id, utils.create_user_friendly_error_log(e.detail)
+        )
+        raise
 
 
 def _request_id_from_args(args):
