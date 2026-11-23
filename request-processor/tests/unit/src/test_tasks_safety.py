@@ -253,6 +253,20 @@ def large_file_server(monkeypatch):
         lambda ip: str(ip) == "127.0.0.1" or real_is_public_ip(ip),
     )
     monkeypatch.setattr(tasks, "check_fetch_url", lambda url: None)
+    # Newer digital-land Collectors also check the URL and connection.
+    try:
+        from digital_land import collect
+        from digital_land.utils import safe_fetch as dl_safe_fetch
+    except ImportError:
+        pass
+    else:
+        real_dl_is_public_ip = dl_safe_fetch.is_public_ip
+        monkeypatch.setattr(collect, "check_fetch_url", lambda url: None)
+        monkeypatch.setattr(
+            dl_safe_fetch,
+            "is_public_ip",
+            lambda ip: str(ip) == "127.0.0.1" or real_dl_is_public_ip(ip),
+        )
     monkeypatch.setattr(safe_fetch, "MAX_RESPONSE_BYTES", 1_000)
     yield f"http://127.0.0.1:{server.server_port}/data.csv"
     server.shutdown()
