@@ -384,3 +384,93 @@ def test_unsafe_params_on_real_request_fail_it_with_an_error(
             },
         )
     ]
+
+
+@pytest.fixture
+def metrics(monkeypatch):
+    """Sentry metrics counted by tasks, as (name, attributes) pairs."""
+    counted = []
+
+    def count(name, value, unit=None, attributes=None):
+        counted.append((name, attributes))
+
+    monkeypatch.setattr(tasks.sentry_sdk.metrics, "count", count)
+    return counted
+
+
+def test_redelivery_for_processing_request_is_counted(
+    stored_request, monkeypatch, metrics
+):
+    monkeypatch.setattr(tasks, "_update_request_status", lambda *a: None)
+    stored_request.status = "PROCESSING"
+    task = tasks.check_datafile
+    task.push_request(called_directly=False)
+    try:
+        tasks.before_task("task-id", task, [_message()], kwargs={})
+    finally:
+        task.pop_request()
+    assert metrics == [("async.task.redelivered", {"task": task.name})]
+
+
+def test_first_delivery_is_not_counted_as_redelivery(
+    stored_request, monkeypatch, metrics
+):
+    monkeypatch.setattr(tasks, "_update_request_status", lambda *a: None)
+    task = tasks.check_datafile
+    task.push_request(called_directly=False)
+    try:
+        tasks.before_task("task-id", task, [_message()], kwargs={})
+    finally:
+        task.pop_request()
+    assert metrics == []
+
+
+@pytest.mark.parametrize(
+    "exception, expected",
+    [
+        (
+            tasks.CustomException(
+                {"message": "x", "exception_type": "UnsafeResourceError"}
+            ),
+            "UnsafeResourceError",
+        ),
+        (
+            tasks.CustomException({"message": "x", "exception": "ConnectionError"}),
+            "ConnectionError",
+        ),
+        (tasks.CustomException({"message": "x"}), "CustomException"),
+        (ValueError("boom"), "ValueError"),
+    ],
+)
+def test_task_failure_metric_records_the_cause(
+    monkeypatch, metrics, exception, expected
+):
+    monkeypatch.setattr(tasks, "_update_request_status", lambda *a: None)
+    monkeypatch.setattr(tasks, "clean_up_request_files", lambda *a: None)
+    tasks.after_task_failure(
+        "task-id", exception, None, None, [_message()], sender=tasks.check_datafile
+    )
+    assert metrics == [
+        (
+            "request_processor.task_failure",
+            {"exception": expected, "task": tasks.check_datafile.name},
+        )
+    ]
+
+
+def test_check_url_user_error_metric_reads_custom_exception_detail(metrics):
+    detail = tasks.CustomException(
+        {"message": "x", "status": "404", "exception": "HTTPError"}
+    ).detail
+    tasks._capture_sentry_event(detail, VALID_ID, handled=True)
+    assert metrics == [
+        (
+            "async.check_url.user_error",
+            {
+                "task": "CheckURL",
+                "exception": "HTTPError",
+                "status": "404",
+                "plugin": None,
+            },
+        )
+    ]

@@ -71,6 +71,9 @@ def validate_broker_message(args, kwargs, expected_type, get_stored_request):
 
     Raise UnsafeRequestParams if the message matches the stored request but its
     params fail validate_params.
+
+    Return the stored request's status: PROCESSING means SQS redelivered the
+    message after its worker was lost.
     """
     if kwargs or len(args) != 1 or not isinstance(args[0], dict):
         raise UntrustedTaskMessage("Unexpected task arguments")
@@ -111,6 +114,7 @@ def validate_broker_message(args, kwargs, expected_type, get_stored_request):
         )
 
     validate_params(stored_params)
+    return stored.status
 
 
 def validate_params(params):
@@ -161,7 +165,8 @@ class BrokerMessageGuard:
 
     A task_prerun handler should call validate_message first, so a forged
     message never changes the request's status. The result is cached on the
-    task request so each delivery is only validated once.
+    task request so each delivery is only validated once. validate_message
+    returns the stored status, so the handler can tell a redelivery apart.
 
     Subclasses set expected_type and implement get_stored_request.
     """
@@ -174,8 +179,9 @@ class BrokerMessageGuard:
     def validate_message(self, args, kwargs):
         request = self.request
         if not hasattr(request, "broker_message_error"):
+            request.broker_message_status = None
             try:
-                validate_broker_message(
+                request.broker_message_status = validate_broker_message(
                     args, kwargs, self.expected_type, self.get_stored_request
                 )
                 request.broker_message_error = None
@@ -183,6 +189,7 @@ class BrokerMessageGuard:
                 request.broker_message_error = e
         if request.broker_message_error is not None:
             raise request.broker_message_error
+        return request.broker_message_status
 
     def __call__(self, *args, **kwargs):
         if not self.request.called_directly:

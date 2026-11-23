@@ -330,3 +330,73 @@ def test_local_add_data_without_token_is_queued(api, monkeypatch):
     assert response.status_code == 202
     create.assert_called_once()
     queue.assert_called_once()
+
+
+@pytest.fixture
+def auth_rejections(monkeypatch):
+    import auth
+
+    counted = []
+
+    def count(name, value, unit=None, attributes=None):
+        counted.append((name, attributes))
+
+    monkeypatch.setattr(auth.sentry_sdk.metrics, "count", count)
+    return counted
+
+
+def _signed(signing_key, **changes):
+    payload = claims()
+    payload.update(changes)
+    return jwt.encode(payload, signing_key, algorithm="RS256")
+
+
+@pytest.mark.parametrize(
+    "header, env_change, reason, issuer",
+    [
+        (lambda key: None, None, "missing", "unknown"),
+        (lambda key: "Bearer invalid", None, "invalid", "unknown"),
+        (lambda key: "Bearer " + _signed(key, iss="other"), None, "invalid", "unknown"),
+        (lambda key: "Bearer " + _signed(key, exp=1), None, "invalid", "manage"),
+        (lambda key: "Bearer " + _signed(key, role="viewer"), None, "role", "manage"),
+        (
+            lambda key: "Bearer " + _signed(key),
+            "MANAGE_JWT_PUBLIC_KEY",
+            "unavailable",
+            "manage",
+        ),
+    ],
+)
+def test_auth_rejections_are_counted(
+    api, signing_key, monkeypatch, auth_rejections, header, env_change, reason, issuer
+):
+    client, _, _ = api
+    if env_change:
+        monkeypatch.delenv(env_change)
+    value = header(signing_key)
+    headers = {"Authorization": value} if value else {}
+    response = client.post("/requests", json=body(), headers=headers)
+    assert response.status_code in (401, 403, 503)
+    assert auth_rejections == [
+        ("async.auth.rejected", {"reason": reason, "issuer": issuer})
+    ]
+
+
+def test_accepted_token_is_not_counted(api, signing_key, auth_rejections):
+    client, create, _ = api
+    create.return_value = models.Request(
+        id="test",
+        type="add_data",
+        status="NEW",
+        params=body()["params"],
+        created=datetime.now(),
+        modified=datetime.now(),
+        response=None,
+    )
+    response = client.post(
+        "/requests",
+        json=body(),
+        headers={"Authorization": "Bearer " + _signed(signing_key)},
+    )
+    assert response.status_code == 202
+    assert auth_rejections == []

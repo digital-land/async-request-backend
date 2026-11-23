@@ -508,7 +508,7 @@ def _request_id_from_args(args):
 def before_task(task_id, task, args, **kwargs):
     if isinstance(task, BrokerMessageGuard):
         try:
-            task.validate_message(args, kwargs.get("kwargs") or {})
+            stored_status = task.validate_message(args, kwargs.get("kwargs") or {})
         except UntrustedTaskMessage as e:
             # Leave the request untouched; __call__ raises the same error.
             # Counted here, once per delivery: __call__ reuses this result.
@@ -521,6 +521,14 @@ def before_task(task_id, task, args, **kwargs):
             count_security_rejection("params", "broker")
             logger.warning(f"Refused params for task {task_id}: {e}")
             return
+        if stored_status == "PROCESSING":
+            # Tasks are acknowledged late, so SQS redelivers a message when
+            # its worker was lost (killed, stopped, or past the visibility
+            # timeout).
+            logger.warning(f"Task {task_id} redelivered for a PROCESSING request")
+            sentry_sdk.metrics.count(
+                "async.task.redelivered", 1, attributes={"task": task.name}
+            )
     request_id = _request_id_from_args(args)
     if request_id is None:
         return
@@ -560,11 +568,18 @@ def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
             },
         )
     logger.debug(f"Set status to FAILED for request {request_id}")
-    # Exception type only: request_id would give the metric unbounded cardinality.
+    # Exception and task names only: request_id would give the metric unbounded
+    # cardinality. Handled failures all raise CustomException, so use the cause
+    # it records.
+    cause = getattr(exception, "exception_type", None) or type(exception).__name__
+    sender = kwargs.get("sender")
     sentry_sdk.metrics.count(
         "request_processor.task_failure",
         1,
-        attributes={"exception": type(exception).__name__},
+        attributes={
+            "exception": str(cause),
+            "task": getattr(sender, "name", None) or "unknown",
+        },
     )
     _update_request_status(request_id, "FAILED")
     clean_up_request_files(request_id)
@@ -632,13 +647,23 @@ def _capture_sentry_event(
     message = error_log.get("message", "Error occurred") if is_dict else str(error_log)
 
     if handled:
+        # Handled errors come from CustomException.detail (exceptionType,
+        # errCode); generic error logs use exception and status.
         sentry_sdk.metrics.count(
             "async.check_url.user_error",
             1,
             attributes={
                 "task": task_name,
-                "exception": error_log.get("exception") if is_dict else None,
-                "status": error_log.get("status") if is_dict else None,
+                "exception": (
+                    error_log.get("exceptionType") or error_log.get("exception")
+                    if is_dict
+                    else None
+                ),
+                "status": (
+                    error_log.get("errCode") or error_log.get("status")
+                    if is_dict
+                    else None
+                ),
                 "plugin": error_log.get("plugin") if is_dict else None,
             },
         )
