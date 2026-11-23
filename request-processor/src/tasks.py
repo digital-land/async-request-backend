@@ -27,7 +27,9 @@ from application.logging import monitoring
 from application.logging.monitoring import count_security_rejection
 from application.security.safe_fetch import (
     MAX_RESPONSE_BYTES,
+    MAX_RESPONSE_SECONDS,
     ResponseTooLargeError,
+    ResponseTooSlowError,
     check_host_resolves_publicly,
     untrusted_fetches,
 )
@@ -777,6 +779,39 @@ def _fetch_resource(resource_dir, url, endpoint_parameters=None):
     return file_name, log
 
 
+def _refused_fetch_error(log):
+    """
+    The error to show when safe_fetch refused a fetch because the response was
+    too large or too slow, or None if it did not.
+    """
+    refusals = {
+        ResponseTooLargeError.__name__: (
+            "size",
+            "The file at this URL is too large",
+            f"The file at this URL is larger than {MAX_RESPONSE_BYTES // 1_000_000}MB",
+        ),
+        ResponseTooSlowError.__name__: (
+            "time",
+            "The file at this URL took too long to download",
+            "The server did not finish sending the file within "
+            f"{MAX_RESPONSE_SECONDS // 60:.0f} minutes",
+        ),
+    }
+    exception = log.get("exception")
+    if exception not in refusals:
+        return None
+    layer, message, detail = refusals[exception]
+    count_security_rejection(layer, "fetch")
+    return CustomException(
+        {
+            "message": message,
+            "status": log.get("status", ""),
+            "exception": exception,
+            "user_message_detail": detail,
+        }
+    )
+
+
 def _fetch_with_plugins(collector, url, endpoint_parameters):
     plugins = [None, "arcgis", "wfs"]
     content_type = None
@@ -810,19 +845,9 @@ def _fetch_with_plugins(collector, url, endpoint_parameters):
                     }
                 )
         elif log.get("exception") or log.get("status", "").startswith("4"):
-            if log.get("exception") == ResponseTooLargeError.__name__:
-                count_security_rejection("size", "fetch")
-                raise CustomException(
-                    {
-                        "message": "The file at this URL is too large",
-                        "status": log.get("status", ""),
-                        "exception": ResponseTooLargeError.__name__,
-                        "user_message_detail": (
-                            "The file at this URL is larger than "
-                            f"{MAX_RESPONSE_BYTES // 1_000_000}MB"
-                        ),
-                    }
-                )
+            refused = _refused_fetch_error(log)
+            if refused:
+                raise refused
             log["plugin"] = plugin  # Save plugin used for arcgis error context
             break
 

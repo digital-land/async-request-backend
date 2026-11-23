@@ -220,31 +220,39 @@ def test_ordinary_fetch_is_not_counted(tmp_path, monkeypatch, rejections):
 
 
 @pytest.fixture
-def large_file_server(monkeypatch):
-    """A local server, treated as public, serving a file over a small limit."""
+def public_local_server(monkeypatch):
+    """
+    Starts a local server, treated as public, whose response body is written
+    by the given function. Returns the URL to fetch.
+    """
     import http.server
     import threading
 
     from application.security import safe_fetch
 
-    class Handler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self):
-            self.send_response(200)
-            self.send_header("Content-Type", "text/csv")
-            self.end_headers()
-            self.wfile.write(b"reference\n" + b"1\n" * 10_000)
+    servers = []
 
-        def log_message(self, *args):
-            pass
+    def start(write_body):
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv")
+                self.end_headers()
+                write_body(self.wfile)
 
-        def handle_one_request(self):
-            try:
-                super().handle_one_request()
-            except ConnectionError:
-                pass  # the client stopped reading at the limit
+            def log_message(self, *args):
+                pass
 
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+            def handle_one_request(self):
+                try:
+                    super().handle_one_request()
+                except ConnectionError:
+                    pass  # the client stopped reading
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        servers.append(server)
+        return f"http://127.0.0.1:{server.server_port}/data.csv"
 
     real_is_public_ip = safe_fetch.is_public_ip
     monkeypatch.setattr(
@@ -267,9 +275,50 @@ def large_file_server(monkeypatch):
             "is_public_ip",
             lambda ip: str(ip) == "127.0.0.1" or real_dl_is_public_ip(ip),
         )
+    yield start
+    for server in servers:
+        server.shutdown()
+
+
+@pytest.fixture
+def large_file_server(monkeypatch, public_local_server):
+    """A local server, treated as public, serving a file over a small limit."""
+    from application.security import safe_fetch
+
     monkeypatch.setattr(safe_fetch, "MAX_RESPONSE_BYTES", 1_000)
-    yield f"http://127.0.0.1:{server.server_port}/data.csv"
-    server.shutdown()
+    return public_local_server(
+        lambda wfile: wfile.write(b"reference\n" + b"1\n" * 10_000)
+    )
+
+
+@pytest.fixture
+def slow_file_server(monkeypatch, public_local_server):
+    """A local server, treated as public, sending a file a byte at a time."""
+    import time
+
+    from application.security import safe_fetch
+
+    def write_slowly(wfile):
+        for byte in b"reference\n" + b"1\n" * 100:
+            wfile.write(bytes([byte]))
+            wfile.flush()
+            time.sleep(0.1)
+
+    monkeypatch.setattr(safe_fetch, "MAX_RESPONSE_SECONDS", 0.5)
+    return public_local_server(write_slowly)
+
+
+def test_fetch_resource_refuses_file_over_time_limit(
+    tmp_path, monkeypatch, slow_file_server, rejections
+):
+    # The Collector writes its logs relative to the working directory.
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(tasks.CustomException) as raised:
+        tasks._fetch_resource(tmp_path / "resource", slow_file_server)
+    assert raised.value.detail["exceptionType"] == "ResponseTooSlowError"
+    assert "did not finish sending" in raised.value.detail["errMsgDetail"]
+    assert rejections == [("time", "fetch")]
+    assert not any((tmp_path / "resource").iterdir())
 
 
 def test_fetch_resource_refuses_file_over_size_limit(

@@ -13,7 +13,10 @@ outside the context manager, such as boto3 to S3 and SQS, are unaffected.
 
 While it is active, every response read through requests is also limited to
 MAX_RESPONSE_BYTES, so a URL cannot exhaust the worker's memory with a huge or
-endless body. This matches Submit's limit for URLs.
+endless body. This matches Submit's limit for URLs. Each response must also
+arrive within MAX_RESPONSE_SECONDS in total, so a server that sends a byte at a
+time cannot hold the worker forever: the read timeout only limits each wait
+for data, not the whole response.
 
 The paged WFS plugin fetches with ogr2ogr (GDAL) in a subprocess, which this
 cannot see, so check_host_resolves_publicly is also called before fetching.
@@ -23,9 +26,11 @@ import contextlib
 import ipaddress
 import socket
 import threading
+import weakref
 from urllib.parse import urlsplit
 
 import requests
+import urllib3.connection
 import urllib3.util.connection as urllib3_connection
 from requests.adapters import HTTPAdapter
 
@@ -34,11 +39,25 @@ from request_model.url_safety import UnsafeUrlError, is_public_ip
 
 # Matches Submit's validations.maxFileSize for URLs.
 MAX_RESPONSE_BYTES = 100_000_000
+# Generous on purpose: only a server that is stalling should hit it. 100MB in
+# 15 minutes needs about 110KB/s.
+MAX_RESPONSE_SECONDS = 15 * 60
 _READ_CHUNK_SIZE = 64 * 1024
 
 _state = threading.local()
 _original_create_connection = urllib3_connection.create_connection
 _original_adapter_send = HTTPAdapter.send
+_CONNECTION_CLASSES = (
+    urllib3.connection.HTTPConnection,
+    urllib3.connection.HTTPSConnection,
+)
+# Unwrap in case another import of this module already installed its guard.
+_original_connects = {
+    cls: getattr(
+        cls.__dict__["connect"], "_safe_fetch_original", cls.__dict__["connect"]
+    )
+    for cls in _CONNECTION_CLASSES
+}
 
 
 class BlockedAddressError(OSError):
@@ -51,6 +70,10 @@ class NonPublicAddressError(BlockedAddressError):
 
 class ResponseTooLargeError(requests.exceptions.RequestException):
     """A fetched response was larger than MAX_RESPONSE_BYTES."""
+
+
+class ResponseTooSlowError(requests.exceptions.Timeout):
+    """A fetched response took longer than MAX_RESPONSE_SECONDS in total."""
 
 
 def _public_addresses(host, port):
@@ -86,6 +109,77 @@ def _guarded_create_connection(address, *args, **kwargs):
     raise last_error
 
 
+def _guarded_connect(original):
+    def connect(self):
+        original(self)
+        # Record the final socket (after any TLS wrapping) so a deadline can
+        # shut it down; see _Deadline.
+        sockets = getattr(_state, "sockets", None)
+        if sockets is not None and self.sock is not None:
+            sockets.add(self.sock)
+
+    connect.__qualname__ = f"_guarded_connect.{original.__qualname__}"
+    connect._safe_fetch_original = original
+    return connect
+
+
+_guarded_connects = {
+    cls: _guarded_connect(original) for cls, original in _original_connects.items()
+}
+
+
+def _shut_down(sock):
+    try:
+        sock.shutdown(socket.SHUT_RDWR)
+    except OSError:
+        pass  # already closed
+
+
+class _Deadline:
+    """
+    Shuts down this thread's connections if a response is not read in time.
+
+    A read blocked waiting for data cannot check the clock itself, so a timer
+    on another thread shuts the sockets down, which makes the blocked read
+    return. Shutting down an idle pooled connection is harmless: urllib3 sees
+    it has dropped and opens a new one.
+    """
+
+    def __init__(self, seconds, sockets):
+        self._lock = threading.Lock()
+        self._sockets = sockets
+        self._expired = False
+        self._finished = False
+        self._timer = threading.Timer(seconds, self._expire)
+        self._timer.daemon = True
+        self._timer.start()
+
+    def _expire(self):
+        with self._lock:
+            if self._finished:
+                return
+            self._expired = True
+            sockets = list(self._sockets)
+        for sock in sockets:
+            _shut_down(sock)
+
+    def finish(self):
+        """Stop the timer. Returns True if it fired, so the read may be cut short."""
+        self._timer.cancel()
+        with self._lock:
+            self._finished = True
+            return self._expired
+
+
+def _too_slow(response=None):
+    if response is not None:
+        response.close()
+    return ResponseTooSlowError(
+        f"Response took longer than {MAX_RESPONSE_SECONDS} seconds",
+        response=response,
+    )
+
+
 def _too_large(response):
     response.close()
     return ResponseTooLargeError(
@@ -105,21 +199,30 @@ def _size_limited_send(
     # read all of it. The limit applies after Content-Encoding is decoded, so a
     # small gzip body cannot expand past it either. Callers that asked to
     # stream get the body already read, which requests supports.
-    response = _original_adapter_send(self, request, stream=True, **options)
-
-    declared = response.headers.get("Content-Length", "")
-    if declared.isdigit() and int(declared) > MAX_RESPONSE_BYTES:
-        raise _too_large(response)
-
-    body = bytearray()
+    deadline = _Deadline(MAX_RESPONSE_SECONDS, _state.sockets)
+    response = None
     try:
+        response = _original_adapter_send(self, request, stream=True, **options)
+
+        declared = response.headers.get("Content-Length", "")
+        if declared.isdigit() and int(declared) > MAX_RESPONSE_BYTES:
+            raise _too_large(response)
+
+        body = bytearray()
         for chunk in response.iter_content(_READ_CHUNK_SIZE):
             body += chunk
             if len(body) > MAX_RESPONSE_BYTES:
                 raise _too_large(response)
-    except BaseException:
-        response.close()
+    except BaseException as error:
+        if response is not None:
+            response.close()
+        if deadline.finish() and not isinstance(error, ResponseTooLargeError):
+            raise _too_slow() from error
         raise
+    # A body with no length ends when the connection does, so one cut off by
+    # the deadline can look complete.
+    if deadline.finish():
+        raise _too_slow(response)
     response._content = bytes(body)
     return response
 
@@ -129,6 +232,9 @@ def _install():
         urllib3_connection.create_connection = _guarded_create_connection
     if HTTPAdapter.send is not _size_limited_send:
         HTTPAdapter.send = _size_limited_send
+    for cls, guarded in _guarded_connects.items():
+        if cls.__dict__["connect"] is not guarded:
+            cls.connect = guarded
 
 
 _install()
@@ -138,14 +244,16 @@ _install()
 def untrusted_fetches():
     """
     Refuse connections to non-public addresses, and responses larger than
-    MAX_RESPONSE_BYTES, on this thread while active.
+    MAX_RESPONSE_BYTES or slower than MAX_RESPONSE_SECONDS, on this thread
+    while active.
     """
-    previous = getattr(_state, "active", False)
+    previous = getattr(_state, "active", False), getattr(_state, "sockets", None)
     _state.active = True
+    _state.sockets = weakref.WeakSet()
     try:
         yield
     finally:
-        _state.active = previous
+        _state.active, _state.sockets = previous
 
 
 def check_host_resolves_publicly(url):

@@ -79,7 +79,8 @@ def count_security_rejection(layer, source):
         address a host resolves to, including after a redirect), "content"
         (a file that is unsafe to convert, such as a SQLite
         virtual table or a zip bomb), "size" (a fetched
-        response larger than the worker will read), "message" (a task
+        response larger than the worker will read), "time" (a fetched
+        response that took longer than the worker will wait), "message" (a task
         message that request-api could not have sent) or "params" (a real
         request whose stored params the worker will not use).
     source: where the input came from: "fetch" (a user-supplied URL),

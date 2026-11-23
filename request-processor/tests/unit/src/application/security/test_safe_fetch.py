@@ -313,3 +313,102 @@ def test_too_large_error_is_a_requests_exception():
     # Collector catches requests.RequestException and logs its name, which
     # tasks._fetch_with_plugins turns into a "too large" error for the user.
     assert issubclass(safe_fetch.ResponseTooLargeError, requests.RequestException)
+
+
+def test_too_slow_error_is_a_requests_exception():
+    # As above, for the "took too long" error.
+    assert issubclass(safe_fetch.ResponseTooSlowError, requests.RequestException)
+
+
+@pytest.fixture
+def slow_server():
+    """
+    A local server that sends its response a byte at a time, 0.1s apart. The
+    test sets which part is slow: "headers", "body" or "body-no-length".
+    """
+    import time
+
+    settings = {}
+
+    def drip(wfile, data):
+        for byte in data:
+            wfile.write(bytes([byte]))
+            wfile.flush()
+            time.sleep(0.1)
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            slow = settings["slow"]
+            body = b"x" * 50
+            if slow == "headers":
+                self.wfile.write(b"HTTP/1.1 200 OK\r\n")
+                drip(self.wfile, b"X-Padding: " + b"a" * 50 + b"\r\n")
+                self.wfile.write(b"Content-Length: 50\r\n\r\n" + body)
+                return
+            self.send_response(200)
+            if slow == "body":
+                self.send_header("Content-Length", str(len(body)))
+            # Without a length, the body ends when the connection closes.
+            self.send_header("Connection", "close")
+            self.end_headers()
+            drip(self.wfile, body)
+
+        def log_message(self, *args):
+            pass
+
+        def handle_one_request(self):
+            try:
+                super().handle_one_request()
+            except (ConnectionError, OSError):
+                pass  # the client cut the connection
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{server.server_port}/data.csv", settings
+    server.shutdown()
+
+
+@pytest.fixture
+def short_deadline(monkeypatch):
+    monkeypatch.setattr(safe_fetch, "MAX_RESPONSE_SECONDS", 0.5)
+
+
+@pytest.mark.parametrize("slow", ["headers", "body", "body-no-length"])
+def test_response_over_the_time_limit_is_refused(
+    slow_server, local_server_is_public, short_deadline, slow
+):
+    import time
+
+    url, settings = slow_server
+    settings["slow"] = slow
+    started = time.monotonic()
+    with safe_fetch.untrusted_fetches():
+        # Each byte arrives well within the read timeout, so only the
+        # overall limit can stop it.
+        with pytest.raises(safe_fetch.ResponseTooSlowError):
+            requests.get(url, timeout=5)
+    assert time.monotonic() - started < 2
+
+
+def test_response_within_the_time_limit_is_returned_and_not_cut_later(
+    body_server, local_server_is_public, short_deadline
+):
+    import time
+
+    url, responses = body_server
+    responses["body"] = b"reference\n1\n"
+    with safe_fetch.untrusted_fetches():
+        with requests.Session() as session:
+            assert session.get(url, timeout=5).content == responses["body"]
+            # The first deadline has passed; the pooled connection still works.
+            time.sleep(1)
+            assert session.get(url, timeout=5).content == responses["body"]
+
+
+def test_response_time_is_not_limited_outside_untrusted_fetches(
+    slow_server, short_deadline
+):
+    url, settings = slow_server
+    settings["slow"] = "body"
+    assert requests.get(url, timeout=5).content == b"x" * 50

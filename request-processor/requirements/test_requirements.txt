@@ -524,7 +524,7 @@ tzdata==2025.2
     #   celery
     #   kombu
     #   pandas
-urllib3==2.3.0
+urllib3==2.6.3
     # via
     #   -r requirements/requirements.txt
     #   botocore
