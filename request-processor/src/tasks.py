@@ -26,6 +26,8 @@ from application.security.request_cleanup import clean_up_request_files
 from application.logging import monitoring
 from application.logging.monitoring import count_security_rejection
 from application.security.safe_fetch import (
+    MAX_RESPONSE_BYTES,
+    ResponseTooLargeError,
     check_host_resolves_publicly,
     untrusted_fetches,
 )
@@ -152,8 +154,8 @@ def handle_check_file(request_schema, request_data, tmp_dir):
         save_response_to_db(request_schema.id, log)
         raise CustomException(log)
 
-    # An uploaded file can point GDAL at local files, other S3 objects or
-    # internal addresses just as a fetched one can; see resource_safety.
+    # An uploaded file can be unsafe to convert just as a fetched one can;
+    # see resource_safety.
     try:
         check_resource_is_safe(os.path.join(tmp_dir, fileName))
     except UnsafeResourceError as e:
@@ -757,8 +759,8 @@ def _fetch_resource(resource_dir, url, endpoint_parameters=None):
     with untrusted_fetches():
         file_name, log = _fetch_with_plugins(collector, url, endpoint_parameters)
 
-    # A public URL can still serve a file that points GDAL at internal
-    # locations, so check the content before anything converts it.
+    # A public URL can still serve a file that is unsafe to convert, so check
+    # it before anything converts it.
     if file_name:
         try:
             check_resource_is_safe(os.path.join(resource_dir, file_name))
@@ -808,6 +810,19 @@ def _fetch_with_plugins(collector, url, endpoint_parameters):
                     }
                 )
         elif log.get("exception") or log.get("status", "").startswith("4"):
+            if log.get("exception") == ResponseTooLargeError.__name__:
+                count_security_rejection("size", "fetch")
+                raise CustomException(
+                    {
+                        "message": "The file at this URL is too large",
+                        "status": log.get("status", ""),
+                        "exception": ResponseTooLargeError.__name__,
+                        "user_message_detail": (
+                            "The file at this URL is larger than "
+                            f"{MAX_RESPONSE_BYTES // 1_000_000}MB"
+                        ),
+                    }
+                )
             log["plugin"] = plugin  # Save plugin used for arcgis error context
             break
 

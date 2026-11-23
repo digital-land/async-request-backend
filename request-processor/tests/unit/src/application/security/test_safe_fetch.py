@@ -191,3 +191,125 @@ def test_public_address_is_not_counted(monkeypatch, rejections):
 def test_check_host_resolves_publicly_accepts_public(monkeypatch):
     monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo("93.184.216.34"))
     safe_fetch.check_host_resolves_publicly("https://wfs.example.org/wfs")
+
+
+@pytest.fixture
+def body_server():
+    """A local server whose response body is set per test."""
+    responses = {}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def do_GET(self):
+            body, headers = responses["body"], responses.get("headers", {})
+            self.send_response(200)
+            for name, value in headers.items():
+                self.send_header(name, value)
+            if "Content-Length" not in headers:
+                # Chunked, so the size is not known up front.
+                self.send_header("Transfer-Encoding", "chunked")
+                self.end_headers()
+                for start in range(0, len(body), 4096):
+                    end = start + 4096
+                    part = body[start:end]
+                    self.wfile.write(b"%x\r\n%s\r\n" % (len(part), part))
+                self.wfile.write(b"0\r\n\r\n")
+            else:
+                self.end_headers()
+                self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+        def handle_one_request(self):
+            try:
+                super().handle_one_request()
+            except ConnectionError:
+                pass  # the client stopped reading at the limit
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{server.server_port}/data.csv", responses
+    server.shutdown()
+
+
+@pytest.fixture
+def local_server_is_public(monkeypatch):
+    real_is_public_ip = safe_fetch.is_public_ip
+    monkeypatch.setattr(
+        safe_fetch,
+        "is_public_ip",
+        lambda ip: str(ip) == "127.0.0.1" or real_is_public_ip(ip),
+    )
+
+
+@pytest.fixture
+def small_limit(monkeypatch):
+    monkeypatch.setattr(safe_fetch, "MAX_RESPONSE_BYTES", 10_000)
+
+
+@pytest.mark.parametrize("declare_length", [True, False])
+def test_response_over_the_limit_is_refused(
+    body_server, local_server_is_public, small_limit, declare_length
+):
+    url, responses = body_server
+    responses["body"] = b"x" * 20_000
+    if declare_length:
+        responses["headers"] = {"Content-Length": "20000"}
+    with safe_fetch.untrusted_fetches():
+        with pytest.raises(safe_fetch.ResponseTooLargeError):
+            requests.get(url, timeout=5)
+
+
+def test_response_with_false_small_length_is_still_limited(
+    body_server, local_server_is_public, small_limit
+):
+    url, responses = body_server
+    responses["body"] = b"x" * 20_000
+    # The header is ignored for reading: urllib3 reads to the declared length,
+    # so a lying header gives a short body, never a longer one.
+    responses["headers"] = {"Content-Length": "5"}
+    with safe_fetch.untrusted_fetches():
+        assert len(requests.get(url, timeout=5).content) == 5
+
+
+def test_compressed_response_is_limited_after_decoding(
+    body_server, local_server_is_public, small_limit
+):
+    import gzip
+
+    url, responses = body_server
+    responses["body"] = gzip.compress(b"x" * 1_000_000)
+    responses["headers"] = {"Content-Encoding": "gzip"}
+    assert len(responses["body"]) < 10_000
+    with safe_fetch.untrusted_fetches():
+        with pytest.raises(safe_fetch.ResponseTooLargeError):
+            requests.get(url, timeout=5)
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_response_under_the_limit_is_returned(
+    body_server, local_server_is_public, small_limit, stream
+):
+    url, responses = body_server
+    responses["body"] = b"reference\n" + b"1" * 5_000
+    with safe_fetch.untrusted_fetches():
+        response = requests.get(url, timeout=5, stream=stream)
+        assert response.content == responses["body"]
+        assert b"".join(response.iter_content(100)) == responses["body"]
+
+
+def test_response_size_is_not_limited_outside_untrusted_fetches(
+    body_server, small_limit
+):
+    url, responses = body_server
+    responses["body"] = b"x" * 20_000
+    assert len(requests.get(url, timeout=5).content) == 20_000
+
+
+def test_too_large_error_is_a_requests_exception():
+    # Collector catches requests.RequestException and logs its name, which
+    # tasks._fetch_with_plugins turns into a "too large" error for the user.
+    assert issubclass(safe_fetch.ResponseTooLargeError, requests.RequestException)

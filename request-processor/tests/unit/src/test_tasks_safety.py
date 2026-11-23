@@ -25,16 +25,38 @@ def _message(request_id=VALID_ID, params=None):
     }
 
 
-VRT_POINTING_ELSEWHERE = (
-    b"<OGRVRTDataSource><OGRVRTLayer name='x'><SrcDataSource>"
-    b"/vsicurl/http://169.254.170.2/v2/credentials/abc"
-    b"</SrcDataSource></OGRVRTLayer></OGRVRTDataSource>"
-)
-UPLOADED_VRT_READING_S3 = (
-    b"<OGRVRTDataSource><OGRVRTLayer name='x'><SrcDataSource>"
-    b"/vsisparse//vsis3/bucket/492f15d8-45e4-427e-bde0-f60d69889f41"
-    b"</SrcDataSource></OGRVRTLayer></OGRVRTDataSource>"
-)
+def _unsafe_database():
+    """A SQLite file with a virtual table that reads a local file."""
+    import sqlite3
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        path = Path(tmp_dir) / "db"
+        connection = sqlite3.connect(path)
+        connection.execute("CREATE TABLE t(a)")
+        connection.execute("PRAGMA writable_schema=1")
+        connection.execute(
+            "INSERT INTO sqlite_master VALUES('table', 'x', 'x', 0, "
+            "\"CREATE VIRTUAL TABLE x USING VirtualOGR('/etc/hostname')\")"
+        )
+        connection.commit()
+        connection.close()
+        return path.read_bytes()
+
+
+def _zipped(name, content):
+    import io
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(name, content)
+    return buffer.getvalue()
+
+
+UNSAFE_DATABASE = _unsafe_database()
+UNSAFE_DATABASE_IN_ZIP = _zipped("boundary.gml", UNSAFE_DATABASE)
 
 
 def _fake_fetch_writing(content):
@@ -53,15 +75,13 @@ def _fake_s3_download(content):
     return download
 
 
-def test_fetch_resource_refuses_gdal_pointer_file(tmp_path, monkeypatch):
-    # A public https URL serving a VRT named .gml.
-    monkeypatch.setattr(
-        tasks.Collector, "fetch", _fake_fetch_writing(VRT_POINTING_ELSEWHERE)
-    )
+def test_fetch_resource_refuses_unsafe_database(tmp_path, monkeypatch):
+    # A public https URL serving a SQLite file with a file-reading virtual table.
+    monkeypatch.setattr(tasks.Collector, "fetch", _fake_fetch_writing(UNSAFE_DATABASE))
     with pytest.raises(tasks.CustomException) as raised:
-        tasks._fetch_resource(tmp_path, "https://example.org/boundary.gml")
+        tasks._fetch_resource(tmp_path, "https://example.org/boundary.gpkg")
     assert raised.value.detail["exceptionType"] == "UnsafeResourceError"
-    assert "another data source" in raised.value.detail["errMsgDetail"]
+    assert "virtual table" in raised.value.detail["errMsgDetail"]
 
 
 def test_fetch_resource_accepts_ordinary_file(tmp_path, monkeypatch):
@@ -72,17 +92,8 @@ def test_fetch_resource_accepts_ordinary_file(tmp_path, monkeypatch):
     assert log["plugin"] is None
 
 
-@pytest.mark.parametrize(
-    "content",
-    [
-        UPLOADED_VRT_READING_S3,
-        b'{"type": "gdal_streamed_alg", "command_line": "gdal vector pipeline '
-        b'! read /proc/self/environ ! write -f stream streamed_dataset"}',
-    ],
-)
-def test_check_file_refuses_upload_that_points_gdal_elsewhere(
-    tmp_path, monkeypatch, content
-):
+@pytest.mark.parametrize("content", [UNSAFE_DATABASE, UNSAFE_DATABASE_IN_ZIP])
+def test_check_file_refuses_unsafe_upload(tmp_path, monkeypatch, content):
     saved = []
     monkeypatch.setenv("REQUEST_FILES_BUCKET_NAME", "bucket")
     monkeypatch.setattr(
@@ -178,11 +189,9 @@ def test_refused_url_is_counted(tmp_path, rejections):
 
 
 def test_refused_fetched_file_is_counted(tmp_path, monkeypatch, rejections):
-    monkeypatch.setattr(
-        tasks.Collector, "fetch", _fake_fetch_writing(VRT_POINTING_ELSEWHERE)
-    )
+    monkeypatch.setattr(tasks.Collector, "fetch", _fake_fetch_writing(UNSAFE_DATABASE))
     with pytest.raises(tasks.CustomException):
-        tasks._fetch_resource(tmp_path, "https://example.org/boundary.gml")
+        tasks._fetch_resource(tmp_path, "https://example.org/boundary.gpkg")
     assert rejections == [("content", "fetch")]
 
 
@@ -191,7 +200,7 @@ def test_refused_upload_is_counted(tmp_path, monkeypatch, rejections):
     monkeypatch.setattr(
         tasks.s3_transfer_manager,
         "download_with_default_configuration",
-        _fake_s3_download(UPLOADED_VRT_READING_S3),
+        _fake_s3_download(UNSAFE_DATABASE),
     )
     monkeypatch.setattr(tasks, "save_response_to_db", lambda request_id, log: None)
     with pytest.raises(tasks.CustomException):
@@ -208,6 +217,58 @@ def test_ordinary_fetch_is_not_counted(tmp_path, monkeypatch, rejections):
     monkeypatch.setattr(tasks.Collector, "fetch", _fake_fetch_writing(content))
     tasks._fetch_resource(tmp_path, "https://example.org/a.json")
     assert rejections == []
+
+
+@pytest.fixture
+def large_file_server(monkeypatch):
+    """A local server, treated as public, serving a file over a small limit."""
+    import http.server
+    import threading
+
+    from application.security import safe_fetch
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/csv")
+            self.end_headers()
+            self.wfile.write(b"reference\n" + b"1\n" * 10_000)
+
+        def log_message(self, *args):
+            pass
+
+        def handle_one_request(self):
+            try:
+                super().handle_one_request()
+            except ConnectionError:
+                pass  # the client stopped reading at the limit
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    real_is_public_ip = safe_fetch.is_public_ip
+    monkeypatch.setattr(
+        safe_fetch,
+        "is_public_ip",
+        lambda ip: str(ip) == "127.0.0.1" or real_is_public_ip(ip),
+    )
+    monkeypatch.setattr(tasks, "check_fetch_url", lambda url: None)
+    monkeypatch.setattr(safe_fetch, "MAX_RESPONSE_BYTES", 1_000)
+    yield f"http://127.0.0.1:{server.server_port}/data.csv"
+    server.shutdown()
+
+
+def test_fetch_resource_refuses_file_over_size_limit(
+    tmp_path, monkeypatch, large_file_server, rejections
+):
+    # The Collector writes its logs relative to the working directory.
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(tasks.CustomException) as raised:
+        tasks._fetch_resource(tmp_path / "resource", large_file_server)
+    assert raised.value.detail["exceptionType"] == "ResponseTooLargeError"
+    assert "larger than" in raised.value.detail["errMsgDetail"]
+    assert rejections == [("size", "fetch")]
+    assert not any((tmp_path / "resource").iterdir())
 
 
 def test_paged_wfs_host_that_does_not_resolve_is_not_counted(
