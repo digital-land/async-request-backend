@@ -648,7 +648,7 @@ def test_check_dataurl_fetch_resource_fails(monkeypatch):
     monkeypatch.setattr(
         tasks, "_get_request", lambda rid: {"id": rid, "status": "FAILED"}
     )
-    monkeypatch.setattr(tasks, "_record_check_url_user_error", MagicMock())
+    monkeypatch.setattr(tasks.monitoring, "record_check_url_user_error", MagicMock())
     monkeypatch.setattr(tasks.utils, "create_user_friendly_error_log", lambda x: x)
 
     result = check_dataurl(request, directories_json)
@@ -756,7 +756,10 @@ def test_check_dataurl_with_plugin(monkeypatch):
         tasks, "_get_request", lambda rid: {"id": rid, "status": "COMPLETE"}
     )
     monkeypatch.setattr(
-        tasks.sentry_sdk.metrics, "count", lambda *a, **kw: None, raising=False
+        tasks.monitoring.sentry_sdk.metrics,
+        "count",
+        lambda *a, **kw: None,
+        raising=False,
     )
 
     result = check_dataurl(request, directories_json)

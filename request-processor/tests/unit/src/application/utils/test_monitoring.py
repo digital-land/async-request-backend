@@ -1,6 +1,6 @@
 import sentry_sdk
 
-from application.utils.security_metrics import (
+from application.utils.monitoring import (
     SECURITY_REJECTED_METRIC,
     count_security_rejection,
 )

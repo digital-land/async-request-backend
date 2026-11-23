@@ -2,9 +2,6 @@ import os
 from typing import Dict
 import urllib.parse
 
-import sentry_sdk
-from sentry_sdk.integrations.logging import ignore_logger
-from sentry_sdk.scrubber import DEFAULT_DENYLIST, EventScrubber
 from celery.utils.log import get_task_logger
 from celery.signals import task_prerun, task_success, task_failure, celeryd_init
 import request_model.schemas as schemas
@@ -26,7 +23,8 @@ from application.utils.resource_safety import (
     check_resource_is_safe,
 )
 from application.utils.request_cleanup import clean_up_request_files
-from application.utils.security_metrics import count_security_rejection
+from application.utils import monitoring
+from application.utils.monitoring import count_security_rejection
 from application.utils.safe_fetch import (
     check_host_resolves_publicly,
     untrusted_fetches,
@@ -308,13 +306,13 @@ def check_dataurl(request: Dict, directories=None):  # noqa
 
     except CustomException as e:
         error_log = utils.create_user_friendly_error_log(e.detail)
-        _record_check_url_user_error(error_log, request_schema.id)
+        monitoring.record_check_url_user_error(error_log, request_schema.id)
         save_response_to_db(request_schema.id, error_log)
 
         return _get_request(request_schema.id)
 
     except Exception as e:
-        _log_check_url_failure("fetch", request_schema.id)
+        monitoring.log_check_url_failure("fetch", request_schema.id)
         error_log = create_generic_error_log(
             url=request_data.url, exception=e, status=getattr(e, "status", None)
         )
@@ -336,9 +334,9 @@ def check_dataurl(request: Dict, directories=None):  # noqa
             if "plugin" in fetch_log:
                 response["plugin"] = fetch_log["plugin"]
             save_response_to_db(request_schema.id, response)
-            sentry_sdk.metrics.count("async.url_submission.success", 1)
+            monitoring.count_check_url_success()
         except Exception as e:
-            _log_check_url_failure("run_workflow", request_schema.id)
+            monitoring.log_check_url_failure("run_workflow", request_schema.id)
             plugin = fetch_log.get("plugin") if "plugin" in fetch_log else None
             error_log = create_generic_error_log(
                 url=request_data.url,
@@ -511,13 +509,8 @@ def before_task(task_id, task, args, **kwargs):
             logger.warning(f"Refused params for task {task_id}: {e}")
             return
         if stored_status == "PROCESSING":
-            # Tasks are acknowledged late, so SQS redelivers a message when
-            # its worker was lost (killed, stopped, or past the visibility
-            # timeout).
             logger.warning(f"Task {task_id} redelivered for a PROCESSING request")
-            sentry_sdk.metrics.count(
-                "async.task.redelivered", 1, attributes={"task": task.name}
-            )
+            monitoring.count_task_redelivered(task.name)
     request_id = _request_id_from_args(args)
     if request_id is None:
         return
@@ -557,67 +550,16 @@ def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
             },
         )
     logger.debug(f"Set status to FAILED for request {request_id}")
-    # Exception and task names only: request_id would give the metric unbounded
-    # cardinality. Handled failures all raise CustomException, so use the cause
-    # it records.
-    cause = getattr(exception, "exception_type", None) or type(exception).__name__
-    sender = kwargs.get("sender")
-    sentry_sdk.metrics.count(
-        "request_processor.task_failure",
-        1,
-        attributes={
-            "exception": str(cause),
-            "task": getattr(sender, "name", None) or "unknown",
-        },
+    monitoring.count_task_failure(
+        exception, getattr(kwargs.get("sender"), "name", None)
     )
     _update_request_status(request_id, "FAILED")
     clean_up_request_files(request_id)
 
 
-# Field names Sentry redacts wherever they appear in an event, on top of its
-# defaults (password, secret, token, ...). Covers the worker's own settings.
-SENTRY_DENYLIST = [
-    *DEFAULT_DENYLIST,
-    "database_url",
-    "celery_broker_url",
-    "aws_access_key_id",
-    "aws_secret_access_key",
-    "aws_session_token",
-    "aws_security_token",
-]
-
-
-def _sentry_privacy_options():
-    """
-    Keep secrets out of Sentry events. Frame local variables are not sent: the
-    worker holds credentials and connection strings in locals, which field
-    name scrubbing can't reliably catch.
-    """
-    return {
-        "include_local_variables": False,
-        "send_default_pii": False,
-        "event_scrubber": EventScrubber(denylist=SENTRY_DENYLIST, recursive=True),
-    }
-
-
 @celeryd_init.connect
 def init_sentry(**_kwargs):
-    if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
-        # esridump logs ERROR-level on handled/expected failures (e.g. probing
-        # non-ArcGIS URLs with the arcgis fallback plugin), which would
-        # otherwise be captured as spurious Sentry issues.
-        ignore_logger("esridump.dumper")
-        sentry_sdk.init(
-            enable_tracing=os.environ.get("SENTRY_TRACING_ENABLED", "false").lower()
-            == "true",
-            traces_sample_rate=float(
-                os.environ.get("SENTRY_TRACING_SAMPLE_RATE", "0.01")
-            ),
-            release=os.environ.get("GIT_COMMIT"),
-            debug=os.environ.get("SENTRY_DEBUG", "false").lower() == "true",
-            enable_logs=True,
-            **_sentry_privacy_options(),
-        )
+    monitoring.init_sentry()
 
 
 def _update_request_status(request_id, status):
@@ -637,42 +579,6 @@ def _get_request(request_id):
     with db_session() as session:
         result = crud.get_request(session, request_id)
     return result
-
-
-def _record_check_url_user_error(error_log, request_id):
-    """
-    Record an expected check_url failure, such as an unreachable, refused or
-    unsupported URL: a metric plus a warning log (Sentry Logs, not an Issue),
-    since it isn't an application bug.
-
-    error_log is CustomException.detail after create_user_friendly_error_log.
-    """
-    sentry_sdk.metrics.count(
-        "async.check_url.user_error",
-        1,
-        attributes={
-            "task": "CheckURL",
-            "exception": error_log.get("exceptionType"),
-            "status": error_log.get("errCode"),
-            "plugin": error_log.get("plugin"),
-        },
-    )
-    logger.warning(
-        f"Check URL user error: {error_log.get('message', 'Error occurred')}",
-        extra={"request_id": request_id, "task": "CheckURL", "error_log": error_log},
-    )
-
-
-def _log_check_url_failure(stage, request_id):
-    """
-    Report an unexpected check_url failure. Call from an except block:
-    logger.exception creates one Sentry Issue with the stack trace, grouped by
-    the exception and code path rather than its message.
-    """
-    logger.exception(
-        f"check_url {stage} failed",
-        extra={"request_id": request_id, "task": "CheckURL", "stage": stage},
-    )
 
 
 def _get_response(request_id):

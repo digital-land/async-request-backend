@@ -394,7 +394,7 @@ def metrics(monkeypatch):
     def count(name, value, unit=None, attributes=None):
         counted.append((name, attributes))
 
-    monkeypatch.setattr(tasks.sentry_sdk.metrics, "count", count)
+    monkeypatch.setattr(tasks.monitoring.sentry_sdk.metrics, "count", count)
     return counted
 
 
@@ -462,7 +462,7 @@ def test_check_url_user_error_metric_reads_custom_exception_detail(metrics):
     detail = tasks.CustomException(
         {"message": "x", "status": "404", "exception": "HTTPError"}
     ).detail
-    tasks._record_check_url_user_error(detail, VALID_ID)
+    tasks.monitoring.record_check_url_user_error(detail, VALID_ID)
     assert metrics == [
         (
             "async.check_url.user_error",
@@ -500,7 +500,9 @@ def test_unexpected_check_url_failure_is_one_issue_with_a_stack_trace(
     monkeypatch.setattr(tasks, "save_response_to_db", lambda *a: None)
     monkeypatch.setattr(tasks, "_get_request", lambda rid: None)
     records = []
-    monkeypatch.setattr(tasks.logger, "handle", lambda record: records.append(record))
+    monkeypatch.setattr(
+        tasks.monitoring.logger, "handle", lambda record: records.append(record)
+    )
 
     tasks.check_dataurl(request)
 
@@ -514,7 +516,7 @@ def test_unexpected_check_url_failure_is_one_issue_with_a_stack_trace(
 
 
 def test_worker_sentry_events_have_no_local_variables_and_scrub_secrets():
-    options = tasks._sentry_privacy_options()
+    options = tasks.monitoring.sentry_privacy_options()
     assert options["include_local_variables"] is False
     assert options["send_default_pii"] is False
 
