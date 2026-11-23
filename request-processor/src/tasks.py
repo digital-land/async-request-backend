@@ -4,6 +4,7 @@ import urllib.parse
 
 import sentry_sdk
 from sentry_sdk.integrations.logging import ignore_logger
+from sentry_sdk.scrubber import DEFAULT_DENYLIST, EventScrubber
 from celery.utils.log import get_task_logger
 from celery.signals import task_prerun, task_success, task_failure, celeryd_init
 import request_model.schemas as schemas
@@ -307,24 +308,15 @@ def check_dataurl(request: Dict, directories=None):  # noqa
 
     except CustomException as e:
         error_log = utils.create_user_friendly_error_log(e.detail)
-        # Track in Sentry for monitoring (not as error)
-        _capture_sentry_event(
-            error_log,
-            request_schema.id,
-            handled=True,
-        )
+        _record_check_url_user_error(error_log, request_schema.id)
         save_response_to_db(request_schema.id, error_log)
 
         return _get_request(request_schema.id)
 
     except Exception as e:
-        logger.error(f"Error during _fetch_resource: {e}")
+        _log_check_url_failure("fetch", request_schema.id)
         error_log = create_generic_error_log(
             url=request_data.url, exception=e, status=getattr(e, "status", None)
-        )
-        _capture_sentry_event(
-            error_log,
-            request_schema.id,
         )
         save_response_to_db(request_schema.id, error_log)
         return _get_request(request_schema.id)
@@ -346,7 +338,7 @@ def check_dataurl(request: Dict, directories=None):  # noqa
             save_response_to_db(request_schema.id, response)
             sentry_sdk.metrics.count("async.url_submission.success", 1)
         except Exception as e:
-            logger.error(f"Workflow failed: {e}")
+            _log_check_url_failure("run_workflow", request_schema.id)
             plugin = fetch_log.get("plugin") if "plugin" in fetch_log else None
             error_log = create_generic_error_log(
                 url=request_data.url,
@@ -355,22 +347,19 @@ def check_dataurl(request: Dict, directories=None):  # noqa
                 plugin=plugin,
                 extra_context={"workflow_stage": "run_workflow"},
             )
-            _capture_sentry_event(
-                error_log,
-                request_schema.id,
-            )
             save_response_to_db(request_schema.id, error_log)
     else:
-        logger.info("File could not be fetched from collector")
+        # Not an exception, but not expected either: _fetch_with_plugins
+        # raises when every fetch fails.
+        logger.error(
+            "check_url fetched no file",
+            extra={"request_id": request_schema.id, "stage": "fetch"},
+        )
         error_log = create_generic_error_log(
             url=request_data.url,
             exception="UnknownCollectionError",
             status=None,
             extra_context={"error_type": "unknown_collection_error"},
-        )
-        _capture_sentry_event(
-            error_log,
-            request_schema.id,
         )
         save_response_to_db(request_schema.id, error_log)
 
@@ -585,6 +574,32 @@ def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
     clean_up_request_files(request_id)
 
 
+# Field names Sentry redacts wherever they appear in an event, on top of its
+# defaults (password, secret, token, ...). Covers the worker's own settings.
+SENTRY_DENYLIST = [
+    *DEFAULT_DENYLIST,
+    "database_url",
+    "celery_broker_url",
+    "aws_access_key_id",
+    "aws_secret_access_key",
+    "aws_session_token",
+    "aws_security_token",
+]
+
+
+def _sentry_privacy_options():
+    """
+    Keep secrets out of Sentry events. Frame local variables are not sent: the
+    worker holds credentials and connection strings in locals, which field
+    name scrubbing can't reliably catch.
+    """
+    return {
+        "include_local_variables": False,
+        "send_default_pii": False,
+        "event_scrubber": EventScrubber(denylist=SENTRY_DENYLIST, recursive=True),
+    }
+
+
 @celeryd_init.connect
 def init_sentry(**_kwargs):
     if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
@@ -601,6 +616,7 @@ def init_sentry(**_kwargs):
             release=os.environ.get("GIT_COMMIT"),
             debug=os.environ.get("SENTRY_DEBUG", "false").lower() == "true",
             enable_logs=True,
+            **_sentry_privacy_options(),
         )
 
 
@@ -623,74 +639,40 @@ def _get_request(request_id):
     return result
 
 
-# Built with a desire to have context about Check URL errors, even ones that are handled.
-def _capture_sentry_event(
-    error_log,
-    request_id,
-    handled=False,
-    task_name="CheckURL",
-):
+def _record_check_url_user_error(error_log, request_id):
     """
-    Report CheckURL errors to Sentry.
+    Record an expected check_url failure, such as an unreachable, refused or
+    unsupported URL: a metric plus a warning log (Sentry Logs, not an Issue),
+    since it isn't an application bug.
 
-    Args:
-        error_log: A dict containing error details
-        request_id: The request ID for context
-        handled: If True, this is an expected user error (e.g. an
-            unreachable/unsupported URL submitted for checking) - recorded as
-            a metric plus a regular log entry, not a Sentry Issue, since
-            it isn't an application bug. If False, treated as an unexpected
-            error and captured as a Sentry Issue.
-        task_name: Task name (defaults to "CheckURL")
+    error_log is CustomException.detail after create_user_friendly_error_log.
     """
-    is_dict = isinstance(error_log, dict)
-    message = error_log.get("message", "Error occurred") if is_dict else str(error_log)
+    sentry_sdk.metrics.count(
+        "async.check_url.user_error",
+        1,
+        attributes={
+            "task": "CheckURL",
+            "exception": error_log.get("exceptionType"),
+            "status": error_log.get("errCode"),
+            "plugin": error_log.get("plugin"),
+        },
+    )
+    logger.warning(
+        f"Check URL user error: {error_log.get('message', 'Error occurred')}",
+        extra={"request_id": request_id, "task": "CheckURL", "error_log": error_log},
+    )
 
-    if handled:
-        # Handled errors come from CustomException.detail (exceptionType,
-        # errCode); generic error logs use exception and status.
-        sentry_sdk.metrics.count(
-            "async.check_url.user_error",
-            1,
-            attributes={
-                "task": task_name,
-                "exception": (
-                    error_log.get("exceptionType") or error_log.get("exception")
-                    if is_dict
-                    else None
-                ),
-                "status": (
-                    error_log.get("errCode") or error_log.get("status")
-                    if is_dict
-                    else None
-                ),
-                "plugin": error_log.get("plugin") if is_dict else None,
-            },
-        )
-        logger.warning(
-            f"Check URL user error: {message}",
-            extra={"request_id": request_id, "task": task_name, "error_log": error_log}
-            if is_dict
-            else {"request_id": request_id, "task": task_name},
-        )
-        return
 
-    with sentry_sdk.new_scope() as scope:
-        context = {"id": request_id}
-        if is_dict:
-            if "endpoint-url" in error_log:
-                context["url"] = error_log["endpoint-url"]
-            # Add all error_log fields as extra data
-            for key, value in error_log.items():
-                scope.set_extra(key, str(value))
-
-        scope.set_context("request", context)
-        scope.set_tag("task", task_name)
-        scope.set_tag("handled", "False")
-
-        sentry_sdk.capture_message(
-            "Check URL Unexpected Error: " + message, level="error"
-        )
+def _log_check_url_failure(stage, request_id):
+    """
+    Report an unexpected check_url failure. Call from an except block:
+    logger.exception creates one Sentry Issue with the stack trace, grouped by
+    the exception and code path rather than its message.
+    """
+    logger.exception(
+        f"check_url {stage} failed",
+        extra={"request_id": request_id, "task": "CheckURL", "stage": stage},
+    )
 
 
 def _get_response(request_id):

@@ -648,7 +648,7 @@ def test_check_dataurl_fetch_resource_fails(monkeypatch):
     monkeypatch.setattr(
         tasks, "_get_request", lambda rid: {"id": rid, "status": "FAILED"}
     )
-    monkeypatch.setattr(tasks, "_capture_sentry_event", MagicMock())
+    monkeypatch.setattr(tasks, "_record_check_url_user_error", MagicMock())
     monkeypatch.setattr(tasks.utils, "create_user_friendly_error_log", lambda x: x)
 
     result = check_dataurl(request, directories_json)
@@ -696,7 +696,6 @@ def test_check_dataurl_no_file_fetched(monkeypatch):
     monkeypatch.setattr(tasks, "_fetch_resource", lambda *a, **kw: (None, {}))
     monkeypatch.setattr(tasks, "_get_request", lambda rid: {"id": rid, "status": "NEW"})
     monkeypatch.setattr(tasks, "save_response_to_db", MagicMock())
-    monkeypatch.setattr(tasks, "_capture_sentry_event", MagicMock())
     monkeypatch.setattr(tasks, "clean_up_request_files", MagicMock())
 
     result = check_dataurl(request, directories_json)

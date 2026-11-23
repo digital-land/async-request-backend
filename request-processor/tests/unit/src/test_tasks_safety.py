@@ -462,7 +462,7 @@ def test_check_url_user_error_metric_reads_custom_exception_detail(metrics):
     detail = tasks.CustomException(
         {"message": "x", "status": "404", "exception": "HTTPError"}
     ).detail
-    tasks._capture_sentry_event(detail, VALID_ID, handled=True)
+    tasks._record_check_url_user_error(detail, VALID_ID)
     assert metrics == [
         (
             "async.check_url.user_error",
@@ -474,3 +474,64 @@ def test_check_url_user_error_metric_reads_custom_exception_detail(metrics):
             },
         )
     ]
+
+
+def test_unexpected_check_url_failure_is_one_issue_with_a_stack_trace(
+    monkeypatch, metrics
+):
+    """One logger.exception call: Sentry makes it a single Issue with exc_info."""
+    request = _message(
+        params={
+            "type": "check_url",
+            "collection": "article-4-direction",
+            "dataset": "article-4-direction-area",
+            "url": "https://example.com/data.csv",
+        }
+    )
+    request.update(
+        type="check_url",
+        created="2026-01-01T00:00:00",
+        modified="2026-01-01T00:00:00",
+        response=None,
+    )
+    monkeypatch.setattr(
+        tasks, "_fetch_resource", lambda *a, **kw: (_ for _ in ()).throw(KeyError("x"))
+    )
+    monkeypatch.setattr(tasks, "save_response_to_db", lambda *a: None)
+    monkeypatch.setattr(tasks, "_get_request", lambda rid: None)
+    records = []
+    monkeypatch.setattr(tasks.logger, "handle", lambda record: records.append(record))
+
+    tasks.check_dataurl(request)
+
+    errors = [r for r in records if r.levelno >= 40]
+    assert len(errors) == 1
+    assert errors[0].getMessage() == "check_url fetch failed"
+    assert errors[0].exc_info[0] is KeyError
+    assert errors[0].request_id == VALID_ID
+    # Unexpected failures are Issues, not the user-error metric.
+    assert metrics == []
+
+
+def test_worker_sentry_events_have_no_local_variables_and_scrub_secrets():
+    options = tasks._sentry_privacy_options()
+    assert options["include_local_variables"] is False
+    assert options["send_default_pii"] is False
+
+    event = {
+        "extra": {
+            "DATABASE_URL": "postgresql://user:pw@host/db",
+            "env": {"AWS_SECRET_ACCESS_KEY": "s", "AWS_SESSION_TOKEN": "t"},
+            "request_id": VALID_ID,
+        }
+    }
+    options["event_scrubber"].scrub_event(event)
+
+    def value(v):
+        # The scrubber returns an AnnotatedValue holding the replacement.
+        return getattr(v, "value", v)
+
+    assert value(event["extra"]["DATABASE_URL"]) == "[Filtered]"
+    assert value(event["extra"]["env"]["AWS_SECRET_ACCESS_KEY"]) == "[Filtered]"
+    assert value(event["extra"]["env"]["AWS_SESSION_TOKEN"]) == "[Filtered]"
+    assert event["extra"]["request_id"] == VALID_ID
