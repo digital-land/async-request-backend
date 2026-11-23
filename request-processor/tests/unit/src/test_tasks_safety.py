@@ -221,10 +221,7 @@ def test_ordinary_fetch_is_not_counted(tmp_path, monkeypatch, rejections):
 
 @pytest.fixture
 def public_local_server(monkeypatch):
-    """
-    Starts a local server, treated as public, whose response body is written
-    by the given function. Returns the URL to fetch.
-    """
+    """Starts a local server, treated as public, and returns its URL."""
     import http.server
     import threading
 
@@ -247,7 +244,7 @@ def public_local_server(monkeypatch):
                 try:
                     super().handle_one_request()
                 except ConnectionError:
-                    pass  # the client stopped reading
+                    pass
 
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -311,7 +308,6 @@ def slow_file_server(monkeypatch, public_local_server):
 def test_fetch_resource_refuses_file_over_time_limit(
     tmp_path, monkeypatch, slow_file_server, rejections
 ):
-    # The Collector writes its logs relative to the working directory.
     monkeypatch.chdir(tmp_path)
     with pytest.raises(tasks.CustomException) as raised:
         tasks._fetch_resource(tmp_path / "resource", slow_file_server)

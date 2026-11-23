@@ -780,10 +780,6 @@ def _fetch_resource(resource_dir, url, endpoint_parameters=None):
 
 
 def _refused_fetch_error(log):
-    """
-    The error to show when safe_fetch refused a fetch because the response was
-    too large or too slow, or None if it did not.
-    """
     refusals = {
         ResponseTooLargeError.__name__: (
             "size",

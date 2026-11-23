@@ -316,16 +316,12 @@ def test_too_large_error_is_a_requests_exception():
 
 
 def test_too_slow_error_is_a_requests_exception():
-    # As above, for the "took too long" error.
     assert issubclass(safe_fetch.ResponseTooSlowError, requests.RequestException)
 
 
 @pytest.fixture
 def slow_server():
-    """
-    A local server that sends its response a byte at a time, 0.1s apart. The
-    test sets which part is slow: "headers", "body" or "body-no-length".
-    """
+    """A local server that sends the part named in settings["slow"] a byte at a time."""
     import time
 
     settings = {}
@@ -348,7 +344,6 @@ def slow_server():
             self.send_response(200)
             if slow == "body":
                 self.send_header("Content-Length", str(len(body)))
-            # Without a length, the body ends when the connection closes.
             self.send_header("Connection", "close")
             self.end_headers()
             drip(self.wfile, body)
@@ -360,7 +355,7 @@ def slow_server():
             try:
                 super().handle_one_request()
             except (ConnectionError, OSError):
-                pass  # the client cut the connection
+                pass
 
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -384,8 +379,6 @@ def test_response_over_the_time_limit_is_refused(
     settings["slow"] = slow
     started = time.monotonic()
     with safe_fetch.untrusted_fetches():
-        # Each byte arrives well within the read timeout, so only the
-        # overall limit can stop it.
         with pytest.raises(safe_fetch.ResponseTooSlowError):
             requests.get(url, timeout=5)
     assert time.monotonic() - started < 2
@@ -401,7 +394,6 @@ def test_response_within_the_time_limit_is_returned_and_not_cut_later(
     with safe_fetch.untrusted_fetches():
         with requests.Session() as session:
             assert session.get(url, timeout=5).content == responses["body"]
-            # The first deadline has passed; the pooled connection still works.
             time.sleep(1)
             assert session.get(url, timeout=5).content == responses["body"]
 

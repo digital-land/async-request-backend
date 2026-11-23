@@ -14,9 +14,7 @@ outside the context manager, such as boto3 to S3 and SQS, are unaffected.
 While it is active, every response read through requests is also limited to
 MAX_RESPONSE_BYTES, so a URL cannot exhaust the worker's memory with a huge or
 endless body. This matches Submit's limit for URLs. Each response must also
-arrive within MAX_RESPONSE_SECONDS in total, so a server that sends a byte at a
-time cannot hold the worker forever: the read timeout only limits each wait
-for data, not the whole response.
+arrive within MAX_RESPONSE_SECONDS in total.
 
 The paged WFS plugin fetches with ogr2ogr (GDAL) in a subprocess, which this
 cannot see, so check_host_resolves_publicly is also called before fetching.
@@ -39,8 +37,6 @@ from request_model.url_safety import UnsafeUrlError, is_public_ip
 
 # Matches Submit's validations.maxFileSize for URLs.
 MAX_RESPONSE_BYTES = 100_000_000
-# Generous on purpose: only a server that is stalling should hit it. 100MB in
-# 15 minutes needs about 110KB/s.
 MAX_RESPONSE_SECONDS = 15 * 60
 _READ_CHUNK_SIZE = 64 * 1024
 
@@ -112,8 +108,6 @@ def _guarded_create_connection(address, *args, **kwargs):
 def _guarded_connect(original):
     def connect(self):
         original(self)
-        # Record the final socket (after any TLS wrapping) so a deadline can
-        # shut it down; see _Deadline.
         sockets = getattr(_state, "sockets", None)
         if sockets is not None and self.sock is not None:
             sockets.add(self.sock)
@@ -132,18 +126,11 @@ def _shut_down(sock):
     try:
         sock.shutdown(socket.SHUT_RDWR)
     except OSError:
-        pass  # already closed
+        pass
 
 
 class _Deadline:
-    """
-    Shuts down this thread's connections if a response is not read in time.
-
-    A read blocked waiting for data cannot check the clock itself, so a timer
-    on another thread shuts the sockets down, which makes the blocked read
-    return. Shutting down an idle pooled connection is harmless: urllib3 sees
-    it has dropped and opens a new one.
-    """
+    """Shuts down this thread's sockets from a timer, ending any blocked read."""
 
     def __init__(self, seconds, sockets):
         self._lock = threading.Lock()
@@ -164,7 +151,7 @@ class _Deadline:
             _shut_down(sock)
 
     def finish(self):
-        """Stop the timer. Returns True if it fired, so the read may be cut short."""
+        """Stop the timer. Returns True if it already fired."""
         self._timer.cancel()
         with self._lock:
             self._finished = True
@@ -219,8 +206,7 @@ def _size_limited_send(
         if deadline.finish() and not isinstance(error, ResponseTooLargeError):
             raise _too_slow() from error
         raise
-    # A body with no length ends when the connection does, so one cut off by
-    # the deadline can look complete.
+    # A body with no length can look complete after being cut off.
     if deadline.finish():
         raise _too_slow(response)
     response._content = bytes(body)
