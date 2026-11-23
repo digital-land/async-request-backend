@@ -1,7 +1,7 @@
 import pytest
 
-from application.utils import request_cleanup
-from application.utils.request_cleanup import clean_up, clean_up_request_files
+from application.security import request_cleanup
+from application.security.request_cleanup import clean_up, clean_up_request_files
 
 VALID_ID = "AbCdEfGhIjKlMnOpQrStUv"
 

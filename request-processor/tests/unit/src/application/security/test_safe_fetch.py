@@ -6,7 +6,7 @@ import pytest
 import requests
 import urllib3.util.connection as urllib3_connection
 
-from application.utils import safe_fetch
+from application.security import safe_fetch
 from request_model.url_safety import UnsafeUrlError
 
 
@@ -38,7 +38,7 @@ def local_server():
 
 def test_guard_is_installed():
     # Compare by name: tests can import this module under two package paths
-    # (application.utils and src.application.utils), each installing its guard.
+    # (application.security and src.application.security), each installing its guard.
     installed = urllib3_connection.create_connection
     assert installed.__qualname__ == safe_fetch._guarded_create_connection.__qualname__
 

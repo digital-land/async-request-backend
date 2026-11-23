@@ -6,6 +6,6 @@ Safety checks for the request-processor worker.
 * resource_safety: rejects fetched or uploaded files that would make GDAL read
   other locations.
 * request_cleanup: deletes a request's files without leaving its directory.
-* monitoring: Sentry setup, metrics (including inputs refused by these
-  checks) and error reporting.
+
+Refusals are counted by application.logging.monitoring.count_security_rejection.
 """

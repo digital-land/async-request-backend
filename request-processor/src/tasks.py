@@ -18,18 +18,18 @@ from task_interface.base_tasks import (
 )
 import json
 from application.core import workflow
-from application.utils.resource_safety import (
+from application.security.resource_safety import (
     UnsafeResourceError,
     check_resource_is_safe,
 )
-from application.utils.request_cleanup import clean_up_request_files
-from application.utils import monitoring
-from application.utils.monitoring import count_security_rejection
-from application.utils.safe_fetch import (
+from application.security.request_cleanup import clean_up_request_files
+from application.logging import monitoring
+from application.logging.monitoring import count_security_rejection
+from application.security.safe_fetch import (
     check_host_resolves_publicly,
     untrusted_fetches,
 )
-from application.utils.task_guard import (
+from application.security.task_guard import (
     BrokerMessageGuard,
     UnsafeRequestParams,
     UntrustedTaskMessage,

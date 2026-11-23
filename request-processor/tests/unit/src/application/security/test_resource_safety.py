@@ -4,8 +4,8 @@ import zipfile
 
 import pytest
 
-from application.utils import resource_safety
-from application.utils.resource_safety import (
+from application.security import resource_safety
+from application.security.resource_safety import (
     UnsafeResourceError,
     check_resource_is_safe,
 )

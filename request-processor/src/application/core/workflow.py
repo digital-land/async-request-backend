@@ -39,7 +39,7 @@ from application.core.pipeline import (
     run_task_pipeline,
 )
 from application.configurations.config import source_url, CONFIG_URL
-from application.utils.request_cleanup import clean_up
+from application.security.request_cleanup import clean_up
 
 logger = get_logger(__name__)
 

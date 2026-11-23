@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from application.utils import task_guard
-from application.utils.task_guard import (
+from application.security import task_guard
+from application.security.task_guard import (
     UnsafeRequestParams,
     UntrustedTaskMessage,
     validate_broker_message,

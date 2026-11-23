@@ -23,7 +23,7 @@ from urllib.parse import urlsplit
 
 import urllib3.util.connection as urllib3_connection
 
-from application.utils.monitoring import count_security_rejection
+from application.logging.monitoring import count_security_rejection
 from request_model.url_safety import UnsafeUrlError, is_public_ip
 
 _state = threading.local()
