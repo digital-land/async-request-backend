@@ -125,12 +125,13 @@ def test_payloads_this_rejects_are_ones_gdal_would_act_on(tmp_path, payload):
     path.write_bytes(payload(secret))
     output = tmp_path / "out.csv"
 
+    with pytest.raises(UnsafeResourceError):
+        check_resource_is_safe(path)
+
     subprocess.run(
         ["ogr2ogr", "-f", "CSV", str(output), str(path)], capture_output=True
     )
-    if not output.exists():
-        pytest.skip("this GDAL does not support the payload's driver")
-    assert "TOP-SECRET-VALUE" in output.read_text()
-
-    with pytest.raises(UnsafeResourceError):
-        check_resource_is_safe(path)
+    # Older GDAL (e.g. distro packages) may not open the payload under this
+    # file name, or not support its driver at all.
+    if not output.exists() or "TOP-SECRET-VALUE" not in output.read_text():
+        pytest.skip("this GDAL does not act on the payload")
