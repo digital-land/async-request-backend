@@ -17,8 +17,9 @@ def count_security_rejection(layer, source):
 
     layer: the check that refused it: "url" (the URL text), "connection" (the
         address a host resolves to, including after a redirect), "content"
-        (a file that points GDAL at another data source) or "message" (a task
-        message that request-api could not have sent).
+        (a file that points GDAL at another data source), "message" (a task
+        message that request-api could not have sent) or "params" (a real
+        request whose stored params the worker will not use).
     source: where the input came from: "fetch" (a user-supplied URL),
         "upload" (a file uploaded through Submit) or "broker" (the task queue).
     """

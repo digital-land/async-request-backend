@@ -4,7 +4,6 @@ import pytest
 import requests
 
 from src import tasks
-from application.utils import task_guard
 
 VALID_ID = "AbCdEfGhIjKlMnOpQrStUv"
 UPLOAD_ID = "492f15d8-45e4-427e-bde0-f60d69889f40"
@@ -229,15 +228,10 @@ def test_paged_wfs_host_that_does_not_resolve_is_not_counted(
 
 @pytest.fixture
 def stored_request(monkeypatch):
-    """Pretend the request row exists with VALID_PARAMS, and stub the spec."""
-    stored = SimpleNamespace(type="check_file", params=dict(VALID_PARAMS))
+    """Pretend the request row exists with VALID_PARAMS."""
+    stored = SimpleNamespace(type="check_file", status="NEW", params=dict(VALID_PARAMS))
     monkeypatch.setattr(
         tasks, "_get_request", lambda rid: stored if rid == VALID_ID else None
-    )
-    monkeypatch.setattr(
-        task_guard.core_utils,
-        "load_specification",
-        lambda _dirs: SimpleNamespace(dataset={"article-4-direction-area": {}}),
     )
     return stored
 
@@ -332,3 +326,61 @@ def test_trusted_message_is_not_counted(stored_request, monkeypatch, rejections)
     finally:
         task.pop_request()
     assert rejections == []
+
+
+def test_replayed_message_for_finished_request_is_left_untouched(
+    stored_request, monkeypatch, rejections
+):
+    calls = []
+    monkeypatch.setattr(tasks, "_update_request_status", lambda *a: calls.append(a))
+    stored_request.status = "COMPLETE"
+    task = tasks.check_datafile
+    task.push_request(called_directly=False)
+    try:
+        tasks.before_task("task-id", task, [_message()], kwargs={})
+        with pytest.raises(tasks.UntrustedTaskMessage, match="already"):
+            task(_message())
+    finally:
+        task.pop_request()
+    assert calls == []
+    assert rejections == [("message", "broker")]
+
+
+def test_unsafe_params_on_real_request_fail_it_with_an_error(
+    stored_request, monkeypatch, rejections
+):
+    calls = []
+    saved = []
+    monkeypatch.setattr(tasks, "_update_request_status", lambda *a: calls.append(a))
+    monkeypatch.setattr(tasks, "clean_up_request_files", lambda *a: None)
+    monkeypatch.setattr(
+        tasks, "save_response_to_db", lambda rid, data: saved.append((rid, data))
+    )
+    # A row stored before request-api checked upload names.
+    params = dict(VALID_PARAMS, uploaded_filename="../other-request/file")
+    stored_request.params = params
+    message = _message(params=params)
+    task = tasks.check_datafile
+    task.push_request(called_directly=False)
+    try:
+        tasks.before_task("task-id", task, [message], kwargs={})
+        # Not marked PROCESSING, and the task body does not run.
+        assert calls == []
+        with pytest.raises(tasks.UnsafeRequestParams) as raised:
+            task(message)
+    finally:
+        task.pop_request()
+    assert rejections == [("params", "broker")]
+
+    tasks.after_task_failure("task-id", raised.value, None, None, [message])
+    assert calls == [(VALID_ID, "FAILED")]
+    assert saved == [
+        (
+            VALID_ID,
+            {
+                "message": raised.value.user_message,
+                "status": "",
+                "exception": "UnsafeRequestParams",
+            },
+        )
+    ]

@@ -32,6 +32,7 @@ from application.utils.safe_fetch import (
 )
 from application.utils.task_guard import (
     BrokerMessageGuard,
+    UnsafeRequestParams,
     UntrustedTaskMessage,
     is_valid_request_id,
 )
@@ -514,6 +515,12 @@ def before_task(task_id, task, args, **kwargs):
             count_security_rejection("message", "broker")
             logger.error(f"Rejected untrusted task message {task_id}: {e}")
             return
+        except UnsafeRequestParams as e:
+            # A real request: __call__ raises the same error and
+            # after_task_failure fails the request with an error.
+            count_security_rejection("params", "broker")
+            logger.warning(f"Refused params for task {task_id}: {e}")
+            return
     request_id = _request_id_from_args(args)
     if request_id is None:
         return
@@ -543,6 +550,15 @@ def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
     request_id = _request_id_from_args(args)
     if request_id is None:
         return
+    if isinstance(exception, UnsafeRequestParams):
+        save_response_to_db(
+            request_id,
+            {
+                "message": exception.user_message,
+                "status": "",
+                "exception": "UnsafeRequestParams",
+            },
+        )
     logger.debug(f"Set status to FAILED for request {request_id}")
     # Exception type only: request_id would give the metric unbounded cardinality.
     sentry_sdk.metrics.count(

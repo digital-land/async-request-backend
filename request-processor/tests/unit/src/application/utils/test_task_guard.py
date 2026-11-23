@@ -4,6 +4,7 @@ import pytest
 
 from application.utils import task_guard
 from application.utils.task_guard import (
+    UnsafeRequestParams,
     UntrustedTaskMessage,
     validate_broker_message,
     validate_params,
@@ -28,19 +29,10 @@ def _message(request_id=VALID_ID, params=None):
     }
 
 
-@pytest.fixture(autouse=True)
-def specification(monkeypatch):
-    monkeypatch.setattr(
-        task_guard.core_utils,
-        "load_specification",
-        lambda _dirs: SimpleNamespace(dataset={"article-4-direction-area": {}}),
-    )
-
-
 @pytest.fixture
 def stored_request():
     """The request row as stored by request-api."""
-    return SimpleNamespace(type="check_file", params=dict(VALID_PARAMS))
+    return SimpleNamespace(type="check_file", status="NEW", params=dict(VALID_PARAMS))
 
 
 @pytest.fixture
@@ -122,23 +114,46 @@ def test_rejects_params_that_differ_from_stored_request(validate):
         ("uploaded_filename", "../../tmp/example.txt"),
         ("uploaded_filename", "../492f15d8-45e4-427e-bde0-f60d69889f40"),
         ("dataset", "../../etc"),
-        ("dataset", "not-a-real-dataset"),
         ("collection", "../config"),
     ],
 )
-def test_rejects_bad_stored_params(validate, stored_request, field, value):
-    # Even if the row itself was written with bad values, the guard rejects it.
+def test_refuses_unsafe_stored_params(validate, stored_request, field, value):
+    # The message matches a real request, so it is refused as unsafe params,
+    # which fails the request, rather than as a forged message.
     stored_request.params[field] = value
     params = dict(VALID_PARAMS, **{field: value})
-    with pytest.raises(UntrustedTaskMessage):
+    with pytest.raises(UnsafeRequestParams) as raised:
         validate([_message(params=params)])
+    assert raised.value.user_message
+
+
+def test_accepts_dataset_missing_from_specification(validate, stored_request):
+    # Not a safety check: the workflow fails an unknown dataset with an error.
+    stored_request.params["dataset"] = "not-a-real-dataset"
+    validate([_message(params=dict(VALID_PARAMS, dataset="not-a-real-dataset"))])
+
+
+@pytest.mark.parametrize("status", ["COMPLETE", "FAILED"])
+def test_rejects_replayed_message_for_finished_request(
+    validate, stored_request, status
+):
+    # The message still says NEW, but the stored request has finished.
+    stored_request.status = status
+    with pytest.raises(UntrustedTaskMessage, match="already"):
+        validate([_message()])
+
+
+def test_accepts_redelivery_while_processing(validate, stored_request):
+    # Tasks are acknowledged late, so SQS redelivers when a worker is lost.
+    stored_request.status = "PROCESSING"
+    validate([_message()])
 
 
 @pytest.mark.parametrize(
     "resource", ["../../etc/passwd", "/etc/passwd", "resource-hash", "A" * 64]
 )
 def test_rejects_invalid_resource(resource):
-    with pytest.raises(UntrustedTaskMessage, match="resource"):
+    with pytest.raises(UnsafeRequestParams, match="resource"):
         validate_params(_url_params(resource=resource))
 
 
@@ -163,8 +178,11 @@ def test_accepts_empty_resource_on_url_requests(resource):
     ],
 )
 def test_rejects_unsafe_urls_in_stored_params(url):
-    with pytest.raises(UntrustedTaskMessage, match="URL not allowed"):
+    with pytest.raises(UnsafeRequestParams, match="URL not allowed") as raised:
         validate_params(_url_params(url=url))
+    # The user sees a general message, not the reason.
+    assert "publicly accessible" in raised.value.user_message
+    assert "internal" not in raised.value.user_message
 
 
 def test_guard_requires_a_stored_request_lookup():

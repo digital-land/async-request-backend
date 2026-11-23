@@ -6,6 +6,11 @@ only ever enqueues args=[request] for a NEW request row it has just committed,
 on the task matching the request type, so a message that differs from that was
 put on the queue by something else.
 
+A message that matches a stored request but carries params the worker will not
+use (an unsafe URL, or a value that could escape its directory) is a real
+request, not a forged one, so it raises UnsafeRequestParams instead: the request
+is failed with an error rather than left untouched.
+
 tasks.py wires this into the Celery tasks: it subclasses BrokerMessageGuard to
 look requests up in the database.
 """
@@ -14,9 +19,7 @@ import re
 
 from pydantic import ValidationError
 
-import application.core.utils as core_utils
 import request_model.schemas as schemas
-from application.configurations.config import Directories
 from request_model.url_safety import UnsafeUrlError, check_fetch_url
 
 # request-api generates ids with shortuuid.uuid(): 22 alphanumeric characters.
@@ -24,10 +27,31 @@ REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9]{22}")
 SLUG_PATTERN = re.compile(r"[a-z0-9-]+")
 # digital-land resource ids are the sha256 hex digest of the content.
 RESOURCE_PATTERN = re.compile(r"[0-9a-f]{64}")
+# Stored statuses a delivered message may run for. request-api only enqueues NEW
+# requests, but tasks are acknowledged late, so SQS redelivers a message whose
+# worker was lost mid-task, by which time the row is PROCESSING. A finished
+# request is never re-sent, so a message for one is a replay.
+RUNNABLE_STATUSES = ("NEW", "PROCESSING")
 
 
 class UntrustedTaskMessage(Exception):
     """A task message on the broker that request-api could not have sent."""
+
+
+class UnsafeRequestParams(Exception):
+    """A real request whose params the worker will not use."""
+
+    def __init__(self, reason, user_message):
+        super().__init__(reason)
+        self.user_message = user_message
+
+
+_UNSAFE_URL_MESSAGE = (
+    "We cannot check this link. Use a publicly accessible link to the data file."
+)
+_UNSAFE_PARAMS_MESSAGE = (
+    "We could not process this request. Check the details you entered and try " "again."
+)
 
 
 def is_valid_request_id(request_id):
@@ -42,8 +66,11 @@ def validate_broker_message(args, kwargs, expected_type, get_stored_request):
 
     get_stored_request(request_id) returns the stored request row, or None.
     Anything other than args=[request] (such as a directories override), an
-    unknown id, another status or type, or params that differ from the stored
-    row is rejected.
+    unknown id, another status or type, a request that has already finished, or
+    params that differ from the stored row is rejected.
+
+    Raise UnsafeRequestParams if the message matches the stored request but its
+    params fail validate_params.
     """
     if kwargs or len(args) != 1 or not isinstance(args[0], dict):
         raise UntrustedTaskMessage("Unexpected task arguments")
@@ -72,6 +99,9 @@ def validate_broker_message(args, kwargs, expected_type, get_stored_request):
     if stored is None:
         raise UntrustedTaskMessage(f"Request {request_id} not found in database")
 
+    if stored.status not in RUNNABLE_STATUSES:
+        raise UntrustedTaskMessage(f"Request {request_id} is already {stored.status!r}")
+
     stored_params = schemas.RequestBase.model_validate({"params": stored.params}).params
     if stored.type != expected_type or message_params.model_dump(
         mode="json"
@@ -84,34 +114,41 @@ def validate_broker_message(args, kwargs, expected_type, get_stored_request):
 
 
 def validate_params(params):
-    """Raise UntrustedTaskMessage if any param could escape what it is for."""
+    """Raise UnsafeRequestParams if any param could escape what it is for."""
     url = getattr(params, "url", None)
     if url:
         try:
             check_fetch_url(url)
         except UnsafeUrlError as e:
-            raise UntrustedTaskMessage(f"URL not allowed: {e}") from e
+            raise UnsafeRequestParams(
+                f"URL not allowed: {e}", _UNSAFE_URL_MESSAGE
+            ) from e
 
     # add_data_task only downloads a resource when it is non-empty, so an empty
     # resource alongside a URL is fine.
     resource = getattr(params, "resource", None)
     if resource and not RESOURCE_PATTERN.fullmatch(resource):
-        raise UntrustedTaskMessage(f"Invalid resource {resource!r}")
+        raise UnsafeRequestParams(
+            f"Invalid resource {resource!r}", _UNSAFE_PARAMS_MESSAGE
+        )
 
     uploaded_filename = getattr(params, "uploaded_filename", None)
     if (
         uploaded_filename is not None
         and not schemas.UPLOADED_FILENAME_PATTERN.fullmatch(uploaded_filename)
     ):
-        raise UntrustedTaskMessage(f"Invalid uploaded_filename {uploaded_filename!r}")
+        raise UnsafeRequestParams(
+            f"Invalid uploaded_filename {uploaded_filename!r}", _UNSAFE_PARAMS_MESSAGE
+        )
 
-    if not SLUG_PATTERN.fullmatch(params.collection or ""):
-        raise UntrustedTaskMessage(f"Invalid collection {params.collection!r}")
-
-    if not SLUG_PATTERN.fullmatch(params.dataset or ""):
-        raise UntrustedTaskMessage(f"Invalid dataset {params.dataset!r}")
-    if params.dataset not in core_utils.load_specification(Directories).dataset:
-        raise UntrustedTaskMessage(f"Dataset {params.dataset!r} not in specification")
+    # Collection and dataset are joined onto local paths. Whether the dataset
+    # exists is left to the workflow, which fails the request with an error.
+    for field in ("collection", "dataset"):
+        value = getattr(params, field)
+        if not SLUG_PATTERN.fullmatch(value or ""):
+            raise UnsafeRequestParams(
+                f"Invalid {field} {value!r}", _UNSAFE_PARAMS_MESSAGE
+            )
 
 
 class BrokerMessageGuard:
@@ -122,7 +159,7 @@ class BrokerMessageGuard:
     Direct calls (tests, debug scripts) keep called_directly=True and are not
     checked, so they can still pass a directories override.
 
-    A task_prerun handler should call validate_message first, so a rejected
+    A task_prerun handler should call validate_message first, so a forged
     message never changes the request's status. The result is cached on the
     task request so each delivery is only validated once.
 
@@ -142,7 +179,7 @@ class BrokerMessageGuard:
                     args, kwargs, self.expected_type, self.get_stored_request
                 )
                 request.broker_message_error = None
-            except UntrustedTaskMessage as e:
+            except (UntrustedTaskMessage, UnsafeRequestParams) as e:
                 request.broker_message_error = e
         if request.broker_message_error is not None:
             raise request.broker_message_error
