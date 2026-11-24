@@ -129,6 +129,40 @@ def _shut_down(sock):
         pass
 
 
+class _SocketRegistry:
+    """
+    The sockets opened on one thread inside untrusted_fetches().
+
+    The fetch thread adds sockets while a _Deadline timer thread may be shutting
+    them down, so both go through one lock. Once the deadline has expired, any
+    socket opened afterwards is shut down straight away, so it cannot start a
+    new blocking read.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._sockets = weakref.WeakSet()
+        self._expired = False
+
+    def add(self, sock):
+        with self._lock:
+            self._sockets.add(sock)
+            expired = self._expired
+        if expired:
+            _shut_down(sock)
+
+    def expire(self):
+        with self._lock:
+            self._expired = True
+            sockets = list(self._sockets)
+        for sock in sockets:
+            _shut_down(sock)
+
+    def reset(self):
+        with self._lock:
+            self._expired = False
+
+
 class _Deadline:
     """Shuts down this thread's sockets from a timer, ending any blocked read."""
 
@@ -142,19 +176,23 @@ class _Deadline:
         self._timer.start()
 
     def _expire(self):
+        # Hold this lock while expiring the registry, so finish() cannot
+        # reset it before expire() runs and leave it marked as expired.
         with self._lock:
             if self._finished:
                 return
             self._expired = True
-            sockets = list(self._sockets)
-        for sock in sockets:
-            _shut_down(sock)
+            self._sockets.expire()
 
     def finish(self):
         """Stop the timer. Returns True if it already fired."""
         self._timer.cancel()
         with self._lock:
             self._finished = True
+            if self._expired:
+                # Later requests in the same untrusted_fetches() get new
+                # sockets that must not be shut down.
+                self._sockets.reset()
             return self._expired
 
 
@@ -235,7 +273,7 @@ def untrusted_fetches():
     """
     previous = getattr(_state, "active", False), getattr(_state, "sockets", None)
     _state.active = True
-    _state.sockets = weakref.WeakSet()
+    _state.sockets = _SocketRegistry()
     try:
         yield
     finally:

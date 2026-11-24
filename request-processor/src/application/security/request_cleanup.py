@@ -94,16 +94,7 @@ def _clean_up_directory(request_id, directory):
         )
         return
     if os.path.exists(dir_path):
-        for file in os.listdir(dir_path):
-            file_path = os.path.join(dir_path, file)
-            # Remove symlinks as links; never recurse into their targets.
-            if os.path.islink(file_path) or os.path.isfile(file_path):
-                os.remove(file_path)
-            elif os.path.isdir(file_path):
-                clean_up(request_id, file_path)
-        # Check if the directory is empty after removing files
-        if not os.listdir(dir_path):
-            os.rmdir(dir_path)
+        _remove_tree_without_following_links(dir_path)
     if os.path.exists(directory) and not os.listdir(directory):
         os.rmdir(directory)
 

@@ -95,3 +95,14 @@ def test_clean_up_does_not_follow_nested_symlinks(tmp_path):
     clean_up(VALID_ID, str(base))
     assert (outside / VALID_ID / "keep.csv").exists()
     assert not (base / VALID_ID).exists()
+
+
+def test_clean_up_removes_nested_directories(tmp_path):
+    base = tmp_path / "resource"
+    (base / VALID_ID / "pipeline" / "deeper").mkdir(parents=True)
+    (base / VALID_ID / "pipeline" / "file.csv").write_text("x")
+    (base / VALID_ID / "pipeline" / "deeper" / "file.csv").write_text("x")
+    (base / "keep.csv").write_text("x")
+    clean_up(VALID_ID, str(base))
+    assert not (base / VALID_ID).exists()
+    assert (base / "keep.csv").exists()

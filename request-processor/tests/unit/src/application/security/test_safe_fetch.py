@@ -413,3 +413,42 @@ def test_response_time_is_not_limited_outside_untrusted_fetches(
     url, settings = slow_server
     settings["slow"] = "body"
     assert requests.get(url, timeout=5).content == b"x" * 50
+
+
+class _FakeSocket:
+    def __init__(self):
+        self.shut_down = False
+
+    def shutdown(self, how):
+        self.shut_down = True
+
+
+def test_socket_opened_after_the_deadline_expired_is_shut_down():
+    registry = safe_fetch._SocketRegistry()
+    deadline = safe_fetch._Deadline(0, registry)
+    deadline._timer.join()
+    late = _FakeSocket()
+    registry.add(late)
+    assert late.shut_down
+    assert deadline.finish()
+
+
+def test_registry_is_usable_again_after_an_expired_deadline_finishes():
+    registry = safe_fetch._SocketRegistry()
+    deadline = safe_fetch._Deadline(0, registry)
+    deadline._timer.join()
+    deadline.finish()
+    sock = _FakeSocket()
+    registry.add(sock)
+    assert not sock.shut_down
+
+
+def test_deadline_shuts_down_sockets_added_while_it_expires():
+    registry = safe_fetch._SocketRegistry()
+    sockets = [_FakeSocket() for _ in range(20_000)]
+    deadline = safe_fetch._Deadline(0.01, registry)
+    for sock in sockets:
+        registry.add(sock)
+    deadline._timer.join()
+    assert deadline.finish()
+    assert all(sock.shut_down for sock in sockets)
