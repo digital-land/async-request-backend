@@ -954,3 +954,40 @@ def test_get_datasets_in_resource(fields, expected, separator):
         for field, value in fields
     ]
     assert tasks._get_datasets_in_resource(rows) == expected
+
+
+@pytest.mark.parametrize(
+    "exception_type, expected",
+    [
+        ("ResponseTooLargeError", "larger than 100MB"),
+        ("ResponseTooSlowError", "longer than 15 minutes"),
+    ],
+)
+def test_check_dataurl_saves_fetch_limit_message(monkeypatch, exception_type, expected):
+    request_schema = MagicMock()
+    request_schema.status = "NEW"
+    request_schema.id = "req-limit"
+    request_schema.params.url = "http://example.com/data.csv"
+    request_schema.params.plugin = None
+
+    def refuse(*a, **kw):
+        raise tasks._refused_fetch_error({"exception": exception_type})
+
+    monkeypatch.setattr(
+        tasks.schemas.Request, "model_validate", lambda r: request_schema
+    )
+    monkeypatch.setattr(tasks, "_fetch_resource", refuse)
+    monkeypatch.setattr(tasks, "count_security_rejection", MagicMock())
+    monkeypatch.setattr(tasks.monitoring, "record_check_url_user_error", MagicMock())
+    save_response_mock = MagicMock()
+    monkeypatch.setattr(tasks, "save_response_to_db", save_response_mock)
+    monkeypatch.setattr(
+        tasks, "_get_request", lambda rid: {"id": rid, "status": "FAILED"}
+    )
+
+    check_dataurl({"id": "req-limit"}, json.dumps({}))
+
+    saved = save_response_mock.call_args.args[1]
+    assert saved["exceptionType"] == exception_type
+    assert expected in saved["message"]
+    assert "try again later" not in saved["message"]
