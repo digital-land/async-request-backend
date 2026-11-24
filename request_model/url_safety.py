@@ -29,6 +29,16 @@ _ENCODED_CONTROL_CHARACTER = re.compile(r"%(?:[01][0-9a-f]|7f)", re.IGNORECASE)
 # GDAL virtual file system paths such as /vsicurl/ or /vsis3/. These let GDAL
 # read from other locations, so they have no place in a URL we fetch.
 _GDAL_VIRTUAL_PATH = re.compile(r"/vsi[a-z0-9_]*/", re.IGNORECASE)
+# NAT64 prefix (RFC 6052): the last 32 bits are the IPv4 address contacted.
+_WELL_KNOWN_NAT64 = ipaddress.IPv6Network("64:ff9b::/96")
+# IPv6 ranges that ipaddress calls global but no real data URL needs:
+# local-use NAT64 (RFC 8215), deprecated IPv4-compatible addresses (::a.b.c.d)
+# and deprecated site-local addresses.
+_REFUSED_IPV6_NETWORKS = (
+    ipaddress.IPv6Network("64:ff9b:1::/48"),
+    ipaddress.IPv6Network("::/96"),
+    ipaddress.IPv6Network("fec0::/10"),
+)
 
 
 class UnsafeUrlError(ValueError):
@@ -54,9 +64,13 @@ def parse_ip(host):
 
 
 def is_public_ip(ip):
-    """True if ip is a publicly routable address."""
-    if ip.version == 6 and ip.ipv4_mapped is not None:
-        ip = ip.ipv4_mapped
+    if ip.version == 6:
+        if ip.ipv4_mapped is not None:
+            ip = ip.ipv4_mapped
+        elif ip in _WELL_KNOWN_NAT64:
+            ip = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+        elif any(ip in network for network in _REFUSED_IPV6_NETWORKS):
+            return False
     return ip.is_global
 
 

@@ -126,6 +126,13 @@ UNSAFE_URLS = [
     "http://１６９.254.170.2/",
     "http://169。254。169。254/",
     "http://LOCALHOST。/",
+    # IPv6 addresses that carry an internal IPv4 address.
+    "http://[64:ff9b::a9fe:a9fe]/",
+    "http://[64:ff9b::10.0.0.1]/",
+    "http://[64:ff9b:1::a00:1]/",
+    "http://[::a9fe:a9fe]/",
+    "http://[::127.0.0.1]/",
+    "http://[fec0::1]/",
 ]
 
 
@@ -149,6 +156,8 @@ def test_unsafe_urls_are_rejected(kind, url):
         "https://example.org./trees.csv",
         "https://bücher.example/trees.csv",
         "http://[2001:4860:4860::8888]/",
+        # NAT64 to a public IPv4 address is a normal IPv6-only route.
+        "http://[64:ff9b::8.8.8.8]/",
     ],
 )
 def test_public_http_urls_are_accepted(url):

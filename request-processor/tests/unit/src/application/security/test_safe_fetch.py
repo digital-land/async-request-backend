@@ -54,7 +54,16 @@ def test_local_server_blocked_inside_untrusted_fetches(local_server):
 
 
 @pytest.mark.parametrize(
-    "ip", ["169.254.170.2", "169.254.169.254", "10.0.0.5", "127.0.0.1", "::1"]
+    "ip",
+    [
+        "169.254.170.2",
+        "169.254.169.254",
+        "10.0.0.5",
+        "127.0.0.1",
+        "::1",
+        # A AAAA record pointing at NAT64 for an internal IPv4 address.
+        "64:ff9b::a00:5",
+    ],
 )
 def test_hostname_resolving_to_internal_address_is_blocked(monkeypatch, ip):
     monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo(ip))
