@@ -73,6 +73,7 @@ services:
       DATABASE_URL: postgresql://postgres:password@request-db/request_database
       DATASETTE_BASE_URL: ${DATASETTE_BASE_URL:-https://datasette.planning.data.gov.uk}
       REQUEST_FILES_BUCKET_NAME: dluhc-data-platform-request-files-local
+      REQUEST_DETAILS_BUCKET_NAME: dluhc-data-platform-request-details-local
       SENTRY_ENABLED: "false"
       SENTRY_DSN: https://secret.sentry.url/here
       SENTRY_ENVIRONMENT: docker-compose-local

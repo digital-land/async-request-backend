@@ -146,6 +146,8 @@ class ResponseError(BaseModel):
 
 
 class ResponseModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     data: Optional[Dict[str, Any]]
     error: Optional[Dict[str, Any]]
 
@@ -161,5 +163,6 @@ class Request(RequestBase):
     )
     created: datetime.datetime
     modified: datetime.datetime
+    published_at: Optional[datetime.datetime] = None
     response: Optional[ResponseModel]
     model_config = ConfigDict(from_attributes=True)

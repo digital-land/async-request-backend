@@ -248,6 +248,7 @@ def _map_to_schema(request_model: models.Request) -> schemas.Request:
         status=request_model.status,
         created=request_model.created,
         modified=request_model.modified,
+        published_at=request_model.published_at,
         params=request_model.params,
         response=response,
     )

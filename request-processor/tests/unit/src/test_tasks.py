@@ -287,6 +287,8 @@ def test_download_resource_uses_datastore_url(monkeypatch, tmp_path):
     ],
 )
 def test_add_data_task_success(monkeypatch, authoritative, owner, expected):
+    monkeypatch.setattr(tasks, "_get_response", lambda rid: None)
+    monkeypatch.setattr(tasks, "_publish_request_result", lambda result: None)
     request = {
         "id": "req-123",
         "status": "NEW",
@@ -335,6 +337,8 @@ def test_add_data_task_success(monkeypatch, authoritative, owner, expected):
 
 
 def test_add_data_task_success_with_resource(monkeypatch):
+    monkeypatch.setattr(tasks, "_get_response", lambda rid: None)
+    monkeypatch.setattr(tasks, "_publish_request_result", lambda result: None)
     request = {
         "id": "req-resource",
         "status": "NEW",
@@ -414,6 +418,7 @@ def test_add_data_task_success_with_resource(monkeypatch):
 
 
 def test_add_data_task_fail(monkeypatch):
+    monkeypatch.setattr(tasks, "_get_response", lambda rid: None)
     request = {
         "id": "req-123",
         "status": "NEW",

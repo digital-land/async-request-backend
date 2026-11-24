@@ -21,6 +21,34 @@ client = TestClient(app)
 exception_msg = "Fake connection error message"
 
 
+@pytest.mark.parametrize(
+    "published_at", [None, datetime.fromisoformat("2026-11-20T12:00:00+00:00")]
+)
+def test_map_request_includes_publication_time(published_at):
+    request = _create_request_model()
+    request.published_at = published_at
+    payload = main._map_to_schema(request).model_dump(mode="json")
+    assert payload["published_at"] == ("2026-11-20T12:00:00Z" if published_at else None)
+
+
+def test_map_request_preserves_full_response_without_submission_contacts():
+    request = _create_request_model()
+    request.add_data_submission_id = "submission-123"
+    request.response = models.Response(
+        data={"additional-result": {"value": "preserved"}}, error=None
+    )
+    payload = main._map_to_schema(request).model_dump(mode="json")
+    assert payload["response"] == {
+        "data": {"additional-result": {"value": "preserved"}},
+        "error": None,
+    }
+    assert payload["add_data_submission_id"] == "submission-123"
+    assert payload["params"]["uploaded_filename"] == "generated.csv"
+    assert payload["created"] == request.created.isoformat()
+    assert "contact_name" not in payload
+    assert "contact_email" not in payload
+
+
 def _create_request_model(service=None):
     return models.Request(
         id="6WuEVYfuScqnW4oewgbyZd",

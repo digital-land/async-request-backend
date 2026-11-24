@@ -879,11 +879,12 @@ def test_migration_preserves_old_requests_through_upgrade_and_downgrade():
             with engine.connect() as connection:
                 row = connection.execute(
                     text(
-                        "SELECT created, modified, add_data_submission_id FROM request WHERE id = 'old'"
+                        "SELECT created, modified, add_data_submission_id, published_at FROM request WHERE id = 'old'"
                     )
                 ).one()
                 assert tuple(row[:2]) == tuple(before)
                 assert row.add_data_submission_id is None
+                assert row.published_at is None
             command.downgrade(config, "d45c986e2727")
             with engine.connect() as connection:
                 assert (
