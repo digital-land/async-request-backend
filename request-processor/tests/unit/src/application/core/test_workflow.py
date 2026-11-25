@@ -941,3 +941,18 @@ def test_add_extra_column_mappings_ignore_with_no_filtered_rows(tmp_path):
     )
 
     assert not_mapped == []
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["file:///proc/self/environ", "FILE:///etc/passwd", "ftp://example.org/x.csv"],
+)
+def test_download_file_refuses_non_http_urls(monkeypatch, tmp_path, url):
+    def fail_urlopen(*args, **kwargs):
+        raise AssertionError("urlopen must not be called")
+
+    monkeypatch.setattr("urllib.request.urlopen", fail_urlopen)
+    destination = tmp_path / "out.csv"
+    with pytest.raises(ValueError, match="Only http and https"):
+        download_file(url, str(destination))
+    assert not destination.exists()

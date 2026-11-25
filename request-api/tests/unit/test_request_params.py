@@ -12,7 +12,10 @@ def params(request):
         "collection": "tree-preservation-order",
     }
     if request.param == "check_file":
-        values.update(original_filename="trees.csv", uploaded_filename="upload.csv")
+        values.update(
+            original_filename="trees.csv",
+            uploaded_filename="492f15d8-45e4-427e-bde0-f60d69889f40",
+        )
     else:
         values["url"] = "https://example.org/trees.csv"
     return values
@@ -28,7 +31,10 @@ def test_add_data_metadata_is_not_accepted_on_checks(kind, field):
     if kind == "check_url":
         params["url"] = "https://example.org/trees.csv"
     else:
-        params.update(original_filename="trees.csv", uploaded_filename="upload.csv")
+        params.update(
+            original_filename="trees.csv",
+            uploaded_filename="492f15d8-45e4-427e-bde0-f60d69889f40",
+        )
     with pytest.raises(ValidationError) as error:
         RequestCreate.model_validate({"params": {**params, field: None}})
     assert error.value.errors()[0]["loc"] == ("params", kind, field)
@@ -120,6 +126,13 @@ UNSAFE_URLS = [
     "http://１６９.254.170.2/",
     "http://169。254。169。254/",
     "http://LOCALHOST。/",
+    # IPv6 addresses that carry an internal IPv4 address.
+    "http://[64:ff9b::a9fe:a9fe]/",
+    "http://[64:ff9b::10.0.0.1]/",
+    "http://[64:ff9b:1::a00:1]/",
+    "http://[::a9fe:a9fe]/",
+    "http://[::127.0.0.1]/",
+    "http://[fec0::1]/",
 ]
 
 
@@ -143,6 +156,8 @@ def test_unsafe_urls_are_rejected(kind, url):
         "https://example.org./trees.csv",
         "https://bücher.example/trees.csv",
         "http://[2001:4860:4860::8888]/",
+        # NAT64 to a public IPv4 address is a normal IPv6-only route.
+        "http://[64:ff9b::8.8.8.8]/",
     ],
 )
 def test_public_http_urls_are_accepted(url):
@@ -220,4 +235,84 @@ def test_other_validation_errors_are_not_counted():
 
     assert response.status_code == 422
     assert response.json()["detail"][0]["type"] == "extra_forbidden"
+    assert counted == []
+
+
+UPLOAD_ID = "492f15d8-45e4-427e-bde0-f60d69889f40"
+
+
+def _check_file(**overrides):
+    params = {
+        "type": "check_file",
+        "dataset": "tree",
+        "collection": "tree",
+        "original_filename": "trees.csv",
+        "uploaded_filename": UPLOAD_ID,
+    }
+    return {"params": {**params, **overrides}}
+
+
+@pytest.mark.parametrize(
+    "uploaded_filename",
+    [
+        "../" + UPLOAD_ID,
+        UPLOAD_ID + "/../../etc/passwd",
+        "../../tmp/example.txt",
+        "/etc/passwd",
+        UPLOAD_ID + ".csv",
+        "trees.csv",
+        "",
+    ],
+)
+def test_check_file_rejects_uploaded_filename_that_is_not_an_upload_id(
+    uploaded_filename,
+):
+    with pytest.raises(ValidationError, match="Invalid uploaded_filename"):
+        RequestCreate.model_validate(_check_file(uploaded_filename=uploaded_filename))
+
+
+@pytest.mark.parametrize("original_filename", ["", "   ", "a" * 256])
+def test_check_file_rejects_bad_original_filename(original_filename):
+    with pytest.raises(ValidationError, match="Invalid original_filename"):
+        RequestCreate.model_validate(_check_file(original_filename=original_filename))
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {},
+        {"uploaded_filename": UPLOAD_ID.upper()},
+        {"original_filename": "Tree Preservation Orders (2024) v2.geojson"},
+        {"original_filename": "a" * 255},
+    ],
+)
+def test_check_file_accepts_submit_uploads(overrides):
+    RequestCreate.model_validate(_check_file(**overrides))
+
+
+def test_upload_name_that_is_not_an_upload_id_is_counted():
+    response, counted = _post_counting_metrics(
+        _check_file(uploaded_filename="../../tmp/example.txt")
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["type"] == "unsafe_uploaded_filename"
+    assert counted == [
+        (
+            ("async.security.rejected", 1),
+            {
+                "attributes": {
+                    "service": "request-api",
+                    "layer": "upload_name",
+                    "source": "api",
+                }
+            },
+        )
+    ]
+
+
+def test_bad_original_filename_is_not_counted():
+    response, counted = _post_counting_metrics(_check_file(original_filename=""))
+
+    assert response.status_code == 422
     assert counted == []

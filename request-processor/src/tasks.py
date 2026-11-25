@@ -4,8 +4,6 @@ from typing import Dict
 import urllib.parse
 from sqlalchemy import or_
 
-import sentry_sdk
-from sentry_sdk.integrations.logging import ignore_logger
 from celery.utils.log import get_task_logger
 from celery.signals import task_prerun, task_success, task_failure, celeryd_init
 import request_model.schemas as schemas
@@ -23,14 +21,26 @@ from task_interface.base_tasks import (
 )
 import json
 from application.core import workflow
-from application.utils.resource_safety import (
+from application.security.resource_safety import (
     UnsafeResourceError,
     check_resource_is_safe,
 )
-from application.utils.security_metrics import count_security_rejection
-from application.utils.safe_fetch import (
+from application.security.request_cleanup import clean_up_request_files
+from application.logging import monitoring
+from application.logging.monitoring import count_security_rejection
+from application.security.safe_fetch import (
+    MAX_RESPONSE_BYTES,
+    MAX_RESPONSE_SECONDS,
+    ResponseTooLargeError,
+    ResponseTooSlowError,
     check_host_resolves_publicly,
     untrusted_fetches,
+)
+from application.security.task_guard import (
+    BrokerMessageGuard,
+    UnsafeRequestParams,
+    UntrustedTaskMessage,
+    is_valid_request_id,
 )
 from application.core.plan_datasets import split_dataset_values
 from application.configurations.config import DATASTORE_URL, Directories
@@ -49,33 +59,26 @@ _DETAIL_BATCH_SIZE = 1000
 max_file_size_mb = 30
 
 
-# Remove resource directories created by Collector, necessary if exception occurs, workflow will not clean up
-def clean_up_request_files(request_id):
-    resource_dir = os.path.join(Directories.COLLECTION_DIR, "resource", request_id)
-    try:
-        if os.path.exists(resource_dir):
-            for root, dirs, files in os.walk(resource_dir, topdown=False):
-                for name in files:
-                    os.remove(os.path.join(root, name))
-                for name in dirs:
-                    os.rmdir(os.path.join(root, name))
-            os.rmdir(resource_dir)
+class _DatabaseBrokerMessageGuard(BrokerMessageGuard):
+    """Checks delivered messages against the request rows in the database."""
 
-            # Clean up parent directories if empty
-            resource_parent_dir = os.path.dirname(resource_dir)
-            if os.path.exists(resource_parent_dir) and not os.listdir(
-                resource_parent_dir
-            ):
-                os.rmdir(resource_parent_dir)
-                collection_dir = os.path.dirname(resource_parent_dir)
-                if os.path.exists(collection_dir) and not os.listdir(collection_dir):
-                    os.rmdir(collection_dir)
-
-    except Exception as e:
-        logger.error(f"Failed to clean up resource directory {resource_dir}: {e}")
+    def get_stored_request(self, request_id):
+        return _get_request(request_id)
 
 
-@celery.task(base=CheckDataFileTask, name=CheckDataFileTask.name)
+class GuardedCheckDataFileTask(_DatabaseBrokerMessageGuard, CheckDataFileTask):
+    expected_type = schemas.RequestTypeEnum.check_file.value
+
+
+class GuardedCheckDataUrlTask(_DatabaseBrokerMessageGuard, CheckDataUrlTask):
+    expected_type = schemas.RequestTypeEnum.check_url.value
+
+
+class GuardedAddDataTask(_DatabaseBrokerMessageGuard, AddDataTask):
+    expected_type = schemas.RequestTypeEnum.add_data.value
+
+
+@celery.task(base=GuardedCheckDataFileTask, name=CheckDataFileTask.name)
 def check_datafile(request: Dict, directories=None):
     logger.info(
         f"Started check_datafile task for request_id={request.get('id', 'unknown')}"
@@ -156,8 +159,8 @@ def handle_check_file(request_schema, request_data, tmp_dir):
         save_response_to_db(request_schema.id, log)
         raise CustomException(log)
 
-    # An uploaded file can point GDAL at local files, other S3 objects or
-    # internal addresses; see resource_safety.
+    # An uploaded file can be unsafe to convert just as a fetched one can;
+    # see resource_safety.
     try:
         check_resource_is_safe(os.path.join(tmp_dir, fileName))
     except UnsafeResourceError as e:
@@ -272,7 +275,7 @@ def _get_resource_metadata(collection_dir, collection, dataset, resource):
     }
 
 
-@celery.task(base=CheckDataUrlTask, name=CheckDataUrlTask.name)
+@celery.task(base=GuardedCheckDataUrlTask, name=CheckDataUrlTask.name)
 def check_dataurl(request: Dict, directories=None):  # noqa
     logger.info(
         f"Started check_dataurl task for request_id = {request.get('id', 'unknown')}"
@@ -310,24 +313,15 @@ def check_dataurl(request: Dict, directories=None):  # noqa
 
     except CustomException as e:
         error_log = utils.create_user_friendly_error_log(e.detail)
-        # Track in Sentry for monitoring (not as error)
-        _capture_sentry_event(
-            error_log,
-            request_schema.id,
-            handled=True,
-        )
+        monitoring.record_check_url_user_error(error_log, request_schema.id)
         save_response_to_db(request_schema.id, error_log)
 
         return _get_request(request_schema.id)
 
     except Exception as e:
-        logger.error(f"Error during _fetch_resource: {e}")
+        monitoring.log_check_url_failure("fetch", request_schema.id)
         error_log = create_generic_error_log(
             url=request_data.url, exception=e, status=getattr(e, "status", None)
-        )
-        _capture_sentry_event(
-            error_log,
-            request_schema.id,
         )
         save_response_to_db(request_schema.id, error_log)
         return _get_request(request_schema.id)
@@ -347,9 +341,9 @@ def check_dataurl(request: Dict, directories=None):  # noqa
             if "plugin" in fetch_log:
                 response["plugin"] = fetch_log["plugin"]
             save_response_to_db(request_schema.id, response)
-            sentry_sdk.metrics.count("async.url_submission.success", 1)
+            monitoring.count_check_url_success()
         except Exception as e:
-            logger.error(f"Workflow failed: {e}")
+            monitoring.log_check_url_failure("run_workflow", request_schema.id)
             plugin = fetch_log.get("plugin") if "plugin" in fetch_log else None
             error_log = create_generic_error_log(
                 url=request_data.url,
@@ -358,29 +352,26 @@ def check_dataurl(request: Dict, directories=None):  # noqa
                 plugin=plugin,
                 extra_context={"workflow_stage": "run_workflow"},
             )
-            _capture_sentry_event(
-                error_log,
-                request_schema.id,
-            )
             save_response_to_db(request_schema.id, error_log)
     else:
-        logger.info("File could not be fetched from collector")
+        # Not an exception, but not expected either: _fetch_with_plugins
+        # raises when every fetch fails.
+        logger.error(
+            "check_url fetched no file",
+            extra={"request_id": request_schema.id, "stage": "fetch"},
+        )
         error_log = create_generic_error_log(
             url=request_data.url,
             exception="UnknownCollectionError",
             status=None,
             extra_context={"error_type": "unknown_collection_error"},
         )
-        _capture_sentry_event(
-            error_log,
-            request_schema.id,
-        )
         save_response_to_db(request_schema.id, error_log)
 
     return _get_request(request_schema.id)
 
 
-@celery.task(base=AddDataTask, name=AddDataTask.name)
+@celery.task(base=GuardedAddDataTask, name=AddDataTask.name)
 def add_data_task(request: Dict, directories=None):
     logger.info(f"Started add_data task for request_id={request.get('id', 'unknown')}")
     logger.info(f"Request payload: {json.dumps(request, default=str)}")
@@ -403,11 +394,7 @@ def add_data_task(request: Dict, directories=None):
             directories.COLLECTION_DIR, "resource", request_schema.id
         )
         if request_data.url:
-            file_name, log = _fetch_resource(
-                resource_dir,
-                request_data.url,
-                endpoint_parameters=request_data.endpoint_parameters,
-            )
+            file_name, log = _fetch_add_data_resource(request_schema, resource_dir)
             organisations = request_data.organisation
             endpoints = None
             resource_start_date = request_data.start_date
@@ -485,16 +472,69 @@ def add_data_task(request: Dict, directories=None):
     return result
 
 
+def _fetch_add_data_resource(request_schema, resource_dir):
+    """
+    Fetch an add_data request's URL. If the fetch fails, save why, as
+    check_dataurl does, so the request is not just marked FAILED with no error.
+    """
+    request_data = request_schema.params
+    try:
+        return _fetch_resource(
+            resource_dir,
+            request_data.url,
+            endpoint_parameters=request_data.endpoint_parameters,
+        )
+    except CustomException as e:
+        save_response_to_db(
+            request_schema.id, utils.create_user_friendly_error_log(e.detail)
+        )
+        raise
+
+
+def _request_id_from_args(args):
+    """Return the request id from task args, or None if it is not a valid id."""
+    try:
+        request_id = args[0]["id"]
+    except (IndexError, KeyError, TypeError):
+        return None
+    if not is_valid_request_id(request_id):
+        logger.error(f"Ignoring task signal for invalid request id {request_id!r}")
+        return None
+    return request_id
+
+
 @task_prerun.connect
 def before_task(task_id, task, args, **kwargs):
-    request_id = args[0]["id"]
+    if isinstance(task, BrokerMessageGuard):
+        try:
+            stored_status = task.validate_message(args, kwargs.get("kwargs") or {})
+        except UntrustedTaskMessage as e:
+            # Leave the request untouched; __call__ raises the same error.
+            # Counted here, once per delivery: __call__ reuses this result.
+            count_security_rejection("message", "broker")
+            logger.error(f"Rejected untrusted task message {task_id}: {e}")
+            return
+        except UnsafeRequestParams as e:
+            # A real request: __call__ raises the same error and
+            # after_task_failure fails the request with an error.
+            count_security_rejection("params", "broker")
+            logger.warning(f"Refused params for task {task_id}: {e}")
+            return
+        if stored_status == "PROCESSING":
+            logger.warning(f"Task {task_id} redelivered for a PROCESSING request")
+            monitoring.count_task_redelivered(task.name)
+    request_id = _request_id_from_args(args)
+    if request_id is None:
+        return
     logger.debug(f"Set status to PROCESSING for request {request_id}")
     _update_request_status(request_id, "PROCESSING")
 
 
 @task_success.connect
 def after_task_success(sender, result, **kwargs):
-    request_id = sender.request.args[0]["id"]
+    request_id = _request_id_from_args(sender.request.args)
+    if request_id is None:
+        return
     logger.debug(f"Set status to PROCESSING for request {request_id}")
     _update_request_status(request_id, "COMPLETE")
     clean_up_request_files(request_id)
@@ -505,13 +545,25 @@ def after_task_success(sender, result, **kwargs):
 
 @task_failure.connect
 def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
-    request_id = args[0]["id"]
+    if isinstance(exception, UntrustedTaskMessage):
+        # The message was forged: don't touch the request row or the filesystem.
+        logger.error(f"Rejected untrusted task message {task_id}: {exception}")
+        return
+    request_id = _request_id_from_args(args)
+    if request_id is None:
+        return
+    if isinstance(exception, UnsafeRequestParams):
+        save_response_to_db(
+            request_id,
+            {
+                "message": exception.user_message,
+                "status": "",
+                "exception": "UnsafeRequestParams",
+            },
+        )
     logger.debug(f"Set status to FAILED for request {request_id}")
-    # Exception type only: request_id would give the metric unbounded cardinality.
-    sentry_sdk.metrics.count(
-        "request_processor.task_failure",
-        1,
-        attributes={"exception": type(exception).__name__},
+    monitoring.count_task_failure(
+        exception, getattr(kwargs.get("sender"), "name", None)
     )
     _update_request_status(request_id, "FAILED")
     if args[0].get("type") == schemas.RequestTypeEnum.add_data:
@@ -526,21 +578,7 @@ def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
 
 @celeryd_init.connect
 def init_sentry(**_kwargs):
-    if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
-        # esridump logs ERROR-level on handled/expected failures (e.g. probing
-        # non-ArcGIS URLs with the arcgis fallback plugin), which would
-        # otherwise be captured as spurious Sentry issues.
-        ignore_logger("esridump.dumper")
-        sentry_sdk.init(
-            enable_tracing=os.environ.get("SENTRY_TRACING_ENABLED", "false").lower()
-            == "true",
-            traces_sample_rate=float(
-                os.environ.get("SENTRY_TRACING_SAMPLE_RATE", "0.01")
-            ),
-            release=os.environ.get("GIT_COMMIT"),
-            debug=os.environ.get("SENTRY_DEBUG", "false").lower() == "true",
-            enable_logs=True,
-        )
+    monitoring.init_sentry()
 
 
 def _publish_request_result(request, status="COMPLETE"):
@@ -572,7 +610,11 @@ def _update_request_status(request_id, status):
                     models.Request.status != "COMPLETE",
                 )
             )
-        query.update({models.Request.status: status}, synchronize_session=False)
+        updated = query.update(
+            {models.Request.status: status}, synchronize_session=False
+        )
+        if not updated and crud.get_request(session, request_id) is None:
+            logger.error(f"Cannot set status {status}: request {request_id} not found")
         session.commit()
         session.flush()
 
@@ -582,66 +624,6 @@ def _get_request(request_id):
     with db_session() as session:
         result = crud.get_request(session, request_id)
     return result
-
-
-# Built with a desire to have context about Check URL errors, even ones that are handled.
-def _capture_sentry_event(
-    error_log,
-    request_id,
-    handled=False,
-    task_name="CheckURL",
-):
-    """
-    Report CheckURL errors to Sentry.
-
-    Args:
-        error_log: A dict containing error details
-        request_id: The request ID for context
-        handled: If True, this is an expected user error (e.g. an
-            unreachable/unsupported URL submitted for checking) - recorded as
-            a metric plus a regular log entry, not a Sentry Issue, since
-            it isn't an application bug. If False, treated as an unexpected
-            error and captured as a Sentry Issue.
-        task_name: Task name (defaults to "CheckURL")
-    """
-    is_dict = isinstance(error_log, dict)
-    message = error_log.get("message", "Error occurred") if is_dict else str(error_log)
-
-    if handled:
-        sentry_sdk.metrics.count(
-            "async.check_url.user_error",
-            1,
-            attributes={
-                "task": task_name,
-                "exception": error_log.get("exception") if is_dict else None,
-                "status": error_log.get("status") if is_dict else None,
-                "plugin": error_log.get("plugin") if is_dict else None,
-            },
-        )
-        logger.warning(
-            f"Check URL user error: {message}",
-            extra={"request_id": request_id, "task": task_name, "error_log": error_log}
-            if is_dict
-            else {"request_id": request_id, "task": task_name},
-        )
-        return
-
-    with sentry_sdk.new_scope() as scope:
-        context = {"id": request_id}
-        if is_dict:
-            if "endpoint-url" in error_log:
-                context["url"] = error_log["endpoint-url"]
-            # Add all error_log fields as extra data
-            for key, value in error_log.items():
-                scope.set_extra(key, str(value))
-
-        scope.set_context("request", context)
-        scope.set_tag("task", task_name)
-        scope.set_tag("handled", "False")
-
-        sentry_sdk.capture_message(
-            "Check URL Unexpected Error: " + message, level="error"
-        )
 
 
 def _get_response(request_id):
@@ -820,8 +802,8 @@ def _fetch_resource(resource_dir, url, endpoint_parameters=None):
     with untrusted_fetches():
         file_name, log = _fetch_with_plugins(collector, url, endpoint_parameters)
 
-    # A public URL can still serve a file that points GDAL at internal
-    # locations, so check the content before anything converts it.
+    # A public URL can still serve a file that is unsafe to convert, so check
+    # it before anything converts it.
     if file_name:
         try:
             check_resource_is_safe(os.path.join(resource_dir, file_name))
@@ -836,6 +818,35 @@ def _fetch_resource(resource_dir, url, endpoint_parameters=None):
                 }
             )
     return file_name, log
+
+
+def _refused_fetch_error(log):
+    refusals = {
+        ResponseTooLargeError.__name__: (
+            "size",
+            "The file at this URL is too large",
+            f"The file at this URL is larger than {MAX_RESPONSE_BYTES // 1_000_000}MB",
+        ),
+        ResponseTooSlowError.__name__: (
+            "time",
+            "The file at this URL took too long to download",
+            "The server did not finish sending the file within "
+            f"{MAX_RESPONSE_SECONDS // 60:.0f} minutes",
+        ),
+    }
+    exception = log.get("exception")
+    if exception not in refusals:
+        return None
+    layer, message, detail = refusals[exception]
+    count_security_rejection(layer, "fetch")
+    return CustomException(
+        {
+            "message": message,
+            "status": log.get("status", ""),
+            "exception": exception,
+            "user_message_detail": detail,
+        }
+    )
 
 
 def _fetch_with_plugins(collector, url, endpoint_parameters):
@@ -871,6 +882,9 @@ def _fetch_with_plugins(collector, url, endpoint_parameters):
                     }
                 )
         elif log.get("exception") or log.get("status", "").startswith("4"):
+            refused = _refused_fetch_error(log)
+            if refused:
+                raise refused
             log["plugin"] = plugin  # Save plugin used for arcgis error context
             break
 

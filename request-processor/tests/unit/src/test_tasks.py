@@ -451,13 +451,26 @@ def test_add_data_task_fail(monkeypatch):
         raise tasks.CustomException({"message": "fail", "status": "404"})
 
     monkeypatch.setattr(tasks, "_fetch_resource", raise_custom)
-    monkeypatch.setattr(tasks, "save_response_to_db", lambda *a, **kw: None)
+    saved = []
+    monkeypatch.setattr(
+        tasks, "save_response_to_db", lambda rid, data: saved.append((rid, data))
+    )
     monkeypatch.setattr(
         tasks, "_get_request", lambda rid: {"id": rid, "status": "FAILED"}
     )
 
     with pytest.raises(tasks.CustomException):
         tasks.add_data_task(request, directories_json)
+
+    # The fetch error is saved so the request explains why it failed.
+    assert len(saved) == 1
+    request_id, error = saved[0]
+    assert request_id == "req-123"
+    assert error["errCode"] == "404"
+    assert error["message"] == (
+        "The URL does not exist. Check the URL you've entered is correct "
+        "(HTTP 404 error)"
+    )
 
 
 def test_check_dataurl_success(monkeypatch):
@@ -640,7 +653,7 @@ def test_check_dataurl_fetch_resource_fails(monkeypatch):
     monkeypatch.setattr(
         tasks, "_get_request", lambda rid: {"id": rid, "status": "FAILED"}
     )
-    monkeypatch.setattr(tasks, "_capture_sentry_event", MagicMock())
+    monkeypatch.setattr(tasks.monitoring, "record_check_url_user_error", MagicMock())
     monkeypatch.setattr(tasks.utils, "create_user_friendly_error_log", lambda x: x)
 
     result = check_dataurl(request, directories_json)
@@ -688,7 +701,6 @@ def test_check_dataurl_no_file_fetched(monkeypatch):
     monkeypatch.setattr(tasks, "_fetch_resource", lambda *a, **kw: (None, {}))
     monkeypatch.setattr(tasks, "_get_request", lambda rid: {"id": rid, "status": "NEW"})
     monkeypatch.setattr(tasks, "save_response_to_db", MagicMock())
-    monkeypatch.setattr(tasks, "_capture_sentry_event", MagicMock())
     monkeypatch.setattr(tasks, "clean_up_request_files", MagicMock())
 
     result = check_dataurl(request, directories_json)
@@ -749,7 +761,10 @@ def test_check_dataurl_with_plugin(monkeypatch):
         tasks, "_get_request", lambda rid: {"id": rid, "status": "COMPLETE"}
     )
     monkeypatch.setattr(
-        tasks.sentry_sdk.metrics, "count", lambda *a, **kw: None, raising=False
+        tasks.monitoring.sentry_sdk.metrics,
+        "count",
+        lambda *a, **kw: None,
+        raising=False,
     )
 
     result = check_dataurl(request, directories_json)
@@ -944,3 +959,40 @@ def test_get_datasets_in_resource(fields, expected, separator):
         for field, value in fields
     ]
     assert tasks._get_datasets_in_resource(rows) == expected
+
+
+@pytest.mark.parametrize(
+    "exception_type, expected",
+    [
+        ("ResponseTooLargeError", "larger than 100MB"),
+        ("ResponseTooSlowError", "longer than 15 minutes"),
+    ],
+)
+def test_check_dataurl_saves_fetch_limit_message(monkeypatch, exception_type, expected):
+    request_schema = MagicMock()
+    request_schema.status = "NEW"
+    request_schema.id = "req-limit"
+    request_schema.params.url = "http://example.com/data.csv"
+    request_schema.params.plugin = None
+
+    def refuse(*a, **kw):
+        raise tasks._refused_fetch_error({"exception": exception_type})
+
+    monkeypatch.setattr(
+        tasks.schemas.Request, "model_validate", lambda r: request_schema
+    )
+    monkeypatch.setattr(tasks, "_fetch_resource", refuse)
+    monkeypatch.setattr(tasks, "count_security_rejection", MagicMock())
+    monkeypatch.setattr(tasks.monitoring, "record_check_url_user_error", MagicMock())
+    save_response_mock = MagicMock()
+    monkeypatch.setattr(tasks, "save_response_to_db", save_response_mock)
+    monkeypatch.setattr(
+        tasks, "_get_request", lambda rid: {"id": rid, "status": "FAILED"}
+    )
+
+    check_dataurl({"id": "req-limit"}, json.dumps({}))
+
+    saved = save_response_mock.call_args.args[1]
+    assert saved["exceptionType"] == exception_type
+    assert expected in saved["message"]
+    assert "try again later" not in saved["message"]

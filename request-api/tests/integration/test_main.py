@@ -156,7 +156,10 @@ def test_request_params_survive_persistence_and_resubmission(db, sqs_queue, kind
         "column_mapping": {"Name": "name"},
     }
     if kind == "check_file":
-        params.update(original_filename="trees.csv", uploaded_filename="upload.csv")
+        params.update(
+            original_filename="trees.csv",
+            uploaded_filename="492f15d8-45e4-427e-bde0-f60d69889f40",
+        )
     else:
         params["url"] = "https://example.org/trees.csv"
     if kind == "add_data":
@@ -189,7 +192,9 @@ def test_create_request_missing_uploaded_file(db, sqs_queue, helpers):
     with pytest.raises(ValidationError):
         json_dict = helpers.request_create_dict(
             request=schemas.RequestCreate(
-                params=schemas.CheckFileParams(uploaded_filename="generated.csv")
+                params=schemas.CheckFileParams(
+                    uploaded_filename="492f15d8-45e4-427e-bde0-f60d69889f40"
+                )
             )
         )
         response = client.post("/requests", json=json_dict)

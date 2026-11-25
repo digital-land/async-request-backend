@@ -7,9 +7,34 @@ import os
 from functools import wraps
 
 import jwt
+import sentry_sdk
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from fastapi import HTTPException
+
+AUTH_REJECTED_METRIC = "async.auth.rejected"
+_KNOWN_ISSUERS = {"manage", "submit"}
+
+
+def _rejected(error, reason, issuer=None):
+    """
+    Count a refused request and return the error to raise.
+
+    reason: "missing" (no bearer token), "invalid" (bad, expired or unknown
+        token), "role" (valid token without a permitted role) or "unavailable"
+        (verification is misconfigured, so every request fails).
+    The issuer is only recorded when it is one we know, so a forged token
+    can't add new values.
+    """
+    sentry_sdk.metrics.count(
+        AUTH_REJECTED_METRIC,
+        1,
+        attributes={
+            "reason": reason,
+            "issuer": issuer if issuer in _KNOWN_ISSUERS else "unknown",
+        },
+    )
+    return error
 
 
 def _issuer_settings(issuer, unauthorized):
@@ -34,6 +59,17 @@ def _verification_config(issuer, unauthorized):
         raise HTTPException(status_code=503, detail="Authentication unavailable")
 
 
+def _unverified_issuer(token, unauthorized):
+    """Read the issuer to pick the verification key; the token is verified after."""
+    try:
+        issuer = jwt.decode(token, options={"verify_signature": False}).get("iss")
+    except jwt.InvalidTokenError:
+        raise _rejected(unauthorized, "invalid")
+    if not isinstance(issuer, str) or not issuer:
+        raise _rejected(unauthorized, "invalid")
+    return issuer
+
+
 def verify_token(http_request, roles):
     scheme, _, token = http_request.headers.get("Authorization", "").partition(" ")
     unauthorized = HTTPException(
@@ -42,14 +78,12 @@ def verify_token(http_request, roles):
         headers={"WWW-Authenticate": "Bearer"},
     )
     if scheme.lower() != "bearer" or not token:
-        raise unauthorized
+        raise _rejected(unauthorized, "missing")
+    issuer = _unverified_issuer(token, unauthorized)
     try:
-        issuer = jwt.decode(token, options={"verify_signature": False}).get("iss")
-        if not isinstance(issuer, str) or not issuer:
-            raise unauthorized
-    except jwt.InvalidTokenError:
-        raise unauthorized
-    key, allowed_roles, audience = _verification_config(issuer, unauthorized)
+        key, allowed_roles, audience = _verification_config(issuer, unauthorized)
+    except HTTPException as e:
+        raise _rejected(e, "unavailable" if e.status_code == 503 else "invalid", issuer)
     try:
         claims = jwt.decode(
             token,
@@ -60,17 +94,23 @@ def verify_token(http_request, roles):
             options={"require": ["iss", "aud", "sub", "iat", "exp", "role"]},
         )
     except jwt.InvalidKeyError:
-        raise HTTPException(status_code=503, detail="Authentication unavailable")
+        raise _rejected(
+            HTTPException(status_code=503, detail="Authentication unavailable"),
+            "unavailable",
+            issuer,
+        )
     except jwt.InvalidTokenError:
-        raise unauthorized
+        raise _rejected(unauthorized, "invalid", issuer)
     if not claims["sub"]:
-        raise unauthorized
+        raise _rejected(unauthorized, "invalid", issuer)
     if (
         not isinstance(claims["role"], str)
         or claims["role"] not in roles
         or claims["role"] not in allowed_roles
     ):
-        raise HTTPException(status_code=403, detail="Insufficient role")
+        raise _rejected(
+            HTTPException(status_code=403, detail="Insufficient role"), "role", issuer
+        )
     http_request.state.principal = claims
 
 

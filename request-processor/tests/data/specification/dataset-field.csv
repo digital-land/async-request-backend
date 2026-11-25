@@ -1,4 +1,5 @@
 dataset,field,field-dataset,guidance,hint
-tree,entry-date,,,
-tree,geometry,,,
-tree,reference,,,
+conservation-area,entry-date,,,
+conservation-area,geometry,,,
+conservation-area,reference,,,
+conservation-area,start-date,,,

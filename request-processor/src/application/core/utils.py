@@ -1,4 +1,5 @@
 from application.logging.logger import get_logger
+from application.security.safe_fetch import MAX_RESPONSE_BYTES, MAX_RESPONSE_SECONDS
 import os
 import hashlib
 import requests
@@ -267,6 +268,33 @@ def append_source(
     return source_key, new_row
 
 
+_UNSUPPORTED_FILE_MESSAGE = (
+    "The selected file must be a CSV, GeoJSON, GML or GeoPackage file"
+)
+
+# Messages chosen by exception type alone. Safety refusals are here because
+# retrying will not help. For unsafe URLs and files the reason is deliberately
+# not shown; size and time limits are.
+_EXCEPTION_TYPE_MESSAGES = {
+    "UnsafeUrlError": (
+        "We cannot check this link. Use a publicly accessible link to the " "data file."
+    ),
+    "UnsafeResourceError": _UNSUPPORTED_FILE_MESSAGE,
+    "ResponseTooLargeError": (
+        "The file at this URL is larger than "
+        f"{MAX_RESPONSE_BYTES // 1_000_000}MB, so we cannot check it. "
+        "Use a link to a smaller file."
+    ),
+    "ResponseTooSlowError": (
+        "The file at this URL took longer than "
+        f"{MAX_RESPONSE_SECONDS // 60:.0f} minutes to download, so we "
+        "cannot check it. Use a link to a smaller file or a faster server."
+    ),
+    "SSLError": "SSL certificate verification failed",
+    "SSLCertVerificationError": "SSL certificate verification failed",
+}
+
+
 def create_user_friendly_error_log(exception_detail):
     """
     Creates a user-friendly error message from CustomException detail, as the message may be displayed to end users.
@@ -290,14 +318,9 @@ def create_user_friendly_error_log(exception_detail):
     user_message = "We could not check this link. Please try again later."
 
     # The ordering here has been considered to show the most relevant message to users in the front end
-    if exception_type in ["SSLError", "SSLCertVerificationError"]:
-        user_message = "SSL certificate verification failed"
-    elif status_code == "403" and is_cloudflare_challenge:
-        user_message = (
-            "This website uses bot detection, so we cannot download this file "
-            "automatically. Use a link that allows automated downloads."
-        )
-    elif status_code == "403" and is_imperva_waf:
+    if exception_type in _EXCEPTION_TYPE_MESSAGES:
+        user_message = _EXCEPTION_TYPE_MESSAGES[exception_type]
+    elif status_code == "403" and (is_cloudflare_challenge or is_imperva_waf):
         user_message = (
             "This website uses bot detection, so we cannot download this file "
             "automatically. Use a link that allows automated downloads."
@@ -308,9 +331,7 @@ def create_user_friendly_error_log(exception_detail):
             "website may be blocking automated downloads."
         )
     elif content_type and "text/html" in content_type:
-        user_message = (
-            "The selected file must be a CSV, GeoJSON, GML or GeoPackage file"
-        )
+        user_message = _UNSUPPORTED_FILE_MESSAGE
     elif status_code == "404":
         user_message = "The URL does not exist. Check the URL you've entered is correct (HTTP 404 error)"
     elif plugin == "arcgis" and status_code == "200":

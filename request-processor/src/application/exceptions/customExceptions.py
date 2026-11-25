@@ -42,7 +42,8 @@ class CustomException(Exception):
         self.endpoint_url = log.get("endpoint-url")
         self.entry_date = log.get("entry-date")
         self.fetch_status = log.get("fetch-status")
-        self.exception_type = log.get("exception")
+        # Some callers name this key exception_type.
+        self.exception_type = log.get("exception") or log.get("exception_type")
         # Content type of the response useful for text/html checks (when not using arcgis/wfs plugin)
         self.content_type = log.get("content-type")
         self.response_headers = {
