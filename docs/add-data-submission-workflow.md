@@ -10,7 +10,21 @@ means processing finished. A submission's `ADDED` means adding the data was
 dispatched; it does not certify that the downstream workflow succeeded. `ADDED`
 and `CLOSED` are terminal. This API does not dispatch additions or send email.
 
-All endpoints below require a Manage JWT with the `staff` or `admin` role.
+Submit calls public `POST /add-data-submissions/duplicate-check` before creating
+Jira issues. It accepts `endpoint_url` (HTTP/HTTPS), `organisation` and `dataset`
+(nonblank), and returns only `{"duplicate": true/false}` for active submissions.
+It requires no check request and reserves nothing; creation still enforces
+uniqueness, returning a generic 409 without the existing submission reference.
+
+Submit then creates Jira and POSTs `/add-data-submissions` with its `jira_issue_key`,
+`check_request_id`, `dataset`, `documentation_url`, `source: "check_tool"` and null
+contacts. Both contacts may be absent; supplied contacts must be a valid pair.
+Confirmation references remain Jira keys. The wizard saves Jira keys and async IDs
+separately per dataset so retries reuse Jira and bypass the duplicate lookup.
+Creation retries reuse the same check/dataset record without changing its metadata.
+Deploy this API before Submit; no migration is needed. `QUERIED` still requires email.
+
+All workflow endpoints below require a Manage JWT with the `staff` or `admin` role.
 Transitions additionally require a nonblank signed `username` claim (the GitHub
 login); the API derives the actor from it and rejects a body-supplied actor.
 Authentication bypass without a verified identity cannot perform transitions.
