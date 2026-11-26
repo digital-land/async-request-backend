@@ -84,4 +84,7 @@ services:
     deploy:
       replicas: 1
     volumes:
-      - "./request-processor/docker_volume:/opt"
+      - "request-processor-data:/opt"
+
+volumes:
+  request-processor-data:
