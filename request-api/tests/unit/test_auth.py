@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 import main
-from auth import require_auth
+from auth import AuthenticationConfigError, authentication_disabled, require_auth
 from request_model import models
 
 
@@ -400,3 +400,65 @@ def test_accepted_token_is_not_counted(api, signing_key, auth_rejections):
     )
     assert response.status_code == 202
     assert auth_rejections == []
+
+
+@pytest.mark.parametrize(
+    "environment",
+    [None, "", "development", "staging", "production", " Production ", "prod"],
+)
+def test_auth_cannot_be_switched_off_outside_local(monkeypatch, environment):
+    # Fails closed: a missing, misspelt or unknown environment counts as deployed.
+    monkeypatch.setenv("AUTHENTICATION_ON", "false")
+    if environment is None:
+        monkeypatch.delenv("SENTRY_ENVIRONMENT", raising=False)
+    else:
+        monkeypatch.setenv("SENTRY_ENVIRONMENT", environment)
+    with pytest.raises(AuthenticationConfigError):
+        authentication_disabled()
+
+    app = FastAPI()
+
+    @app.get("/protected")
+    @require_auth(roles={"staff"})
+    def protected(http_request: Request):
+        return {"ok": True}
+
+    # A protected route fails rather than serving without authentication.
+    response = TestClient(app, raise_server_exceptions=False).get("/protected")
+    assert response.status_code == 500
+
+
+@pytest.mark.parametrize("environment", ["local", "docker-compose-local", " Local "])
+def test_auth_can_be_switched_off_locally(monkeypatch, environment):
+    monkeypatch.setenv("AUTHENTICATION_ON", "false")
+    monkeypatch.setenv("SENTRY_ENVIRONMENT", environment)
+    assert authentication_disabled() is True
+
+
+@pytest.mark.parametrize("environment", [None, "staging", "production"])
+def test_auth_left_on_is_fine_anywhere(monkeypatch, environment):
+    monkeypatch.delenv("AUTHENTICATION_ON", raising=False)
+    if environment is None:
+        monkeypatch.delenv("SENTRY_ENVIRONMENT", raising=False)
+    else:
+        monkeypatch.setenv("SENTRY_ENVIRONMENT", environment)
+    assert authentication_disabled() is False
+
+
+def test_api_refuses_to_start_with_auth_off_in_production():
+    # In a separate interpreter, so the app other tests use is not reloaded.
+    import os
+    import subprocess
+    import sys
+
+    env = {
+        **os.environ,
+        "AUTHENTICATION_ON": "false",
+        "SENTRY_ENVIRONMENT": "production",
+        "PYTHONPATH": os.pathsep.join(sys.path),
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", "import main"], env=env, capture_output=True, text=True
+    )
+    assert result.returncode != 0
+    assert "AuthenticationConfigError" in result.stderr

@@ -1,12 +1,17 @@
 import datetime
 import database
 import pytest
-import json
 from src import tasks
 from src.tasks import save_response_to_db, check_dataurl, _fetch_resource
 from request_model import models, schemas
 from unittest.mock import MagicMock
 from application.exceptions.customExceptions import CustomException
+
+
+def _use_directories(monkeypatch, directories):
+    """Point the worker's directories somewhere else for one test."""
+    for name, value in directories.items():
+        monkeypatch.setattr(tasks.Directories, name, value)
 
 
 @pytest.mark.parametrize(
@@ -303,7 +308,7 @@ def test_add_data_task_success(monkeypatch, authoritative, owner, expected):
         "COLLECTION_DIR": "/tmp/collection",
         "PIPELINE_DIR": "/tmp/pipeline",
     }
-    directories_json = json.dumps(directories_dict)
+    _use_directories(monkeypatch, directories_dict)
     request_schema = MagicMock()
     request_schema = MagicMock()
     request_schema.status = "NEW"
@@ -328,7 +333,7 @@ def test_add_data_task_success(monkeypatch, authoritative, owner, expected):
         tasks, "_get_request", lambda rid: {"id": rid, "status": "COMPLETE"}
     )
 
-    result = tasks.add_data_task(request, directories_json)
+    result = tasks.add_data_task(request)
 
     assert result["id"] == "req-123"
     assert result["status"] == "COMPLETE"
@@ -352,7 +357,7 @@ def test_add_data_task_success_with_resource(monkeypatch):
         "COLLECTION_DIR": "/tmp/collection",
         "PIPELINE_DIR": "/tmp/pipeline",
     }
-    directories_json = json.dumps(directories_dict)
+    _use_directories(monkeypatch, directories_dict)
     request_schema = MagicMock()
     request_schema.status = "NEW"
     request_schema.id = "req-resource"
@@ -404,7 +409,7 @@ def test_add_data_task_success_with_resource(monkeypatch):
         tasks, "_get_request", lambda rid: {"id": rid, "status": "COMPLETE"}
     )
 
-    result = tasks.add_data_task(request, directories_json)
+    result = tasks.add_data_task(request)
 
     assert result["id"] == "req-resource"
     assert result["status"] == "COMPLETE"
@@ -433,7 +438,7 @@ def test_add_data_task_fail(monkeypatch):
         "COLLECTION_DIR": "/tmp/collection",
         "PIPELINE_DIR": "/tmp/pipeline",
     }
-    directories_json = json.dumps(directories_dict)
+    _use_directories(monkeypatch, directories_dict)
     request_schema = MagicMock()
     request_schema.status = "NEW"
     request_schema.id = "req-123"
@@ -460,7 +465,7 @@ def test_add_data_task_fail(monkeypatch):
     )
 
     with pytest.raises(tasks.CustomException):
-        tasks.add_data_task(request, directories_json)
+        tasks.add_data_task(request)
 
     # The fetch error is saved so the request explains why it failed.
     assert len(saved) == 1
@@ -494,7 +499,7 @@ def test_check_dataurl_success(monkeypatch):
         "SPECIFICATION_DIR": "/tmp/specification",
         "CACHE_DIR": "/tmp/cache",
     }
-    directories_json = json.dumps(directories_dict)
+    _use_directories(monkeypatch, directories_dict)
 
     request_schema = MagicMock()
     request_schema.status = "NEW"
@@ -527,7 +532,7 @@ def test_check_dataurl_success(monkeypatch):
         tasks, "_get_request", lambda rid: {"id": rid, "status": "COMPLETE"}
     )
 
-    result = check_dataurl(request, directories_json)
+    result = check_dataurl(request)
 
     assert result["id"] == "req-001"
     assert result["status"] == "COMPLETE"
@@ -570,7 +575,7 @@ def test_check_dataurl_with_default_directories(monkeypatch):
         tasks, "_get_request", lambda rid: {"id": rid, "status": "COMPLETE"}
     )
 
-    result = check_dataurl(request, None)
+    result = check_dataurl(request)
 
     assert result["id"] == "req-002"
     assert result["status"] == "COMPLETE"
@@ -600,7 +605,7 @@ def test_check_dataurl_already_complete(monkeypatch):
         tasks, "_get_request", lambda rid: {"id": rid, "status": "COMPLETE"}
     )
 
-    result = check_dataurl(request, None)
+    result = check_dataurl(request)
 
     assert result["id"] == "req-003"
     assert result["status"] == "COMPLETE"
@@ -622,7 +627,7 @@ def test_check_dataurl_fetch_resource_fails(monkeypatch):
         "COLLECTION_DIR": "/tmp/collection",
         "PIPELINE_DIR": "/tmp/pipeline",
     }
-    directories_json = json.dumps(directories_dict)
+    _use_directories(monkeypatch, directories_dict)
 
     request_schema = MagicMock()
     request_schema.status = "NEW"
@@ -656,7 +661,7 @@ def test_check_dataurl_fetch_resource_fails(monkeypatch):
     monkeypatch.setattr(tasks.monitoring, "record_check_url_user_error", MagicMock())
     monkeypatch.setattr(tasks.utils, "create_user_friendly_error_log", lambda x: x)
 
-    result = check_dataurl(request, directories_json)
+    result = check_dataurl(request)
 
     assert result["id"] == "req-004"
     assert result["status"] == "FAILED"
@@ -683,7 +688,7 @@ def test_check_dataurl_no_file_fetched(monkeypatch):
         "COLLECTION_DIR": "/tmp/collection",
         "PIPELINE_DIR": "/tmp/pipeline",
     }
-    directories_json = json.dumps(directories_dict)
+    _use_directories(monkeypatch, directories_dict)
 
     request_schema = MagicMock()
     request_schema.status = "NEW"
@@ -703,7 +708,7 @@ def test_check_dataurl_no_file_fetched(monkeypatch):
     monkeypatch.setattr(tasks, "save_response_to_db", MagicMock())
     monkeypatch.setattr(tasks, "clean_up_request_files", MagicMock())
 
-    result = check_dataurl(request, directories_json)
+    result = check_dataurl(request)
 
     assert result["id"] == "req-005"
 
@@ -725,7 +730,7 @@ def test_check_dataurl_with_plugin(monkeypatch):
         "COLLECTION_DIR": "/tmp/collection",
         "PIPELINE_DIR": "/tmp/pipeline",
     }
-    directories_json = json.dumps(directories_dict)
+    _use_directories(monkeypatch, directories_dict)
 
     request_schema = MagicMock()
     request_schema.status = "NEW"
@@ -767,7 +772,7 @@ def test_check_dataurl_with_plugin(monkeypatch):
         raising=False,
     )
 
-    result = check_dataurl(request, directories_json)
+    result = check_dataurl(request)
 
     assert result["id"] == "req-006"
     assert len(fetch_calls) == 1
@@ -793,7 +798,7 @@ def test_check_dataurl_without_geom_type_and_column_mapping(monkeypatch):
         "COLLECTION_DIR": "/tmp/collection",
         "PIPELINE_DIR": "/tmp/pipeline",
     }
-    directories_json = json.dumps(directories_dict)
+    _use_directories(monkeypatch, directories_dict)
 
     request_schema = MagicMock()
     request_schema.status = "NEW"
@@ -836,7 +841,7 @@ def test_check_dataurl_without_geom_type_and_column_mapping(monkeypatch):
         tasks, "_get_request", lambda rid: {"id": rid, "status": "COMPLETE"}
     )
 
-    result = check_dataurl(request, directories_json)
+    result = check_dataurl(request)
 
     assert result["id"] == "req-007"
     assert len(workflow_calls) == 1
@@ -864,7 +869,7 @@ def test_check_dataurl_workflow_called_with_correct_params(monkeypatch):
         "SPECIFICATION_DIR": "/tmp/specification",
         "CACHE_DIR": "/tmp/cache",
     }
-    directories_json = json.dumps(directories_dict)
+    _use_directories(monkeypatch, directories_dict)
 
     request_schema = MagicMock()
     request_schema.status = "NEW"
@@ -914,7 +919,7 @@ def test_check_dataurl_workflow_called_with_correct_params(monkeypatch):
         tasks, "_get_request", lambda rid: {"id": rid, "status": "COMPLETE"}
     )
 
-    check_dataurl(request, directories_json)
+    check_dataurl(request)
 
     assert len(workflow_calls) == 1
     assert workflow_calls[0]["file_name"] == "brownfield-data.csv"
@@ -990,7 +995,7 @@ def test_check_dataurl_saves_fetch_limit_message(monkeypatch, exception_type, ex
         tasks, "_get_request", lambda rid: {"id": rid, "status": "FAILED"}
     )
 
-    check_dataurl({"id": "req-limit"}, json.dumps({}))
+    check_dataurl({"id": "req-limit"})
 
     saved = save_response_mock.call_args.args[1]
     assert saved["exceptionType"] == exception_type

@@ -316,3 +316,29 @@ def test_bad_original_filename_is_not_counted():
 
     assert response.status_code == 422
     assert counted == []
+
+
+def _add_data(**params):
+    return {
+        "params": {
+            "type": "add_data",
+            "dataset": "tree",
+            "collection": "tree-preservation-order",
+            "url": "https://example.org/trees.csv",
+            **params,
+        }
+    }
+
+
+@pytest.mark.parametrize(
+    "branch",
+    ["../../../other-org/repo/refs/heads/main", "a/./b", "/main", "main?x", "a//b", ""],
+)
+def test_add_data_rejects_unsafe_github_branch(branch):
+    with pytest.raises(ValidationError, match="github_branch"):
+        RequestCreate.model_validate(_add_data(github_branch=branch))
+
+
+@pytest.mark.parametrize("branch", [None, "main", "config-manager-update"])
+def test_add_data_accepts_plain_github_branch(branch):
+    RequestCreate.model_validate(_add_data(github_branch=branch))

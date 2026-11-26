@@ -142,7 +142,7 @@ def test_create_request(db, sqs_queue, helpers):
     response = client.post("/requests", json=helpers.request_create_dict())
     request_id = response.json()["id"]
     assert response.status_code == 202
-    assert response.headers["Location"] == f"$testserver/requests/{request_id}"
+    assert response.headers["Location"] == f"/requests/{request_id}"
 
 
 @pytest.mark.parametrize("kind", ["check_url", "check_file", "add_data"])

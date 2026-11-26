@@ -25,6 +25,7 @@ sys.path.insert(0, str(task_interface))
 import crud  # noqa: E402
 import database  # noqa: E402
 import request_model.models as request_models  # noqa: E402
+from application.configurations.config import Directories  # noqa: E402
 from tasks import add_data_task  # noqa: E402
 
 # Change to request-processor so relative paths (e.g. specification/, var/) resolve correctly
@@ -60,7 +61,8 @@ def ensure_request_exists(request_payload: dict) -> None:
         session.commit()
 
 
-# Override directories to local workspace paths (avoids relying on /opt/* when not in Docker)
+# Point Directories at local workspace paths (avoids relying on /opt/* when not in Docker).
+# The tasks no longer accept a per-call override, so patch the shared config class.
 workspace_volume = workspace_root / "request-processor" / "docker_volume"
 directories_override = {
     "COLLECTION_DIR": str(workspace_volume / "collection"),
@@ -72,9 +74,10 @@ directories_override = {
     # Leave relative defaults for var/ and specification/
 }
 
-# Ensure base directories exist
-for d in directories_override.values():
+# Ensure base directories exist and apply them
+for key, d in directories_override.items():
     Path(d).mkdir(parents=True, exist_ok=True)
+    setattr(Directories, key, d)
 
 # Request payload - edit the params block if you need to test different datasets or URLs
 now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
@@ -114,7 +117,7 @@ print("=" * 80 + "\n")
 
 try:
     ensure_request_exists(request_payload)
-    result = add_data_task(request_payload, directories=json.dumps(directories_override))
+    result = add_data_task(request_payload)
     print("\n" + "=" * 80)
     print("TASK COMPLETED SUCCESSFULLY")
     print("=" * 80)

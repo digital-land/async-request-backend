@@ -3,7 +3,7 @@ eventlet==0.35.2
 SQLAlchemy>=2.0.27
 psycopg2_binary>=2.9.9
 pydantic==2.7.0
-cryptography==3.4.8 #Needed to control version of transient dependency used by moto[sqs]
+cryptography==48.0.1
 cchardet==2.1.7
 httpx
 pre-commit
@@ -12,3 +12,4 @@ rapidfuzz==3.9.7
 shortuuid==1.0.13
 sentry-sdk[celery]==2.44.0
 urllib3>=2.6.0
+h11>=0.16.0

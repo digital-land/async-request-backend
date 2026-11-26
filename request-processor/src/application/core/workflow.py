@@ -164,7 +164,9 @@ def download_file(url, destination):
     scheme = urllib.parse.urlsplit(url).scheme.lower()
     if scheme not in _DOWNLOAD_SCHEMES:
         raise ValueError(f"Only http and https downloads are allowed, not {scheme!r}")
-    request = urllib.request.Request(url, headers=_download_headers(url))
+    request = urllib.request.Request(url)
+    for name, value in _download_headers(url).items():
+        request.add_unredirected_header(name, value)
     try:
         with urllib.request.urlopen(
             request, timeout=REQUEST_TIMEOUT_SECONDS

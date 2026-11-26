@@ -47,7 +47,7 @@ certifi==2025.1.31
     #   pyproj
     #   requests
     #   sentry-sdk
-cffi==1.17.1
+cffi==2.1.1
     # via
     #   cryptography
     #   pygit2
@@ -80,7 +80,7 @@ cloudpathlib[s3]==0.25.0
     # via digital-land
 cloudpickle==3.1.1
     # via dask
-cryptography==3.4.8
+cryptography==48.0.1
     # via
     #   -r requirements/requirements.in
     #   moto
@@ -116,11 +116,12 @@ geojson==3.2.0
     # via digital-land
 greenlet==3.1.1
     # via eventlet
-h11==0.14.0
+h11==0.16.0
     # via
+    #   -r requirements/requirements.in
     #   httpcore
     #   uvicorn
-httpcore==1.0.7
+httpcore==1.0.9
     # via httpx
 httpx==0.28.1
     # via
@@ -284,11 +285,12 @@ toolz==1.0.0
     # via
     #   dask
     #   partd
-typing-extensions==4.13.1
+typing-extensions==4.16.0
     # via
     #   anyio
     #   asgiref
     #   cloudpathlib
+    #   cryptography
     #   datasette
     #   flexcache
     #   flexparser

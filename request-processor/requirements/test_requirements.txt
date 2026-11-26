@@ -70,7 +70,7 @@ certifi==2025.1.31
     #   pyproj
     #   requests
     #   sentry-sdk
-cffi==1.17.1
+cffi==2.1.1
     # via
     #   -r requirements/requirements.txt
     #   cryptography
@@ -123,7 +123,7 @@ cloudpickle==3.1.1
     #   dask
 coverage[toml]==7.8.0
     # via pytest-cov
-cryptography==3.4.8
+cryptography==48.0.1
     # via
     #   -r requirements/requirements.txt
     #   -r requirements/test_requirements.in
@@ -195,12 +195,12 @@ greenlet==3.1.1
     # via
     #   -r requirements/requirements.txt
     #   eventlet
-h11==0.14.0
+h11==0.16.0
     # via
     #   -r requirements/requirements.txt
     #   httpcore
     #   uvicorn
-httpcore==1.0.7
+httpcore==1.0.9
     # via
     #   -r requirements/requirements.txt
     #   httpx
@@ -500,12 +500,13 @@ toolz==1.0.0
     #   -r requirements/requirements.txt
     #   dask
     #   partd
-typing-extensions==4.13.1
+typing-extensions==4.16.0
     # via
     #   -r requirements/requirements.txt
     #   anyio
     #   asgiref
     #   cloudpathlib
+    #   cryptography
     #   datasette
     #   flexcache
     #   flexparser

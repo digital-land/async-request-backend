@@ -20,6 +20,21 @@ UPLOADED_FILENAME_PATTERN = re.compile(
 # The user's own filename; only stored and shown back. 255 is the usual
 # filesystem limit for a file name.
 MAX_ORIGINAL_FILENAME_LENGTH = 255
+# add_data joins github_branch onto the config repo's download URL, so it must
+# be a plain branch name: slash-separated segments of these characters, none of
+# them "." or "..", so it cannot move the URL to another repo or file.
+GITHUB_BRANCH_PATTERN = re.compile(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*")
+MAX_GITHUB_BRANCH_LENGTH = 255
+
+
+def is_safe_github_branch(branch):
+    return (
+        isinstance(branch, str)
+        and len(branch) <= MAX_GITHUB_BRANCH_LENGTH
+        and bool(GITHUB_BRANCH_PATTERN.fullmatch(branch))
+        and ".." not in branch
+        and all(segment != "." for segment in branch.split("/"))
+    )
 
 
 class RequestTypeEnum(str, Enum):
@@ -116,6 +131,17 @@ class RequestCreate(RequestBase):
             raise ValueError(
                 "Invalid original_filename: must be 1 to "
                 f"{MAX_ORIGINAL_FILENAME_LENGTH} characters"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def github_branch_is_safe(self):
+        # Only checked when a request is created, like the url check above.
+        branch = getattr(self.params, "github_branch", None)
+        if branch is not None and not is_safe_github_branch(branch):
+            raise ValueError(
+                "Invalid github_branch: must be a branch name of letters, digits, "
+                "'.', '_', '-' and '/'"
             )
         return self
 

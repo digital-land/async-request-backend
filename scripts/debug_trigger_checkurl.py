@@ -66,9 +66,11 @@ def ensure_request_exists(request_payload: dict) -> None:
 
 
 # Now import the task (request-processor/src is on sys.path)
+from application.configurations.config import Directories
 from tasks import check_dataurl
 
-# Override directories to local workspace paths (avoids relying on /opt/* when not in Docker)
+# Point Directories at local workspace paths (avoids relying on /opt/* when not in Docker).
+# The tasks no longer accept a per-call override, so patch the shared config class.
 workspace_volume = workspace_root / "request-processor" / "docker_volume"
 directories_override = {
     "COLLECTION_DIR": str(workspace_volume / "collection"),
@@ -80,9 +82,10 @@ directories_override = {
     # Leave relative defaults for var/ and specification/
 }
 
-# Ensure base directories exist
-for d in directories_override.values():
+# Ensure base directories exist and apply them
+for key, d in directories_override.items():
     Path(d).mkdir(parents=True, exist_ok=True)
+    setattr(Directories, key, d)
 
 # Request payload - POST body from your requirement (all required fields for schemas.Request)
 now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
@@ -118,7 +121,7 @@ print("=" * 80 + "\n")
 try:
     ensure_request_exists(request_payload)
     # Call the task synchronously without Celery
-    result = check_dataurl(request_payload, directories=json.dumps(directories_override))
+    result = check_dataurl(request_payload)
     print("\n" + "=" * 80)
     print("TASK COMPLETED SUCCESSFULLY")
     print("=" * 80)

@@ -729,7 +729,7 @@ def test_download_file_does_not_add_auth_without_github_env(monkeypatch, tmp_pat
     )
 
     request, timeout = requests[0]
-    assert "Authorization" not in request.headers
+    assert request.get_header("Authorization") is None
     assert timeout == REQUEST_TIMEOUT_SECONDS
     assert destination.read_text() == "dummy data"
 
@@ -767,7 +767,9 @@ def test_download_file_adds_github_app_token_for_github_download(monkeypatch, tm
     )
 
     request, timeout = requests[0]
-    assert request.headers["Authorization"] == "Bearer installation-token"
+    assert request.get_header("Authorization") == "Bearer installation-token"
+    # Sent only to this URL, not to wherever a redirect points.
+    assert "Authorization" not in request.headers
     assert timeout == REQUEST_TIMEOUT_SECONDS
     assert destination.read_text() == "dummy data"
 
@@ -810,7 +812,7 @@ def test_download_file_does_not_add_token_for_non_github_download(
     )
 
     request, timeout = requests[0]
-    assert "Authorization" not in request.headers
+    assert request.get_header("Authorization") is None
     assert timeout == REQUEST_TIMEOUT_SECONDS
     assert destination.read_text() == "dummy data"
 
@@ -956,3 +958,58 @@ def test_download_file_refuses_non_http_urls(monkeypatch, tmp_path, url):
     with pytest.raises(ValueError, match="Only http and https"):
         download_file(url, str(destination))
     assert not destination.exists()
+
+
+def test_download_file_does_not_send_github_token_after_a_redirect(
+    monkeypatch, tmp_path
+):
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    received = {}
+
+    class Target(BaseHTTPRequestHandler):
+        def do_GET(self):
+            received["authorization"] = self.headers.get("Authorization")
+            self.send_response(200)
+            self.send_header("Content-Length", "4")
+            self.end_headers()
+            self.wfile.write(b"data")
+
+        def log_message(self, *args):
+            pass
+
+    target = HTTPServer(("127.0.0.1", 0), Target)
+
+    class Redirect(BaseHTTPRequestHandler):
+        def do_GET(self):
+            received["first_authorization"] = self.headers.get("Authorization")
+            self.send_response(302)
+            self.send_header(
+                "Location", f"http://127.0.0.1:{target.server_port}/elsewhere.csv"
+            )
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    redirect = HTTPServer(("127.0.0.1", 0), Redirect)
+    for server in (target, redirect):
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+    monkeypatch.setattr(
+        "src.application.core.workflow._download_headers",
+        lambda url: {"Authorization": "Bearer installation-token"},
+    )
+    destination = tmp_path / "column.csv"
+    try:
+        download_file(
+            f"http://127.0.0.1:{redirect.server_port}/column.csv", str(destination)
+        )
+    finally:
+        for server in (target, redirect):
+            server.shutdown()
+            server.server_close()
+
+    assert received["first_authorization"] == "Bearer installation-token"
+    assert received["authorization"] is None
+    assert destination.read_text() == "data"

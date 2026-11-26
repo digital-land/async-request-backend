@@ -22,5 +22,4 @@ class DependencyHealth(BaseModel):
 
 class HealthCheckResponse(BaseModel):
     name: str
-    version: str
     dependencies: List[DependencyHealth]
