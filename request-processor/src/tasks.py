@@ -79,7 +79,7 @@ class GuardedAddDataTask(_DatabaseBrokerMessageGuard, AddDataTask):
 
 
 @celery.task(base=GuardedCheckDataFileTask, name=CheckDataFileTask.name)
-def check_datafile(request: Dict, directories=None):
+def check_datafile(request: Dict):
     logger.info(
         f"Started check_datafile task for request_id={request.get('id', 'unknown')}"
     )
@@ -87,15 +87,7 @@ def check_datafile(request: Dict, directories=None):
     request_schema = schemas.Request.model_validate(request)
     request_data = request_schema.params
     if not request_schema.status == "COMPLETE":
-        if not directories:
-            directories = Directories
-        elif directories:
-            data_dict = json.loads(directories)
-            # Create an instance of the Directories class
-            directories = Directories()
-            # Update attribute values based on the dictionary
-            for key, value in data_dict.items():
-                setattr(directories, key, value)
+        directories = Directories
 
         tmp_dir = os.path.join(
             directories.COLLECTION_DIR, "resource", request_schema.id
@@ -276,7 +268,7 @@ def _get_resource_metadata(collection_dir, collection, dataset, resource):
 
 
 @celery.task(base=GuardedCheckDataUrlTask, name=CheckDataUrlTask.name)
-def check_dataurl(request: Dict, directories=None):  # noqa
+def check_dataurl(request: Dict):  # noqa
     logger.info(
         f"Started check_dataurl task for request_id = {request.get('id', 'unknown')}"
     )
@@ -288,13 +280,7 @@ def check_dataurl(request: Dict, directories=None):  # noqa
         logger.info(f"Request {request_schema.id} already COMPLETE")
         return _get_request(request_schema.id)
 
-    if not directories:
-        directories = Directories
-    elif directories:
-        data_dict = json.loads(directories)
-        directories = Directories()
-        for key, value in data_dict.items():
-            setattr(directories, key, value)
+    directories = Directories
 
     resource_dir = os.path.join(
         directories.COLLECTION_DIR, "resource", request_schema.id
@@ -372,7 +358,7 @@ def check_dataurl(request: Dict, directories=None):  # noqa
 
 
 @celery.task(base=GuardedAddDataTask, name=AddDataTask.name)
-def add_data_task(request: Dict, directories=None):
+def add_data_task(request: Dict):
     logger.info(f"Started add_data task for request_id={request.get('id', 'unknown')}")
     logger.info(f"Request payload: {json.dumps(request, default=str)}")
     request_schema = schemas.Request.model_validate(request)
@@ -382,13 +368,7 @@ def add_data_task(request: Dict, directories=None):
     # Publish that exact result rather than allocating entity numbers again.
     saved_response = _get_response(request_schema.id)
     if saved_response is None and request_schema.status != "COMPLETE":
-        if not directories:
-            directories = Directories
-        else:
-            data_dict = json.loads(directories)
-            directories = Directories()
-            for key, value in data_dict.items():
-                setattr(directories, key, value)
+        directories = Directories
 
         resource_dir = os.path.join(
             directories.COLLECTION_DIR, "resource", request_schema.id
@@ -503,26 +483,32 @@ def _request_id_from_args(args):
     return request_id
 
 
+# The task signals below fire for every task the worker runs, including
+# Celery's built-in ones, whose args a sender can fill with any request id. Only
+# the guarded request tasks may change a request's status or files.
+
+
 @task_prerun.connect
 def before_task(task_id, task, args, **kwargs):
-    if isinstance(task, BrokerMessageGuard):
-        try:
-            stored_status = task.validate_message(args, kwargs.get("kwargs") or {})
-        except UntrustedTaskMessage as e:
-            # Leave the request untouched; __call__ raises the same error.
-            # Counted here, once per delivery: __call__ reuses this result.
-            count_security_rejection("message", "broker")
-            logger.error(f"Rejected untrusted task message {task_id}: {e}")
-            return
-        except UnsafeRequestParams as e:
-            # A real request: __call__ raises the same error and
-            # after_task_failure fails the request with an error.
-            count_security_rejection("params", "broker")
-            logger.warning(f"Refused params for task {task_id}: {e}")
-            return
-        if stored_status == "PROCESSING":
-            logger.warning(f"Task {task_id} redelivered for a PROCESSING request")
-            monitoring.count_task_redelivered(task.name)
+    if not isinstance(task, BrokerMessageGuard):
+        return
+    try:
+        stored_status = task.validate_message(args, kwargs.get("kwargs") or {})
+    except UntrustedTaskMessage as e:
+        # Leave the request untouched; __call__ raises the same error.
+        # Counted here, once per delivery: __call__ reuses this result.
+        count_security_rejection("message", "broker")
+        logger.error(f"Rejected untrusted task message {task_id}: {e}")
+        return
+    except UnsafeRequestParams as e:
+        # A real request: __call__ raises the same error and
+        # after_task_failure fails the request with an error.
+        count_security_rejection("params", "broker")
+        logger.warning(f"Refused params for task {task_id}: {e}")
+        return
+    if stored_status == "PROCESSING":
+        logger.warning(f"Task {task_id} redelivered for a PROCESSING request")
+        monitoring.count_task_redelivered(task.name)
     request_id = _request_id_from_args(args)
     if request_id is None:
         return
@@ -532,6 +518,8 @@ def before_task(task_id, task, args, **kwargs):
 
 @task_success.connect
 def after_task_success(sender, result, **kwargs):
+    if not isinstance(sender, BrokerMessageGuard):
+        return
     request_id = _request_id_from_args(sender.request.args)
     if request_id is None:
         return
@@ -545,6 +533,8 @@ def after_task_success(sender, result, **kwargs):
 
 @task_failure.connect
 def after_task_failure(task_id, exception, traceback, einfo, args, **kwargs):
+    if not isinstance(kwargs.get("sender"), BrokerMessageGuard):
+        return
     if isinstance(exception, UntrustedTaskMessage):
         # The message was forged: don't touch the request row or the filesystem.
         logger.error(f"Rejected untrusted task message {task_id}: {exception}")

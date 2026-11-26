@@ -14,6 +14,7 @@ from fastapi import HTTPException
 
 AUTH_REJECTED_METRIC = "async.auth.rejected"
 _KNOWN_ISSUERS = {"manage", "submit"}
+_AUTH_OPTIONAL_ENVIRONMENTS = {"local", "docker-compose-local"}
 
 
 def _rejected(error, reason, issuer=None):
@@ -114,6 +115,28 @@ def verify_token(http_request, roles):
     http_request.state.principal = claims
 
 
+class AuthenticationConfigError(RuntimeError):
+    """Authentication is switched off in an environment that requires it."""
+
+
+def authentication_disabled():
+    """
+    Return True if AUTHENTICATION_ON=false, which is only for local use.
+
+    Raise AuthenticationConfigError if it is set anywhere else
+    """
+    if os.environ.get("AUTHENTICATION_ON", "true").lower() != "false":
+        return False
+    environment = os.environ.get("SENTRY_ENVIRONMENT", "").strip().lower()
+    if environment not in _AUTH_OPTIONAL_ENVIRONMENTS:
+        raise AuthenticationConfigError(
+            "AUTHENTICATION_ON=false is only allowed when SENTRY_ENVIRONMENT is "
+            f"one of {sorted(_AUTH_OPTIONAL_ENVIRONMENTS)}, "
+            f"not {environment or '(not set)'!r}"
+        )
+    return True
+
+
 def add_data_requires_auth(request):
     """Protect add-data processing and any request changing submission pointers."""
     return (
@@ -131,7 +154,7 @@ def require_auth(*, roles, when=None):
         signature = inspect.signature(handler)
 
         def authorize(args, kwargs):
-            if os.environ.get("AUTHENTICATION_ON", "true").lower() == "false":
+            if authentication_disabled():
                 return
             arguments = signature.bind(*args, **kwargs).arguments
             if when is None or when(arguments["request"]):

@@ -15,7 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 import crud
-from auth import add_data_requires_auth, require_auth
+from auth import add_data_requires_auth, authentication_disabled, require_auth
 from dependencies import _get_db, _get_sqs_client
 from routers.add_data_submissions import router as add_data_submissions_router
 from pagination_model import PaginationParams
@@ -69,6 +69,9 @@ if os.environ.get("SENTRY_ENABLED", "false").lower() == "true":
         custom_repr=sentry_event_scrubber.safe_repr,
         before_send_log=sentry_event_scrubber.scrub_log,
     )
+
+# Refuse to start with authentication switched off in staging or production.
+authentication_disabled()
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(add_data_submissions_router)
@@ -127,7 +130,6 @@ def healthcheck(
 
     return HealthCheckResponse(
         name="request-api",
-        version=os.environ.get("GIT_COMMIT", "unknown"),
         dependencies=[
             DependencyHealth(
                 name="request-db",
@@ -173,9 +175,7 @@ def create_request(
         logging.error("Async call to celery task failed: %s", error)
         raise error
 
-    http_response.headers[
-        "Location"
-    ] = f"${http_request.headers['Host']}/requests/{request_schema.id}"
+    http_response.headers["Location"] = f"/requests/{request_schema.id}"
 
     return request_schema
 

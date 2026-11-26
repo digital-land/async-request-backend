@@ -17,6 +17,7 @@ look requests up in the database.
 
 import re
 
+from celery._state import get_current_task
 from pydantic import ValidationError
 
 import request_model.schemas as schemas
@@ -145,6 +146,13 @@ def validate_params(params):
             f"Invalid uploaded_filename {uploaded_filename!r}", _UNSAFE_PARAMS_MESSAGE
         )
 
+    # add_data joins github_branch onto the config repo's download URL.
+    github_branch = getattr(params, "github_branch", None)
+    if github_branch is not None and not schemas.is_safe_github_branch(github_branch):
+        raise UnsafeRequestParams(
+            f"Invalid github_branch {github_branch!r}", _UNSAFE_PARAMS_MESSAGE
+        )
+
     # Collection and dataset are joined onto local paths. Whether the dataset
     # exists is left to the workflow, which fails the request with an error.
     for field in ("collection", "dataset"):
@@ -160,8 +168,13 @@ class BrokerMessageGuard:
     Mixin for Celery tasks that validates delivered messages before the body runs.
 
     Celery's tracer calls a task's custom __call__ with called_directly=False.
-    Direct calls (tests, debug scripts) keep called_directly=True and are not
-    checked, so they can still pass a directories override.
+    Direct calls from tests and debug scripts keep called_directly=True and are
+    not checked.
+
+    A direct call made while another task is running is refused. Celery's
+    built-in tasks (celery.starmap, celery.map, celery.chunks) call the task
+    they are given directly, so a message for one of them would otherwise run
+    this task without the check. request-api never sends those.
 
     A task_prerun handler should call validate_message first, so a forged
     message never changes the request's status. The result is cached on the
@@ -194,4 +207,8 @@ class BrokerMessageGuard:
     def __call__(self, *args, **kwargs):
         if not self.request.called_directly:
             self.validate_message(args, kwargs)
+        elif get_current_task() is not None:
+            raise UntrustedTaskMessage(
+                f"{self.name} called from inside task {get_current_task().name}"
+            )
         return super().__call__(*args, **kwargs)

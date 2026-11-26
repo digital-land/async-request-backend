@@ -185,6 +185,35 @@ def test_rejects_unsafe_urls_in_stored_params(url):
     assert "internal" not in raised.value.user_message
 
 
+@pytest.mark.parametrize(
+    "branch",
+    [
+        "../../../other-org/repo/refs/heads/main",
+        "main/../../evil",
+        "a/./b",
+        "/main",
+        "main/",
+        "a//b",
+        "main?x=1",
+        "main#x",
+        "ma%2e%2ein",
+        "main\\evil",
+        "",
+        "a" * 256,
+    ],
+)
+def test_rejects_unsafe_github_branch(branch):
+    with pytest.raises(UnsafeRequestParams, match="github_branch"):
+        validate_params(_url_params(github_branch=branch))
+
+
+@pytest.mark.parametrize(
+    "branch", [None, "main", "config-manager-update", "feature/add_data-1.2"]
+)
+def test_accepts_plain_github_branch(branch):
+    validate_params(_url_params(github_branch=branch))
+
+
 def test_guard_requires_a_stored_request_lookup():
     with pytest.raises(NotImplementedError):
         task_guard.BrokerMessageGuard().get_stored_request(VALID_ID)

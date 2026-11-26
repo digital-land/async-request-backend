@@ -376,6 +376,7 @@ def test_failure_handler_ignores_untrusted_messages(monkeypatch):
         None,
         None,
         [_message()],
+        sender=tasks.check_datafile,
     )
     assert calls == []
 
@@ -386,11 +387,75 @@ def test_signal_handlers_ignore_invalid_request_ids(monkeypatch, handler):
     monkeypatch.setattr(tasks, "_update_request_status", lambda *a: calls.append(a))
     monkeypatch.setattr(tasks, "clean_up_request_files", lambda *a: calls.append(a))
     if handler == "before_task":
-        tasks.before_task("task-id", None, [_message(request_id="..")])
+        task = tasks.check_datafile
+        task.push_request(called_directly=False)
+        try:
+            tasks.before_task("task-id", task, [_message(request_id="..")], kwargs={})
+        finally:
+            task.pop_request()
     else:
         tasks.after_task_failure(
-            "task-id", ValueError("boom"), None, None, [_message(request_id="..")]
+            "task-id",
+            ValueError("boom"),
+            None,
+            None,
+            [_message(request_id="..")],
+            sender=tasks.check_datafile,
         )
+    assert calls == []
+
+
+@pytest.mark.parametrize("builtin", ["celery.starmap", "celery.map"])
+def test_builtin_task_cannot_run_a_request_task(stored_request, monkeypatch, builtin):
+    # These built-in tasks call the task they are given directly, which would
+    # skip the check on delivered messages.
+    ran = []
+    monkeypatch.setattr(
+        tasks.schemas.Request, "model_validate", lambda r: ran.append(r)
+    )
+    monkeypatch.setattr(tasks, "_update_request_status", lambda *a: ran.append(a))
+    monkeypatch.setattr(tasks, "clean_up_request_files", lambda *a: ran.append(a))
+    item = [_message()] if builtin == "celery.starmap" else _message()
+    result = tasks.celery.tasks[builtin].apply(
+        kwargs={"task": tasks.check_datafile.s(), "it": [item]}
+    )
+    assert isinstance(result.result, tasks.UntrustedTaskMessage)
+    assert ran == []
+
+
+def test_task_called_from_inside_another_task_is_refused(stored_request):
+    from celery._state import _task_stack
+
+    _task_stack.push(tasks.celery.tasks["celery.starmap"])
+    try:
+        with pytest.raises(tasks.UntrustedTaskMessage, match="inside task"):
+            tasks.check_datafile(_message())
+    finally:
+        _task_stack.pop()
+
+
+@pytest.mark.parametrize(
+    "handler", ["before_task", "after_task_success", "after_task_failure"]
+)
+def test_signal_handlers_ignore_tasks_other_than_request_tasks(monkeypatch, handler):
+    # A message for a built-in task can carry any request id in its args.
+    calls = []
+    monkeypatch.setattr(tasks, "_update_request_status", lambda *a: calls.append(a))
+    monkeypatch.setattr(tasks, "clean_up_request_files", lambda *a: calls.append(a))
+    monkeypatch.setattr(tasks, "save_response_to_db", lambda *a: calls.append(a))
+    other = tasks.celery.tasks["celery.backend_cleanup"]
+    other.push_request(args=[_message()], called_directly=False)
+    try:
+        if handler == "before_task":
+            tasks.before_task("task-id", other, [_message()], kwargs={})
+        elif handler == "after_task_success":
+            tasks.after_task_success(other, None)
+        else:
+            tasks.after_task_failure(
+                "task-id", ValueError("boom"), None, None, [_message()], sender=other
+            )
+    finally:
+        other.pop_request()
     assert calls == []
 
 
@@ -492,7 +557,9 @@ def test_unsafe_params_on_real_request_fail_it_with_an_error(
         task.pop_request()
     assert rejections == [("params", "broker")]
 
-    tasks.after_task_failure("task-id", raised.value, None, None, [message])
+    tasks.after_task_failure(
+        "task-id", raised.value, None, None, [message], sender=task
+    )
     assert calls == [(VALID_ID, "FAILED")]
     assert saved == [
         (

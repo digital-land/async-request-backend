@@ -592,6 +592,7 @@ def test_stale_failure_cannot_replace_newer_success(
         traceback=None,
         einfo=None,
         args=[request],
+        sender=tasks.add_data_task,
     )
 
     saved = tasks._get_request(request_id)

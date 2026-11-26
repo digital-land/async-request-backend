@@ -25,4 +25,8 @@ COPY request-api/migrations migrations
 
 COPY request-api/makefile makefile
 
+# Run as an unprivileged user; the API writes no files.
+RUN useradd --system --uid 10001 --no-create-home api
+USER api
+
 ENTRYPOINT ["./docker-entrypoint.sh"]

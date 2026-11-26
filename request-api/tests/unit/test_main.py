@@ -183,7 +183,6 @@ def test_healthcheck(
     response = main.healthcheck(response=mock_response, db=mock_db, sqs=mock_sqs)
     assert response == HealthCheckResponse(
         name="request-api",
-        version="unknown",
         dependencies=expected_response,
     )
     assert mock_response.status_code == expected_status

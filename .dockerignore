@@ -1,0 +1,10 @@
+# Both images build from the repository root and copy only named paths, so
+# keep the rest of the checkout (history, local virtualenvs, test output) out
+# of the build context.
+.git
+**/.venv
+**/venv
+**/__pycache__
+**/.pytest_cache
+**/.coverage
+**/docker_volume

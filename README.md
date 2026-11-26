@@ -53,6 +53,8 @@ docker-compose exec request-db psql -U postgres -d request_database
 ### Local authentication
 
 Auth is on by default. Local Compose sets `AUTHENTICATION_ON=false`;
+request-api only accepts that when `SENTRY_ENVIRONMENT` is `local` or
+`docker-compose-local`, and otherwise refuses to start.
 
 Run `docker compose up -d --build` locally. To enable auth, configure the JWT keys
 and run `AUTHENTICATION_ON=true docker compose up -d --build`.

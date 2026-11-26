@@ -18,7 +18,6 @@ COPY request-processor/makerules/python.mk makerules/python.mk
 RUN make init
 
 
-COPY .git/ .
 COPY request-processor/src/. .
 
 COPY ../request_model ./request_model
@@ -31,5 +30,13 @@ COPY request-processor/healthcheck-output-template.json healthcheck-output-templ
 HEALTHCHECK CMD "./docker-healthcheck.sh"
 
 COPY request-processor/docker-entrypoint.sh docker-entrypoint.sh
+
+# Run as an unprivileged user. The code and specification stay owned by root,
+# so the worker can only write to its working directories (and /tmp).
+RUN useradd --system --uid 10001 --create-home --home-dir /home/worker worker && \
+    mkdir -p /opt/collection /opt/issue /opt/transformed /opt/converted \
+        /opt/pipeline /var/column-field /var/dataset-resource /var/cache && \
+    chown -R worker:worker /opt /var/column-field /var/dataset-resource /var/cache
+USER worker
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
